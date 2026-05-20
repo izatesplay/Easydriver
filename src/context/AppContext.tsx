@@ -243,23 +243,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updatedTickets = tickets.map(t => t.id === ticketId ? updatedTicket : t);
     saveTickets(updatedTickets);
 
-    // Dynamic support simulation! If the user sent the message (customer), trigger an organic auto-response within 1.5s
+    // Dynamic support assistant! If the user sent the message (customer), trigger a real Gemini response from our server-side API
     if (roleToSend === 'customer') {
-      setTimeout(() => {
-        const responses: string[] = [
-          'سلام، تیکت شما توسط کارشناسان بخش درایور و نرم‌افزار دریافت شد. در حال بررسی جزئیات سیستم و آماده‌سازی پکیج مناسب هستیم. صبور باشید.',
-          'درخواست پشتیبانی شما در صف بررسی آنی‌دسک کارشناس نوید مرادی قرار گرفت. لطفاً نرم‌افزار AnyDesk را اجرا کرده و کد ۹ رقمی را در بخش یادداشت‌ها آپدیت کنید یا اینجا بفرستید.',
-          'پیام شما ثبت شد. جهت بهبود زمان پاسخ و فعالسازی، آنتی‌ویروس پی‌سی خود را به مدت ۱۵ دقیقه خاموش نگه دارید تا تداخلی ایجاد نشود.',
-          'باتشکر از شکیبایی شما؛ کارشناس فنی جهت نصب ریموت متصل خواهد شد. لطفاً اتصال اینترنت خود را قطع نکنید.'
-        ];
-        const randomAnswer = responses[Math.floor(Math.random() * responses.length)];
-
+      fetch("/api/ai-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject: ticket.subject,
+          messageHistory: updatedMessages,
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
         const autoMessage: ChatMessage = {
           id: `msg-${Date.now() + 1}`,
           senderId: 'admin-1',
           senderName: 'پشتیبان هوشمند EasyDriver',
           senderRole: 'admin',
-          message: randomAnswer,
+          message: data.text || 'سلام، جزئیات خطای ریموت سیستم شما دریافت شد. در حال هماهنگی با مهندسان هستیم.',
           timestamp: new Date().toISOString(),
         };
 
@@ -273,7 +274,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setTickets(savedList);
           localStorage.setItem('ed_tickets', JSON.stringify(savedList));
         }
-      }, 1500);
+      })
+      .catch(err => {
+        console.error("AI chat assistant fetch error:", err);
+      });
     }
   };
 

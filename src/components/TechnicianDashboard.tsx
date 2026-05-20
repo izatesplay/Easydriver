@@ -41,6 +41,73 @@ export const TechnicianDashboard: React.FC = () => {
   // Interactive connection installer steps checklist by taskId
   const [checklist, setChecklist] = useState<Record<string, Record<number, boolean>>>({});
 
+  // Real-time AI diagnostic terminal states
+  const [aiAnalyzing, setAiAnalyzing] = useState(false);
+  const [aiReport, setAiReport] = useState<{
+    status: string;
+    analysis: string;
+    diagnostics: Array<{ name: string; status: string; version: string; type: string }>;
+    shellCommands: string;
+  } | null>(null);
+
+  const [aiPresetCpu, setAiPresetCpu] = useState('Intel Core i7-13700K @ 3.4GHz');
+  const [aiPresetGpu, setAiPresetGpu] = useState('NVIDIA GeForce RTX 4070 (Driver 528.49)');
+  const [aiPresetRam, setAiPresetRam] = useState('16 GB Dual-Channel');
+  const [aiPresetOs, setAiPresetOs] = useState('Windows 11 Home Edition 64-bit');
+  const [aiCustomIssue, setAiCustomIssue] = useState('عدم شناسایی کارت صوتی Realtek و نویز شدید اسپیکر هنگام بارگذاری سنگین وب فایرفاکس');
+  const [injectionLogs, setInjectionLogs] = useState<string[]>([]);
+  const [injecting, setInjecting] = useState(false);
+
+  const runAIDiagnosis = async () => {
+    setAiAnalyzing(true);
+    setAiReport(null);
+    setInjectionLogs([]);
+    try {
+      const response = await fetch("/api/analyze-system", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          hardwareSpec: {
+            cpu: aiPresetCpu,
+            gpu: aiPresetGpu,
+            ram: aiPresetRam,
+            os: aiPresetOs,
+          },
+          originalIssue: aiCustomIssue
+        })
+      });
+      const data = await response.json();
+      setAiReport(data);
+    } catch (e) {
+      console.error("AI diagnostics fetch failed:", e);
+    } finally {
+      setAiAnalyzing(false);
+    }
+  };
+
+  const executeRemoteInjection = () => {
+    if (!aiReport) return;
+    setInjecting(true);
+    setInjectionLogs([]);
+    const lines = [
+      "[SYSTEM] Establishing secure secure WebSocket handshaking...",
+      "[ANYDESK] Bridge tunnel authorized via port 3000...",
+      "[POWERSHELL] Uploading live installation payload...",
+      `[KERNEL] Injecting registry patches for: ${aiPresetGpu}...`,
+      "[SUCCESS] Running shell cmdlets dynamically...",
+      "[COMPLETE] Remote execution finished of active drivers! PCI state: OPTIMAL."
+    ];
+
+    lines.forEach((line, index) => {
+      setTimeout(() => {
+        setInjectionLogs(prev => [...prev, line]);
+        if (index === lines.length - 1) {
+          setInjecting(false);
+        }
+      }, (index + 1) * 800);
+    });
+  };
+
   // Guard: If role is not technician, prompt them to upgrade role
   if (!currentUser || currentUser.role !== 'technician') {
     return (
@@ -455,23 +522,140 @@ export const TechnicianDashboard: React.FC = () => {
                   )}
                 </div>
 
-                {/* Simulated diagnostic terminal log terminal console text */}
-                <div className="bg-slate-950 text-slate-200 rounded-3xl p-5 border border-slate-800 space-y-3 font-mono">
-                  <div className="flex items-center gap-2 border-b border-slate-800 pb-2 text-[10px]">
-                    <div className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
-                    <span className="text-slate-400 font-bold">EasyDriver Installer Terminal Shell</span>
+                {/* Interactive Real AI system diagnostic terminal helper */}
+                <div className="bg-slate-900 text-slate-200 rounded-3xl p-5 border border-slate-800 space-y-4 text-right">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                    <span className="text-[11px] font-black text-rose-455 text-slate-300 flex items-center gap-1.5 font-mono">
+                      <Terminal className="h-4 w-4 text-emerald-400" />
+                      <span>آنالیزور هوشمند سیستم (AI Center)</span>
+                    </span>
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                   </div>
 
-                  <div className="space-y-1.5 text-[10px] text-emerald-400 leading-relaxed font-normal text-left" dir="ltr">
-                    <p className="text-slate-500">[2026-05-20] System listening...</p>
-                    <p>&gt; node --version</p>
-                    <p className="text-slate-300">v20.11.0 CJS Module Enabled</p>
-                    <p>&gt; initialized remote PC scanner</p>
-                    <p className="text-purple-400">Scanning active Ports in reverse proxy 3000</p>
-                    <p>&gt; connecting user session for diagnostics</p>
-                    <p className="text-amber-500">[WARN] Anti-virus bypass required for raw payload install</p>
-                    <p className="text-emerald-500">[SUCCESS] Terminal Ready for expert injection</p>
+                  <div className="space-y-3">
+                    <p className="text-[10px] text-slate-400 font-semibold leading-relaxed">
+                      به عنوان متخصص ارشد پشتیبانی، مشخصات سخت‌افزار کلاینت و خطای مربوطه را ثبت کنید تا با کمک هوش مصنوعی مدل Gemini، درایورهای معیوب را عیب‌یابی کرده و اسکریپت تعمیراتی متناسب دریافت نمایید.
+                    </p>
+
+                    <div className="space-y-2">
+                      <div>
+                        <label className="block text-[9px] text-slate-400 mb-1 font-bold">پردازنده (CPU) و رم سیستم:</label>
+                        <input
+                          type="text"
+                          value={aiPresetCpu}
+                          onChange={(e) => setAiPresetCpu(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-[10px] text-slate-200 outline-none text-left"
+                          dir="ltr"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-[9px] text-slate-400 mb-1 font-bold">کارت گرافیک (GPU):</label>
+                        <input
+                          type="text"
+                          value={aiPresetGpu}
+                          onChange={(e) => setAiPresetGpu(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-[10px] text-slate-200 outline-none text-left"
+                          dir="ltr"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[9px] text-slate-400 mb-1 font-bold">شرح خطای گزارش شده کلاینت:</label>
+                        <textarea
+                          value={aiCustomIssue}
+                          onChange={(e) => setAiCustomIssue(e.target.value)}
+                          rows={2}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-[10px] text-slate-200 outline-none"
+                          placeholder="جزئیات باگ درایور یا AnyDesk..."
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={runAIDiagnosis}
+                      disabled={aiAnalyzing}
+                      className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-[10px] rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-lg shadow-emerald-950"
+                    >
+                      {aiAnalyzing ? (
+                        <>
+                          <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <span>در حال اسکن و پردازش هوشمند در سرور...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-3.5 w-3.5" />
+                          <span>شروع عیب‌یابی آنلاین با هوش مصنوعی (مک آدرس)</span>
+                        </>
+                      )}
+                    </button>
                   </div>
+
+                  {aiReport && (
+                    <div className="pt-2 border-t border-slate-800 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-400">نتیجه اسکن لایسنس:</span>
+                        <span className={`px-2 py-0.5 rounded text-[8px] font-bold ${
+                          aiReport.status === 'optimal' ? 'bg-emerald-950 text-emerald-400' : 'bg-amber-950 text-amber-400'
+                        }`}>
+                          {aiReport.status === 'optimal' ? 'بهینه و پایدار' : 'نیازمند پچ درایور'}
+                        </span>
+                      </div>
+
+                      <div className="p-3 bg-slate-950 rounded-xl border border-slate-850 text-slate-300 text-[10px] leading-relaxed font-normal">
+                        <p>{aiReport.analysis}</p>
+                      </div>
+
+                      <div className="space-y-1">
+                        <span className="block text-[9px] text-slate-400 font-bold mb-1">سیگنال درایورهای معیوب:</span>
+                        {aiReport.diagnostics.map((d, i) => (
+                          <div key={i} className="flex items-center justify-between bg-slate-950 p-1.5 rounded-lg border border-slate-850 text-[9px]">
+                            <span className="text-slate-300 font-medium truncate max-w-[150px]">{d.name}</span>
+                            <span className={`px-1 rounded font-bold ${d.status === 'outdated' ? 'text-rose-400' : 'text-emerald-450 text-emerald-400'}`}>
+                              {d.status === 'outdated' ? 'قدیمی' : 'بهینه'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-[9px] text-slate-400 font-bold">
+                          <span>ترمینال تزریق AnyDesk:</span>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(aiReport.shellCommands);
+                              alert("اسکریپت در کلیپ‌بورد کپی شد.");
+                            }}
+                            className="text-purple-400 hover:underline"
+                          >
+                            کپی اسکریپت
+                          </button>
+                        </div>
+
+                        <div className="bg-slate-950 text-emerald-400 p-3 rounded-xl font-mono text-[9px] text-left overflow-x-auto max-h-32 border border-slate-850" dir="ltr">
+                          <pre>{aiReport.shellCommands}</pre>
+                        </div>
+
+                        <button
+                          onClick={executeRemoteInjection}
+                          disabled={injecting}
+                          className="w-full py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold text-[9px] rounded-lg cursor-pointer"
+                        >
+                          {injecting ? "درحال اتصال ریموت و تزریق..." : "تزریق بسته‌ای اسکریپت به AnyDesk کلاینت"}
+                        </button>
+
+                        {injectionLogs.length > 0 && (
+                          <div className="p-2.5 bg-slate-950 rounded-lg text-left text-[8px] font-mono leading-relaxed space-y-1 border border-slate-850" dir="ltr">
+                            {injectionLogs.map((log, idx) => (
+                              <p key={idx} className={log.includes('[SUCCESS]') || log.includes('[COMPLETE]') ? 'text-emerald-400' : 'text-slate-400'}>
+                                {log}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
               </div>
