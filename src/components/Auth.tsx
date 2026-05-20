@@ -1,0 +1,454 @@
+import React, { useState } from 'react';
+import { useApp, MOCK_USERS } from '../context/AppContext';
+import { UserRole } from '../types';
+import { User, Mail, Phone, Lock, Sparkles, Key, CheckCircle, ArrowLeft, Shield, Hammer, Users } from 'lucide-react';
+import { motion } from 'motion/react';
+
+interface AuthProps {
+  onSuccess?: () => void;
+  setActiveTab?: (tab: string) => void;
+}
+
+export const Auth: React.FC<AuthProps> = ({ onSuccess, setActiveTab }) => {
+  const { login } = useApp();
+  const [activeMode, setActiveMode] = useState<'login' | 'signup'>('login');
+  
+  // Signup State
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [signupRole, setSignupRole] = useState<UserRole>('customer');
+  const [password, setPassword] = useState('');
+  
+  // Login State
+  const [loginIdentifier, setLoginIdentifier] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginRole, setLoginRole] = useState<UserRole>('customer');
+
+  // Success Notification state
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
+
+  // Handles actual login submission
+  const handleLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginIdentifier.trim()) return;
+
+    // Simulate login
+    let displayName = loginIdentifier.split('@')[0];
+    displayName = displayName.charAt(0).toUpperCase() + displayName.slice(1);
+    
+    // Discover if mock account
+    let selectedRole = loginRole;
+    let actualName = `کاربر ${displayName}`;
+
+    // Quick match on mocks
+    if (loginIdentifier.includes('admin') || loginIdentifier === 'admin@easydriver.ir') {
+      selectedRole = 'admin';
+      actualName = MOCK_USERS.admin.fullName;
+    } else if (loginIdentifier.includes('navid') || loginIdentifier === 'navid@easydriver.ir') {
+      selectedRole = 'technician';
+      actualName = MOCK_USERS.technician.fullName;
+    } else if (loginIdentifier.includes('saeed') || loginIdentifier === 'saeed@customer.ir') {
+      selectedRole = 'customer';
+      actualName = MOCK_USERS.customer.fullName;
+    }
+
+    setSuccessMsg(`خوش آمدید، جناب ${actualName}! ورود موفقیت‌آمیز بود.`);
+    setShowSuccess(true);
+
+    setTimeout(() => {
+      login(loginIdentifier, actualName, selectedRole);
+      if (onSuccess) onSuccess();
+      if (setActiveTab) {
+        if (selectedRole === 'admin') setActiveTab('admin-dashboard');
+        else if (selectedRole === 'technician') setActiveTab('tech-dashboard');
+        else setActiveTab('home');
+      }
+    }, 1200);
+  };
+
+  // Handles actual signup submission
+  const handleSignupSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!fullName.trim() || !email.trim() || !phone.trim()) return;
+
+    setSuccessMsg(`حساب کاربری شما با عنوان «${fullName}» در نقش ${signupRole === 'admin' ? 'مدیر سیستم' : signupRole === 'technician' ? 'تکنسین فنی' : 'مشتری'} با موفقیت ساخته شد.`);
+    setShowSuccess(true);
+
+    setTimeout(() => {
+      login(email, fullName, signupRole);
+      if (onSuccess) onSuccess();
+      if (setActiveTab) {
+        if (signupRole === 'admin') setActiveTab('admin-dashboard');
+        else if (signupRole === 'technician') setActiveTab('tech-dashboard');
+        else setActiveTab('home');
+      }
+    }, 1200);
+  };
+
+  // Handles fast login via mock selection
+  const handleQuickLogin = (role: UserRole) => {
+    const mock = MOCK_USERS[role];
+    setSuccessMsg(`ورود سریع به عنوان ${mock.fullName} (${role === 'admin' ? 'مدیر' : role === 'technician' ? 'تکنسین' : 'مشتری'})`);
+    setShowSuccess(true);
+    
+    setTimeout(() => {
+      login(mock.email, mock.fullName, role);
+      if (onSuccess) onSuccess();
+      if (setActiveTab) {
+        if (role === 'admin') setActiveTab('admin-dashboard');
+        else if (role === 'technician') setActiveTab('tech-dashboard');
+        else setActiveTab('home');
+      }
+    }, 1000);
+  };
+
+  return (
+    <div className="font-sans min-h-[80vh] flex items-center justify-center px-4 py-12 bg-slate-50 text-right" dir="rtl">
+      
+      {/* Absolute Success Backdrop popup overlay */}
+      {showSuccess && (
+        <div className="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl border border-slate-100 space-y-4"
+          >
+            <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto">
+              <CheckCircle className="h-10 w-10" />
+            </div>
+            <h3 className="text-base font-black text-slate-900">انتقال آنی به پرتال کاربری</h3>
+            <p className="text-xs text-slate-500 leading-relaxed font-semibold">{successMsg}</p>
+            <div className="w-8 h-1 bg-gradient-to-r from-blue-600 to-indigo-600 mx-auto rounded-full animate-bounce mt-4" />
+          </motion.div>
+        </div>
+      )}
+
+      {/* Main Form container grid */}
+      <div className="max-w-5xl w-full bg-white rounded-3xl border border-slate-200/80 shadow-2xl overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-[600px]">
+        
+        {/* Left column info decor panel (hidden on small) */}
+        <div className="lg:col-span-5 bg-gradient-to-tr from-blue-900 via-indigo-900 to-slate-950 text-white p-8 sm:p-12 flex flex-col justify-between relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-80 h-80 bg-blue-500/10 rounded-full filter blur-3xl" />
+          <div className="absolute bottom-0 left-0 w-80 h-80 bg-indigo-500/10 rounded-full filter blur-3xl" />
+          
+          <div className="space-y-3 relative z-10">
+            <span className="text-[10px] tracking-widest font-black text-blue-400 uppercase">سیستم یکپارچه نصب درایور</span>
+            <h2 className="text-2xl font-black leading-tight">پرتال متمرکز مشتریان و تکنسین‌ها</h2>
+            <p className="text-xs font-normal text-slate-300 leading-relaxed">
+              با ایجاد حساب کاربری در EasyDriver، گام بلندی در تسهیل نصب‌های ریموت خود بردارید. به سرعت مشخصات رایانه خود را برای کارشناسان ریموت ارسال کنید.
+            </p>
+          </div>
+
+          <div className="space-y-4 pt-12 relative z-10">
+            <div className="p-4 bg-white/5 border border-white/10 rounded-2xl flex gap-3 text-xs leading-relaxed font-normal">
+              <Sparkles className="h-5 w-5 text-indigo-400 shrink-0" />
+              <div>
+                <strong className="block font-bold text-slate-100">دریافت آنی پشتیبانی</strong>
+                <span className="text-[11px] text-slate-350">پس از ورود می‌توانید در کمتر از ۳ دقیقه تیکت یا درخواست اورژانسی با کد آنی‌دسک ثبت کنید.</span>
+              </div>
+            </div>
+
+            <div className="p-4 bg-white/5 border border-white/10 rounded-2xl flex gap-3 text-xs leading-relaxed font-normal">
+              <Key className="h-5 w-5 text-emerald-400 shrink-0" />
+              <div>
+                <strong className="block font-bold text-slate-100">امنیت هویت کاربران</strong>
+                <span className="text-[11px] text-slate-350">اطلاعات اتصال، تلفن‌ها و یادداشت‌های سیستم، صرفاً برای تکنسین ارجاع‌شده امن می‌ماند.</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-[10px] text-slate-400 font-mono tracking-widest pt-8 border-t border-white/5 uppercase">
+            EasyDriver Remote Center v2.5
+          </div>
+        </div>
+
+        {/* Right column Form wizard control */}
+        <div className="lg:col-span-7 p-8 sm:p-12 flex flex-col justify-center">
+          
+          {/* Tabs header */}
+          <div className="grid grid-cols-2 p-1.5 bg-slate-100 rounded-2xl mb-8">
+            <button
+              onClick={() => setActiveMode('login')}
+              className={`py-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeMode === 'login'
+                  ? 'bg-white text-slate-900 shadow'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              ورود سریع کاربران
+            </button>
+            <button
+              onClick={() => setActiveMode('signup')}
+              className={`py-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeMode === 'signup'
+                  ? 'bg-white text-slate-900 shadow'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              ثبت‌نام همکار یا مشتری جدید
+            </button>
+          </div>
+
+          {/* Form switch views */}
+          <div>
+            {activeMode === 'login' ? (
+              <form onSubmit={handleLoginSubmit} className="space-y-5">
+                <div className="space-y-1">
+                  <h3 className="text-lg font-black text-slate-950">به پرتال EasyDriver وارد شوید</h3>
+                  <p className="text-xs text-slate-400">اطلاعات نمونه یا کاربری شخصی خود را در کادرهای زیر بنویسید</p>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Email & Phone */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-500">شماره موبایل یا ایمیل حساب کاربری</label>
+                    <div className="relative flex items-center">
+                      <div className="absolute right-3.5 text-slate-400">
+                        <Mail className="h-4 w-4" />
+                      </div>
+                      <input
+                        type="text"
+                        required
+                        value={loginIdentifier}
+                        onChange={(e) => setLoginIdentifier(e.target.value)}
+                        placeholder="example@easydriver.ir یا شماره تلفن"
+                        className="w-full pr-11 pl-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-600 transition-all font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Password mock */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-500">رمز عبور اختصاصی (در صورت داشتن)</label>
+                    <div className="relative flex items-center">
+                      <div className="absolute right-3.5 text-slate-400">
+                        <Lock className="h-4 w-4" />
+                      </div>
+                      <input
+                        type="password"
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full pr-11 pl-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-600 transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Test Switch Role */}
+                  <div className="space-y-1.5 pt-1">
+                    <label className="text-[11px] font-bold text-slate-500 block">مشخص کردن نقش ورود (تست سریع):</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { id: 'customer', name: 'مشتری عادی', icon: Users, color: 'hover:border-blue-500' },
+                        { id: 'technician', name: 'تکنسین فنی', icon: Hammer, color: 'hover:border-purple-500' },
+                        { id: 'admin', name: 'مدیر کل شبیه‌ساز', icon: Shield, color: 'hover:border-rose-500' },
+                      ].map((rl) => (
+                        <button
+                          key={rl.id}
+                          type="button"
+                          onClick={() => setLoginRole(rl.id as UserRole)}
+                          className={`p-2.5 rounded-xl border text-[10px] font-bold transition-all flex flex-col items-center gap-1 cursor-pointer ${
+                            loginRole === rl.id
+                              ? 'bg-slate-900 border-slate-900 text-white'
+                              : 'bg-white border-slate-150 text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          <rl.icon className="h-3.5 w-3.5 shrink-0" />
+                          <span>{rl.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg hover:shadow-xl shadow-blue-500/15 cursor-pointer"
+                >
+                  تایید و ورود آنلاین به حساب
+                </button>
+
+                {/* Quick login simulations */}
+                <div className="pt-4 border-t border-slate-100 text-center space-y-2.5">
+                  <span className="text-[10px] text-slate-400 font-bold block">تنظیم شده برای تست! ورود با حساب‌های آزمایشی زیر با یک کلیک:</span>
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleQuickLogin('customer')}
+                      className="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-[10px] font-bold cursor-pointer transition-colors"
+                    >
+                      ورود به عنوان مشتری دمو
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickLogin('technician')}
+                      className="px-3 py-1.5 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg text-[10px] font-bold cursor-pointer transition-colors"
+                    >
+                      ورود به عنوان تکنسین دمو
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickLogin('admin')}
+                      className="px-3 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg text-[10px] font-bold cursor-pointer transition-colors"
+                    >
+                      ورود به عنوان مدیر دمو
+                    </button>
+                  </div>
+                </div>
+
+              </form>
+            ) : (
+              <form onSubmit={handleSignupSubmit} className="space-y-4">
+                <div className="space-y-1">
+                  <h3 className="text-lg font-black text-slate-950">عضویت در سامانه همکاران و مشتریان جدید</h3>
+                  <p className="text-xs text-slate-400">کادرهای زیر را طبق اصول فیلدها تکمیل نمایید</p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Full name */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-500">نام و نام خانوادگی گرانقدر</label>
+                    <div className="relative flex items-center">
+                      <div className="absolute right-3.5 text-slate-400">
+                        <User className="h-4 w-4" />
+                      </div>
+                      <input
+                        type="text"
+                        required
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        placeholder="مثال: آرش علیزاده"
+                        className="w-full pr-11 pl-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-600 transition-all font-sans"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Phone */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-500">شماره موبایل فعال</label>
+                    <div className="relative flex items-center">
+                      <div className="absolute right-3.5 text-slate-400">
+                        <Phone className="h-4 w-4" />
+                      </div>
+                      <input
+                        type="tel"
+                        required
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        placeholder="09123456789"
+                        className="w-full pr-11 pl-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-left outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-600 transition-all font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Email */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-500">آدرس پست الکترونیکی (ایمیل)</label>
+                  <div className="relative flex items-center">
+                    <div className="absolute right-3.5 text-slate-400">
+                      <Mail className="h-4 w-4" />
+                    </div>
+                    <input
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="arash@gmail.com"
+                      className="w-full pr-11 pl-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-left outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-600 transition-all font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* Password signup */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-500">رمز عبور امنیتی برای ورود بعدی</label>
+                  <div className="relative flex items-center">
+                    <div className="absolute right-3.5 text-slate-400">
+                      <Lock className="h-4 w-4" />
+                    </div>
+                    <input
+                      type="password"
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="حداقل ۶ کاراکتر"
+                      className="w-full pr-11 pl-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-600 transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* Choose role for signup */}
+                <div className="space-y-1.5 pt-1.5">
+                  <label className="text-[11px] font-bold text-slate-500 block">لطفاً نقش کاربری خودتان را تعیین فرمایید:</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {[
+                      { id: 'customer', title: 'مشتری متقاضی خدمت نصب', desc: 'نیاز به آپدیت سیستم ها دارم', icon: Users },
+                      { id: 'technician', title: 'تکنسین ریموت و ای‌دی پی‌سی', desc: 'نصب‌های تخصصی را بلد هستم', icon: Hammer },
+                    ].map((btn) => (
+                      <button
+                        key={btn.id}
+                        type="button"
+                        onClick={() => setSignupRole(btn.id as UserRole)}
+                        className={`p-3 rounded-xl border text-right transition-all flex flex-col justify-between h-20 cursor-pointer ${
+                          signupRole === btn.id
+                            ? 'bg-slate-900 border-slate-900 text-white'
+                            : 'bg-white border-slate-150 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <btn.icon className="h-4 w-4 shrink-0" />
+                          <span className="font-extrabold text-[11px]">{btn.title}</span>
+                        </div>
+                        <p className={`text-[9px] mt-1 ${signupRole === btn.id ? 'text-slate-350' : 'text-slate-400'}`}>{btn.desc}</p>
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setSignupRole('admin')}
+                      className={`p-3 rounded-xl border text-right transition-all flex flex-col justify-between h-20 cursor-pointer ${
+                        signupRole === 'admin'
+                          ? 'bg-rose-900 border-rose-950 text-white'
+                          : 'bg-white border-slate-150 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <Shield className="h-4 w-4 shrink-0 text-rose-500" />
+                        <span className="font-extrabold text-[11px]">توسعه‌دهنده / ادمین</span>
+                      </div>
+                      <p className={`text-[9px] mt-1 ${signupRole === 'admin' ? 'text-rose-200' : 'text-slate-400'}`}>سوپروایزر و پاسخگو درایورها</p>
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg hover:shadow-xl shadow-blue-500/15 cursor-pointer mt-2"
+                >
+                  تکمیل عضویت و ساخت فوری حساب
+                </button>
+              </form>
+            )}
+          </div>
+
+          {/* Go Back Trigger link */}
+          {setActiveTab && (
+            <button
+              onClick={() => setActiveTab('home')}
+              className="mt-6 text-[11px] text-slate-400 hover:text-slate-950 font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer mx-auto"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              <span>بازگشت به صحنه اصلی سایت ایزی‌درایور</span>
+            </button>
+          )}
+
+        </div>
+
+      </div>
+
+    </div>
+  );
+};

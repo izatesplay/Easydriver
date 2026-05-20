@@ -1,0 +1,6 @@
+{
+  "name": "EasyDriver",
+  "description": "پلتفرم هوشمند خدمات نصب درایور، نرم‌افزار و پشتیبانی آنلاین از راه دور",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

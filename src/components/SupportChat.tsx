@@ -1,0 +1,285 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useApp } from '../context/AppContext';
+import { Ticket, ChatMessage } from '../types';
+import { ShieldAlert, Key, Send, Inbox, MessageSquare, Laptop, Headset, CornerDownLeft, Sparkles, Smile, RefreshCw, Plus } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+
+interface SupportChatProps {
+  selectedTicketId: string;
+  setSelectedTicketId: (id: string | null) => void;
+}
+
+export const SupportChat: React.FC<SupportChatProps> = ({ selectedTicketId, setSelectedTicketId }) => {
+  const { currentUser, tickets, addTicket, addTicketMessage, switchRole } = useApp();
+  const [typedMessage, setTypedMessage] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Authenticated guard check
+  if (!currentUser) {
+    return (
+      <div className="font-sans min-h-[70vh] flex items-center justify-center px-4 py-12 bg-slate-50" dir="rtl">
+        <div className="max-w-md w-full bg-white rounded-2xl border border-slate-200 p-8 shadow-xl text-center space-y-6">
+          <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto">
+            <ShieldAlert className="h-8 w-8" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-extrabold text-slate-900">نیاز به ورود به چت روم زنده</h2>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              جهت ورود به سیستم چت زنده و هدایت خطاها به اپراتور حاضر روی خط، لطفاً وارد سیستم احراز هویت دمو شوید.
+            </p>
+          </div>
+          <div className="pt-2">
+            <button
+               onClick={() => switchRole('customer')}
+              className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-500/15 flex items-center justify-center gap-2 transition-all cursor-pointer"
+            >
+              <Key className="h-4 w-4" />
+              <span>ورود فوری به عنوان مشتری</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Get only general category tickets (support chat)
+  const generalTickets = tickets.filter(t => t.createdBy === currentUser.id && t.category === 'general');
+
+  // Find active selected ticket object
+  const activeTicket = generalTickets.find(t => t.id === selectedTicketId) || generalTickets[0];
+
+  // Auto-scroll inside chat
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [activeTicket?.messages?.length]);
+
+  // Simulate "typing..." status when customer sends a message to make it feel super living
+  useEffect(() => {
+    if (!activeTicket) return;
+    const msgLen = activeTicket.messages?.length || 0;
+    if (msgLen > 0) {
+      const lastMsg = activeTicket.messages?.[msgLen - 1];
+      if (lastMsg && lastMsg.senderRole === 'customer') {
+        setIsTyping(true);
+        const timer = setTimeout(() => {
+          setIsTyping(false);
+        }, 1500);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [activeTicket?.messages?.length]);
+
+  const handleSendMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!typedMessage.trim() || !activeTicket) return;
+
+    // Send customer message
+    addTicketMessage(activeTicket.id, typedMessage.trim(), 'customer');
+    setTypedMessage('');
+  };
+
+  // Safe background ticket creator if none exist
+  const handleCreateAutoChat = () => {
+    const freshTicket = addTicket({
+      subject: 'گفتگوی آنلاین حل خطای ویندوز',
+      category: 'general',
+      priority: 'medium',
+      message: 'سلام، من نیاز به راهنمایی در مورد روش نصب با AnyDesk و دریافت لایسنس دارم.',
+      userName: currentUser.fullName,
+      userEmail: currentUser.email,
+    });
+    setSelectedTicketId(freshTicket.id);
+  };
+
+  return (
+    <div className="font-sans min-h-[80vh] bg-slate-100 flex items-stretch py-6" dir="rtl">
+      <div className="max-w-5xl w-full mx-auto px-4 grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch">
+        
+        {/* Sidebar Left: General Tickets Selection panel */}
+        <div className="md:col-span-4 bg-white border border-slate-200 rounded-3xl p-4 flex flex-col justify-between shadow-sm">
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+              <div className="p-1.5 bg-blue-50 text-blue-600 rounded-xl">
+                <Headset className="h-4.5 w-4.5" />
+              </div>
+              <h3 className="font-extrabold text-xs text-slate-800">گفتگوهای پشتیبانی</h3>
+            </div>
+
+            {/* List entries */}
+            {generalTickets.length === 0 ? (
+              <div className="text-center py-8 space-y-3 text-slate-400">
+                <p className="text-xs">هیچ روم چت فعالی ثبت نشده است.</p>
+              </div>
+            ) : (
+              <div className="space-y-2 overflow-y-auto max-h-[50vh]">
+                {generalTickets.map((tc) => {
+                  const isActive = activeTicket?.id === tc.id;
+                  const lastMsg = tc.messages?.[tc.messages.length - 1]?.message || tc.message;
+                  return (
+                    <button
+                      key={tc.id}
+                      onClick={() => setSelectedTicketId(tc.id)}
+                      className={`w-full p-3 rounded-xl border text-right transition-all cursor-pointer ${
+                        isActive
+                          ? 'border-blue-600 bg-blue-50/20 shadow-xs'
+                          : 'border-slate-100 bg-white hover:bg-slate-50/70'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-extrabold text-[11px] text-slate-800 line-clamp-1">{tc.subject}</span>
+                        <span className="text-[8px] bg-slate-100 text-slate-500 rounded px-1 shrink-0 font-mono">#{tc.id.substring(0, 7)}</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1 truncate max-w-[200px] font-normal">{lastMsg}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="pt-4 border-t border-slate-100">
+            <button
+              onClick={handleCreateAutoChat}
+              className="w-full py-2.5 bg-indigo-650 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+            >
+              <Plus className="h-4 w-4" />
+              <span>شروع گفتگوی جدید</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Main Chat Frame Right */}
+        <div className="md:col-span-8 bg-white border border-slate-200 rounded-3xl overflow-hidden flex flex-col shadow-sm">
+          {activeTicket ? (
+            <>
+              {/* Header inside chat */}
+              <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 bg-gradient-to-tr from-emerald-500 to-teal-500 text-white rounded-full flex items-center justify-center font-bold text-xs select-none shadow">
+                    اپ
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-extrabold text-white">{activeTicket.subject}</h4>
+                    <span className="text-[9px] text-slate-400">اپراتور پشتیبان شبانه روزی EasyDriver آنلاین است</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] bg-emerald-505/15 text-emerald-400 border border-emerald-500/10 px-2 py-0.5 rounded font-mono font-bold uppercase shrink-0">
+                    Live Chat Mode
+                  </span>
+                </div>
+              </div>
+
+              {/* Chat Messages scroll yard */}
+              <div className="grow p-4 overflow-y-auto space-y-4 bg-slate-50/50 min-h-[350px] max-h-[500px]">
+                {activeTicket.messages?.map((msg) => {
+                  const isMe = msg.senderId === currentUser.id;
+                  return (
+                    <div
+                      key={msg.id}
+                      className={`flex ${isMe ? 'justify-end' : 'justify-start'} gap-2.5 items-end`}
+                    >
+                      {/* Left side profile bubble */}
+                      {!isMe && (
+                        <div className="h-7 w-7 bg-slate-200 text-slate-600 rounded-full flex items-center justify-center font-bold text-[10px] select-none shrink-0 mb-1">
+                          پش
+                        </div>
+                      )}
+
+                      <div className="space-y-1 max-w-[75%]">
+                        {/* Sender info */}
+                        <span className="block text-[8px] text-slate-400 font-bold px-1 text-right">
+                          {isMe ? 'شما' : msg.senderName}
+                        </span>
+                        
+                        {/* Bubble content */}
+                        <div
+                          className={`p-3 rounded-2xl text-xs font-normal leading-relaxed ${
+                            isMe
+                              ? 'bg-blue-620 text-white rounded-br-none shadow-sm shadow-blue-600/5'
+                              : 'bg-white border border-slate-200 text-slate-800 rounded-bl-none shadow-xxs'
+                          }`}
+                        >
+                          {msg.message}
+                        </div>
+
+                        {/* Timestamp */}
+                        <span className="block text-[8px] text-slate-350 px-1 font-mono">
+                          {new Date(msg.timestamp).toLocaleTimeString('fa-IR', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      </div>
+
+                    </div>
+                  );
+                })}
+
+                {/* Animated Typing Bubble simulation */}
+                {isTyping && (
+                  <div className="flex justify-start gap-2.5 items-end">
+                    <div className="h-7 w-7 bg-slate-200 text-slate-600 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 mb-1">
+                      پش
+                    </div>
+                    <div className="p-3 bg-white border border-slate-200 rounded-2xl rounded-bl-none flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 bg-slate-450 rounded-full animate-bounce" />
+                      <span className="h-1.5 w-1.5 bg-slate-450 rounded-full animate-bounce [animation-delay:0.2s]" />
+                      <span className="h-1.5 w-1.5 bg-slate-450 rounded-full animate-bounce [animation-delay:0.4s]" />
+                    </div>
+                  </div>
+                )}
+
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Chat Input Area */}
+              <form onSubmit={handleSendMessage} className="p-3 border-t border-slate-200 shrink-0 bg-white flex items-center gap-2">
+                <input
+                  type="text"
+                  value={typedMessage}
+                  onChange={(e) => setTypedMessage(e.target.value)}
+                  placeholder="پیام خود را به مهندس پشتیبان بنویسید..."
+                  className="grow px-4 py-3 bg-slate-50 hover:bg-slate-1002 border border-slate-200 rounded-2xl text-xs outline-none focus:bg-white focus:border-blue-600 transition-all font-normal"
+                />
+                
+                <button
+                  type="submit"
+                  disabled={!typedMessage.trim()}
+                  className="p-3 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-100 text-white disabled:text-slate-450 rounded-2xl shrink-0 transition-all cursor-pointer"
+                >
+                  <Send className="h-4 w-4 rotate-180" />
+                </button>
+              </form>
+            </>
+          ) : (
+            <div className="grow p-12 flex flex-col items-center justify-center text-center space-y-4">
+              <div className="p-4 bg-slate-50 text-slate-400 rounded-full">
+                <MessageSquare className="h-8 w-8" />
+              </div>
+              <div className="space-y-1 max-w-sm">
+                <h4 className="font-bold text-slate-800 text-sm">اتصال به چت آنلاین</h4>
+                <p className="text-xs text-slate-400 leading-relaxed font-normal">
+                  لطفاً با فشردن دکمه زیر یک تیکت چت جدید ایجاد کنید تا خط گفتگوی آنلاین شما با کارشناس فعال گردد.
+                </p>
+              </div>
+              <button
+                onClick={handleCreateAutoChat}
+                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md"
+              >
+                ایجاد کانال گفتگوی آنلاین زنده
+              </button>
+            </div>
+          )}
+        </div>
+
+      </div>
+    </div>
+  );
+};
