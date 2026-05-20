@@ -1,8 +1,9 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
+import fs from "fs";
+import mysql from "mysql2/promise";
 
 dotenv.config();
 
@@ -11,181 +12,927 @@ const PORT = 3000;
 
 app.use(express.json());
 
-// API: Health status
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok" });
-});
+// -------------------------------------------------------------
+// Database Connection Layer (MySQL / phpMyAdmin) with Fallback
+// -------------------------------------------------------------
+let mysqlPool: mysql.Pool | null = null;
+let connectionPromise: Promise<mysql.Pool | null> | null = null;
+let lastAttemptTime = 0;
+const ATTEMPT_COOLDOWN_MS = 45000; // 45 seconds cooldown to avoid slow DNS blocks and warning spams
 
-// API: Check if API key is active
-app.get("/api/check-api-key", (req, res) => {
-  const isAvailable = !!process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== "MY_GEMINI_API_KEY";
-  res.json({ available: isAvailable });
-});
+let dbStatus = {
+  connected: false,
+  error: "تلاش برای اتصال به دیتابیس صورت نگرفته یا متغیرهای محیطی ست نشده‌اند.",
+  host: process.env.DB_HOST || "",
+  database: process.env.DB_NAME || "easydriver_db",
+  mode: "فایل محلی پشتیبان (Local JSON Backup)"
+};
 
-// Lazy loader for Google GenAI client
-let aiInstance: GoogleGenAI | null = null;
-function getAIClient(): GoogleGenAI | null {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key || key === "MY_GEMINI_API_KEY") {
+// Lazy initialize MySQL pool if environment variables are preset
+async function getMySQLPool(): Promise<mysql.Pool | null> {
+  if (mysqlPool) return mysqlPool;
+  if (connectionPromise) return connectionPromise;
+
+  const host = process.env.DB_HOST;
+  const user = process.env.DB_USER;
+  const password = process.env.DB_PASSWORD;
+  const database = process.env.DB_NAME || "easydriver_db";
+  const port = parseInt(process.env.DB_PORT || "3306", 10);
+
+  if (!host || !user) {
+    dbStatus.connected = false;
+    dbStatus.mode = "فایل محلی پشتیبان (Local JSON Backup)";
+    dbStatus.error = "اطلاعات اتصال MySQL (مانند DB_HOST یا DB_USER) در فایل .env تعریف نشده است.";
     return null;
   }
-  if (!aiInstance) {
-    aiInstance = new GoogleGenAI({
-      apiKey: key,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        }
-      }
-    });
+
+  // Rate-limit connection retries on failure to keep the app blazing fast and silent
+  const now = Date.now();
+  if (now - lastAttemptTime < ATTEMPT_COOLDOWN_MS) {
+    return null;
   }
-  return aiInstance;
+  lastAttemptTime = now;
+
+  connectionPromise = (async () => {
+    try {
+      const tempPool = mysql.createPool({
+        host,
+        user,
+        password,
+        database,
+        port,
+        waitForConnections: true,
+        connectionLimit: 10,
+        queueLimit: 0,
+      });
+
+      // Test connection
+      const connection = await tempPool.getConnection();
+      console.log("🟢 Successfully connected to MySQL Database!");
+      connection.release();
+
+      dbStatus.connected = true;
+      dbStatus.mode = "دیتابیس فعال MySQL (phpMyAdmin)";
+      dbStatus.host = host;
+      dbStatus.database = database;
+      dbStatus.error = "";
+      
+      mysqlPool = tempPool;
+      return tempPool;
+    } catch (err: any) {
+      console.error("🔴 MySQL connection test failed (will use Local JSON Backup):", err.message);
+      dbStatus.connected = false;
+      dbStatus.mode = "فایل محلی پشتیبان (Local JSON Backup)";
+      dbStatus.error = `خطا در اتصال به سرور پایگاه داده: ${err.message}`;
+      
+      mysqlPool = null;
+      // Clear connectionPromise on failure so client can retry after the cooldown expires
+      connectionPromise = null;
+      return null;
+    }
+  })();
+
+  return connectionPromise;
 }
 
-// API: Dynamic Ticket Chat Support
+// -------------------------------------------------------------
+// Backup File Engine for local-out-of-the-box execution
+// -------------------------------------------------------------
+const BACKUP_FILE_PATH = path.join(process.cwd(), "local_db.json");
+
+// Define initial dataset in case local_db.json is missing
+const INITIAL_DATASET = {
+  requests: [
+    {
+      id: 'req-1',
+      fullName: 'علی رضایی',
+      phone: '09121112233',
+      serviceType: 'driver_install',
+      description: 'کارت گرافیک لپتاپ ایسوس TUF RTX 3060 به درستی شناسایی نمی‌شود و بازی‌ها افت فریم شدید دارند. درایور مناسب و پایدار می‌خواهم نصب شود.',
+      status: 'completed',
+      priority: 'high',
+      adminNotes: 'با موفقیت از طریق انی‌دسک متصل شدیم. درایور قدیمی به طور کامل با DDU پاکسازی شد و آخرین نسخه پایدار و اورجینال انویدیا نصب گردید.',
+      scheduledDate: '2026-05-18T14:00',
+      assignedToId: 'tech-2',
+      assignedToName: 'آرش علوی',
+      isApproved: true,
+      approvedAt: '2026-05-18T09:30:00Z',
+      assignedAt: '2026-05-18T09:35:00Z',
+      createdDate: '2026-05-18T08:15:00Z',
+      updatedDate: '2026-05-18T14:45:00Z',
+      createdBy: 'user-customer',
+      rating: 5,
+      ratingComment: 'بسیار عالی تشکر',
+      ratedAt: '2026-05-18T15:00:00Z'
+    },
+    {
+      id: 'req-2',
+      fullName: 'سارا امینی',
+      phone: '09192223344',
+      serviceType: 'software_install',
+      description: 'نیاز به نصب آخرین نسخه نرم‌افزار اتوکد و متلب به همراه لایسنس فعال دارم تا برای پروژه‌ پایانی دانشگاه کار کنم.',
+      status: 'in_progress',
+      priority: 'medium',
+      adminNotes: 'نرم‌افزارها دانلود شده و لایسنس‌ها آماده است. تکنسین مینا خسروی در حال انجام کار است.',
+      scheduledDate: '2026-05-20T11:00',
+      assignedToId: 'tech-3',
+      assignedToName: 'مینا خسروی',
+      isApproved: true,
+      approvedAt: '2026-05-19T10:00:00Z',
+      assignedAt: '2026-05-19T10:15:00Z',
+      createdDate: '2026-05-19T09:00:00Z',
+      updatedDate: '2026-05-20T04:00:00Z',
+      createdBy: 'user-customer'
+    },
+    {
+      id: 'req-3',
+      fullName: 'احسان حسینی',
+      phone: '09374445566',
+      serviceType: 'anydesk_support',
+      description: 'ویندوز ۱۱ پس از آپدیت آخر بالا می‌آید ولی وای‌فای کاملاً قطع شده و خطای کد ۴۳ در دیوایس منیجر می‌دهد.',
+      status: 'assigned',
+      priority: 'urgent',
+      scheduledDate: '2026-05-20T16:30',
+      assignedToId: 'tech-1',
+      assignedToName: 'مهندس نوید مرادی',
+      isApproved: true,
+      approvedAt: '2026-05-20T03:00:00Z',
+      assignedAt: '2026-05-20T03:10:00Z',
+      createdDate: '2026-05-20T02:40:00Z',
+      updatedDate: '2026-05-20T03:10:00Z',
+      createdBy: 'user-customer'
+    },
+    {
+      id: 'req-4',
+      fullName: 'مریم بهرامی',
+      phone: '09335556677',
+      serviceType: 'other',
+      description: 'سیستم ویندوز من بسیار کند کار می‌کند و بعضی اوقات خودبه‌خود ریستارت می‌شود. چند آنتی‌ویروس و ابزار بهینه‌سازی لازم دارم.',
+      status: 'pending',
+      priority: 'medium',
+      isApproved: false,
+      createdDate: '2026-05-20T04:15:00Z',
+      updatedDate: '2026-05-20T04:15:00Z',
+      createdBy: 'user-customer'
+    }
+  ],
+  technicians: [
+    {
+      id: 'tech-1',
+      fullName: 'مهندس نوید مرادی',
+      phone: '09123456789',
+      email: 'navid@easydriver.ir',
+      specialty: 'all',
+      isActive: true,
+      completedTasks: 34,
+      createdDate: '2026-01-10T08:30:00Z',
+      updatedDate: '2026-05-18T10:20:00Z',
+      createdBy: 'admin-1'
+    },
+    {
+      id: 'tech-2',
+      fullName: 'آرش علوی',
+      phone: '09187654321',
+      email: 'arash@easydriver.ir',
+      specialty: 'driver_install',
+      isActive: true,
+      completedTasks: 51,
+      createdDate: '2026-02-15T09:12:00Z',
+      updatedDate: '2026-05-19T14:40:00Z',
+      createdBy: 'admin-1'
+    },
+    {
+      id: 'tech-3',
+      fullName: 'مینا خسروی',
+      phone: '09351234567',
+      email: 'mina@easydriver.ir',
+      specialty: 'software_install',
+      isActive: true,
+      completedTasks: 22,
+      createdDate: '2026-03-01T15:20:00Z',
+      updatedDate: '2026-05-15T11:00:00Z',
+      createdBy: 'admin-1'
+    },
+    {
+      id: 'tech-4',
+      fullName: 'سهراب شریفی',
+      phone: '09219876543',
+      email: 'sohrab@easydriver.ir',
+      specialty: 'anydesk_support',
+      isActive: false,
+      completedTasks: 18,
+      createdDate: '2026-04-12T11:05:00Z',
+      updatedDate: '2026-05-10T16:30:00Z',
+      createdBy: 'admin-1'
+    }
+  ],
+  reviews: [
+    {
+      id: 'rev-1',
+      customerName: 'کامران شهاب',
+      rating: 5,
+      comment: 'بسیار سریع درایور کارت صدا و گرافیک لپ‌تاپ قدیمی من رو آپدیت کردن. فکر نمی‌کردم بشه مشکلات ویندوز ۱۰ رو این‌قدر تمیز و از راه دور حل کرد. کارشناسشون واقعاً صبور بودن.',
+      serviceType: 'نصب و بروزرسانی درایور',
+      isApproved: true,
+      createdDate: '2026-05-10T12:00:00Z',
+      updatedDate: '2026-05-10T12:00:00Z',
+      createdBy: 'user-customer-1',
+      technicianId: 'tech-2',
+      technicianName: 'آرش علوی'
+    },
+    {
+      id: 'rev-2',
+      customerName: 'فاطمه صادقی',
+      rating: 5,
+      comment: 'برنامه فتوشاپ ۲۰۲۶ و پریمیر رو به همراه پلاگین‌ها برام نصب کردن. سرعت دانلود بالا بود و فعالسازها عالی کار می‌کنند. تشکر فراوان.',
+      serviceType: 'نصب نرم‌افزار تخصصی و عمومی',
+      isApproved: true,
+      createdDate: '2026-05-14T16:45:00Z',
+      updatedDate: '2026-05-14T16:45:00Z',
+      createdBy: 'user-customer-2',
+      technicianId: 'tech-3',
+      technicianName: 'مینا خسروی'
+    },
+    {
+      id: 'rev-3',
+      customerName: 'علیرضا تقوی',
+      rating: 4,
+      comment: 'رفع مشکل صفحه آبی مرگ ویندوز با انی‌دسک به بهترین شکل انجام شد. فقط ای کاش زمان پاسخ اولیه کمی کمتر بود ولی در کل خیلی حرفه‌ای بودن.',
+      serviceType: 'پشتیبانی فنی از راه دور (AnyDesk)',
+      isApproved: true,
+      createdDate: '2026-05-17T09:30:00Z',
+      updatedDate: '2026-05-17T09:30:00Z',
+      createdBy: 'user-customer-3',
+      technicianId: 'tech-1',
+      technicianName: 'مهندس نوید مرادی'
+    }
+  ],
+  tickets: [
+    {
+      id: 'tick-1',
+      subject: 'عدم فعال‌سازی مجدد لایسنس آفیس',
+      message: 'سلام، آفیس نصب شده به خوبی کار می‌کرد ولی امروز پیام لایسنس داد و وارد حالت Read-Only شد. چیکار باید بکنم؟',
+      status: 'in_progress',
+      priority: 'high',
+      category: 'technical',
+      userEmail: 'ali@gmail.com',
+      userName: 'علی رضایی',
+      createdDate: '2026-05-19T11:20:00Z',
+      updatedDate: '2026-05-20T01:30:00Z',
+      createdBy: 'user-customer',
+      messages: [
+        {
+          id: 'msg-1',
+          senderId: 'user-customer',
+          senderName: 'علی رضایی',
+          senderRole: 'customer',
+          message: 'سلام، آفیس نصب شده به خوبی کار می‌کرد ولی امروز پیام لایسنس داد و وارد حالت Read-Only شد. چیکار باید بکنم؟',
+          timestamp: '2026-05-19T11:20:00Z'
+        },
+        {
+          id: 'msg-2',
+          senderId: 'admin-1',
+          senderName: 'مدیریت پشتیبانی',
+          senderRole: 'admin',
+          message: 'سلام علی عزیز؛ لطفاً از خاموش بودن فایروال سیستم یا آنتی‌ویروس مطمئن بشید. دوباره ابزار فعال‌ساز EasyActivator رو که روی دسکتاپتون هست اجرا کنید و گزینه ۲ رو بزنید.',
+          timestamp: '2026-05-20T01:30:00Z'
+        }
+      ]
+    },
+    {
+      id: 'tick-2',
+      subject: 'آموزش اتصال انی‌دسک',
+      message: 'من برای اولین بار می‌خوام ثبت درخواست بدم، ولی بلد نیستم چطور برنامه انی‌دسک رو اجرا کنم تا تکنسینتون وصل بشه.',
+      status: 'open',
+      priority: 'medium',
+      category: 'general',
+      userEmail: 'maryam@gmail.com',
+      userName: 'مریم بهرامی',
+      createdDate: '2026-05-20T04:30:00Z',
+      updatedDate: '2026-05-20T04:30:00Z',
+      createdBy: 'user-customer',
+      messages: [
+        {
+          id: 'msg-3',
+          senderId: 'user-customer',
+          senderName: 'مریم بهرامی',
+          senderRole: 'customer',
+          message: 'من برای اولین بار می‌خوام ثبت درخواست بدم، ولی بلد نیستم چطور برنامه انی‌دسک رو اجرا کنم تا تکنسینتون وصل بشه.',
+          timestamp: '2026-05-20T04:30:00Z'
+        }
+      ]
+    },
+    {
+      id: 'tick-3',
+      subject: 'نصب مجدد بعد از ارتقا ویندوز',
+      message: 'ببخشید من ماه گذشته درخواستم کامل شد. اگر ویندوزم رو دوباره عوض کنم باز هم به صورت رایگان برام نصب می‌کنید یا فاکتور جدید صادر میشه؟',
+      status: 'closed',
+      priority: 'low',
+      category: 'billing',
+      adminReply: 'کاربر گرامی، گارانتی نصب خدمات EasyDriver تا یک هفته می‌باشد. پس از آن هزینه نصب با تخفیف ۵۰درصدی برای مشتریان وفادار محاسبه خواهد شد.',
+      userEmail: 'sara@gmail.com',
+      userName: 'سارا امینی',
+      createdDate: '2026-05-15T14:10:00Z',
+      updatedDate: '2026-05-16T10:00:00Z',
+      createdBy: 'user-customer'
+    }
+  ]
+};
+
+// Ensure JSON backup exists
+function ensureLocalJSON() {
+  if (!fs.existsSync(BACKUP_FILE_PATH)) {
+    fs.writeFileSync(BACKUP_FILE_PATH, JSON.stringify(INITIAL_DATASET, null, 2), "utf-8");
+  }
+}
+
+function readLocalJSON(): typeof INITIAL_DATASET {
+  ensureLocalJSON();
+  try {
+    const raw = fs.readFileSync(BACKUP_FILE_PATH, "utf-8");
+    return JSON.parse(raw);
+  } catch (e) {
+    return INITIAL_DATASET;
+  }
+}
+
+function writeLocalJSON(data: typeof INITIAL_DATASET) {
+  fs.writeFileSync(BACKUP_FILE_PATH, JSON.stringify(data, null, 2), "utf-8");
+}
+
+// Check database status
+app.get("/api/db-status", async (req, res) => {
+  await getMySQLPool(); // attempt lazy initialization if envs exist
+  res.json(dbStatus);
+});
+
+// -------------------------------------------------------------
+// APIs: Dynamic REST Routes supporting MySQL & Backup
+// -------------------------------------------------------------
+
+// 1. SERVICES REQUESTS APIs
+app.get("/api/requests", async (req, res) => {
+  const pool = await getMySQLPool();
+  if (pool) {
+    try {
+      const [rows] = await pool.query("SELECT * FROM `requests` ORDER BY `created_date` DESC");
+      // Map database snake_case columns to TS camelCase
+      const formatted = (rows as any[]).map(row => ({
+        id: row.id,
+        fullName: row.full_name,
+        phone: row.phone,
+        serviceType: row.service_type,
+        description: row.description,
+        status: row.status,
+        priority: row.priority,
+        adminNotes: row.admin_notes,
+        scheduledDate: row.scheduled_date,
+        assignedToId: row.assigned_to_id,
+        assignedToName: row.assigned_to_name,
+        isApproved: !!row.is_approved,
+        approvedAt: row.approved_at,
+        assignedAt: row.assigned_at,
+        createdDate: row.created_date,
+        updatedDate: row.updated_date,
+        createdBy: row.created_by,
+        rating: row.rating,
+        ratingComment: row.rating_comment,
+        ratedAt: row.rated_at,
+      }));
+      return res.json(formatted);
+    } catch (err: any) {
+      console.error("Error reading requests from MySQL:", err);
+    }
+  }
+
+  // Fallback to local file db
+  const local = readLocalJSON();
+  res.json(local.requests);
+});
+
+app.post("/api/requests", async (req, res) => {
+  const { id, fullName, phone, serviceType, description, status, priority, adminNotes, scheduledDate, assignedToId, assignedToName, isApproved, approvedAt, assignedAt, createdDate, updatedDate, createdBy } = req.body;
+  const pool = await getMySQLPool();
+  if (pool) {
+    try {
+      await pool.query(
+        "INSERT INTO `requests` (`id`, `full_name`, `phone`, `service_type`, `description`, `status`, `priority`, `admin_notes`, `scheduled_date`, `assigned_to_id`, `assigned_to_name`, `is_approved`, `approved_at`, `assigned_at`, `created_date`, `updated_date`, `created_by`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [id, fullName, phone, serviceType, description, status, priority, adminNotes || null, scheduledDate || null, assignedToId || null, assignedToName || null, isApproved ? 1 : 0, approvedAt || null, assignedAt || null, createdDate, updatedDate, createdBy]
+      );
+      return res.json({ success: true, id });
+    } catch (err) {
+      console.error("MySQL Insert request failed:", err);
+    }
+  }
+
+  const local = readLocalJSON();
+  const index = local.requests.findIndex(r => r.id === id);
+  if (index >= 0) {
+    local.requests[index] = req.body;
+  } else {
+    local.requests.unshift(req.body);
+  }
+  writeLocalJSON(local);
+  res.json({ success: true, id });
+});
+
+app.put("/api/requests/:id", async (req, res) => {
+  const { id } = req.params;
+  const { fullName, phone, serviceType, description, status, priority, adminNotes, scheduledDate, assignedToId, assignedToName, isApproved, approvedAt, assignedAt, updatedDate, rating, ratingComment, ratedAt } = req.body;
+  const pool = await getMySQLPool();
+  if (pool) {
+    try {
+      await pool.query(
+        "UPDATE `requests` SET `full_name`=?, `phone`=?, `service_type`=?, `description`=?, `status`=?, `priority`=?, `admin_notes`=?, `scheduled_date`=?, `assigned_to_id`=?, `assigned_to_name`=?, `is_approved`=?, `approved_at`=?, `assigned_at`=?, `updated_date`=?, `rating`=?, `rating_comment`=?, `rated_at`=? WHERE `id`=?",
+        [fullName, phone, serviceType, description, status, priority, adminNotes || null, scheduledDate || null, assignedToId || null, assignedToName || null, isApproved ? 1 : 0, approvedAt || null, assignedAt || null, updatedDate, rating || null, ratingComment || null, ratedAt || null, id]
+      );
+      return res.json({ success: true });
+    } catch (err) {
+      console.error("MySQL update request failed:", err);
+    }
+  }
+
+  const local = readLocalJSON();
+  const index = local.requests.findIndex(r => r.id === id);
+  if (index >= 0) {
+    local.requests[index] = { ...local.requests[index], ...req.body };
+    writeLocalJSON(local);
+  }
+  res.json({ success: true });
+});
+
+app.delete("/api/requests/:id", async (req, res) => {
+  const { id } = req.params;
+  const pool = await getMySQLPool();
+  if (pool) {
+    try {
+      await pool.query("DELETE FROM `requests` WHERE `id` = ?", [id]);
+      return res.json({ success: true });
+    } catch (err) {
+      console.error("MySQL delete request failed:", err);
+    }
+  }
+
+  const local = readLocalJSON();
+  local.requests = local.requests.filter(r => r.id !== id);
+  writeLocalJSON(local);
+  res.json({ success: true });
+});
+
+// 2. TICKETS & THREADS APIs
+app.get("/api/tickets", async (req, res) => {
+  const pool = await getMySQLPool();
+  if (pool) {
+    try {
+      const [ticketsRows] = await pool.query("SELECT * FROM `tickets` ORDER BY `created_date` DESC");
+      const [messagesRows] = await pool.query("SELECT * FROM `ticket_messages` ORDER BY `timestamp` ASC");
+
+      const ticketMessagesMap: Record<string, any[]> = {};
+      (messagesRows as any[]).forEach(msg => {
+        if (!ticketMessagesMap[msg.ticket_id]) {
+          ticketMessagesMap[msg.ticket_id] = [];
+        }
+        ticketMessagesMap[msg.ticket_id].push({
+          id: msg.id,
+          senderId: msg.sender_id,
+          senderName: msg.sender_name,
+          senderRole: msg.sender_role,
+          message: msg.message,
+          timestamp: msg.timestamp
+        });
+      });
+
+      const formatted = (ticketsRows as any[]).map(t => ({
+        id: t.id,
+        subject: t.subject,
+        message: t.message,
+        status: t.status,
+        priority: t.priority,
+        category: t.category,
+        adminReply: t.admin_reply,
+        userEmail: t.user_email,
+        userName: t.user_name,
+        createdDate: t.created_date,
+        updatedDate: t.updated_date,
+        createdBy: t.created_by,
+        availabilityTime: t.availability_time,
+        attachedFile: t.attached_file,
+        attachedFileName: t.attached_file_name,
+        messages: ticketMessagesMap[t.id] || []
+      }));
+      return res.json(formatted);
+    } catch (err) {
+      console.error("MySQL read tickets failed:", err);
+    }
+  }
+
+  const local = readLocalJSON();
+  res.json(local.tickets);
+});
+
+app.post("/api/tickets", async (req, res) => {
+  const { id, subject, message, status, priority, category, userEmail, userName, createdDate, updatedDate, createdBy, availabilityTime, attachedFile, attachedFileName, messages } = req.body;
+  const pool = await getMySQLPool();
+  if (pool) {
+    try {
+      await pool.query(
+        "INSERT INTO `tickets` (`id`, `subject`, `message`, `status`, `priority`, `category`, `user_email`, `user_name`, `created_date`, `updated_date`, `created_by`, `availability_time`, `attached_file`, `attached_file_name`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [id, subject, message, status, priority, category, userEmail || null, userName || null, createdDate, updatedDate, createdBy, availabilityTime || null, attachedFile || null, attachedFileName || null]
+      );
+      
+      // Save initial thread messages if any
+      if (Array.isArray(messages)) {
+        for (const msg of messages) {
+          await pool.query(
+            "INSERT INTO `ticket_messages` (`id`, `ticket_id`, `sender_id`, `sender_name`, `sender_role`, `message`, `timestamp`) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [msg.id, id, msg.senderId, msg.senderName, msg.senderRole, msg.message, msg.timestamp]
+          );
+        }
+      }
+      return res.json({ success: true, id });
+    } catch (err) {
+      console.error("MySQL post SQL ticket failed:", err);
+    }
+  }
+
+  const local = readLocalJSON();
+  local.tickets.unshift(req.body);
+  writeLocalJSON(local);
+  res.json({ success: true, id });
+});
+
+app.put("/api/tickets/:id", async (req, res) => {
+  const { id } = req.params;
+  const { status, priority, adminReply, updatedDate, userName, userEmail } = req.body;
+  const pool = await getMySQLPool();
+  if (pool) {
+    try {
+      await pool.query(
+        "UPDATE `tickets` SET `status`=?, `priority`=?, `admin_reply`=?, `updated_date`=?, `user_name`=?, `user_email`=? WHERE `id`=?",
+        [status, priority, adminReply || null, updatedDate, userName || null, userEmail || null, id]
+      );
+      return res.json({ success: true });
+    } catch (err) {
+      console.error("MySQL update ticket details failed:", err);
+    }
+  }
+
+  const local = readLocalJSON();
+  const index = local.tickets.findIndex(t => t.id === id);
+  if (index >= 0) {
+    local.tickets[index] = { ...local.tickets[index], ...req.body };
+    writeLocalJSON(local);
+  }
+  res.json({ success: true });
+});
+
+app.post("/api/tickets/:id/messages", async (req, res) => {
+  const { id } = req.params;
+  const { msgId, senderId, senderName, senderRole, message, timestamp } = req.body;
+  const pool = await getMySQLPool();
+  if (pool) {
+    try {
+      await pool.query(
+        "INSERT INTO `ticket_messages` (`id`, `ticket_id`, `sender_id`, `sender_name`, `sender_role`, `message`, `timestamp`) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [msgId, id, senderId, senderName, senderRole, message, timestamp]
+      );
+      await pool.query("UPDATE `tickets` SET `updated_date` = ? WHERE `id` = ?", [timestamp, id]);
+      return res.json({ success: true });
+    } catch (err) {
+      console.error("MySQL insert ticket message failed:", err);
+    }
+  }
+
+  const local = readLocalJSON();
+  const index = local.tickets.findIndex(t => t.id === id);
+  if (index >= 0) {
+    if (!local.tickets[index].messages) {
+      local.tickets[index].messages = [];
+    }
+    local.tickets[index].messages.push({
+      id: msgId,
+      senderId,
+      senderName,
+      senderRole,
+      message,
+      timestamp
+    });
+    local.tickets[index].updatedDate = timestamp;
+    writeLocalJSON(local);
+  }
+  res.json({ success: true });
+});
+
+// 3. REVIEWS APIs
+app.get("/api/reviews", async (req, res) => {
+  const pool = await getMySQLPool();
+  if (pool) {
+    try {
+      const [rows] = await pool.query("SELECT * FROM `reviews` ORDER BY `created_date` DESC");
+      const formatted = (rows as any[]).map(r => ({
+        id: r.id,
+        customerName: r.customer_name,
+        rating: r.rating,
+        comment: r.comment,
+        serviceType: r.service_type,
+        isApproved: !!r.is_approved,
+        createdDate: r.created_date,
+        updatedDate: r.updated_date,
+        createdBy: r.created_by,
+        technicianId: r.technician_id,
+        technicianName: r.technician_name,
+      }));
+      return res.json(formatted);
+    } catch (err) {
+      console.error("MySQL read reviews failed:", err);
+    }
+  }
+
+  const local = readLocalJSON();
+  res.json(local.reviews);
+});
+
+app.post("/api/reviews", async (req, res) => {
+  const { id, customerName, rating, comment, serviceType, isApproved, createdDate, updatedDate, createdBy, technicianId, technicianName } = req.body;
+  const pool = await getMySQLPool();
+  if (pool) {
+    try {
+      await pool.query(
+        "INSERT INTO `reviews` (`id`, `customer_name`, `rating`, `comment`, `service_type`, `is_approved`, `created_date`, `updated_date`, `created_by`, `technician_id`, `technician_name`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [id, customerName, rating, comment, serviceType || null, isApproved ? 1 : 0, createdDate, updatedDate, createdBy, technicianId || null, technicianName || null]
+      );
+      return res.json({ success: true, id });
+    } catch (err) {
+      console.error("MySQL post review query failed:", err);
+    }
+  }
+
+  const local = readLocalJSON();
+  local.reviews.unshift(req.body);
+  writeLocalJSON(local);
+  res.json({ success: true, id });
+});
+
+app.put("/api/reviews/:id", async (req, res) => {
+  const { id } = req.params;
+  const { isApproved, rating, comment, updatedDate } = req.body;
+  const pool = await getMySQLPool();
+  if (pool) {
+    try {
+      await pool.query(
+        "UPDATE `reviews` SET `is_approved`=?, `rating`=?, `comment`=?, `updated_date`=? WHERE `id`=?",
+        [isApproved ? 1 : 0, rating, comment, updatedDate, id]
+      );
+      return res.json({ success: true });
+    } catch (err) {
+      console.error("MySQL update reviews query failed:", err);
+    }
+  }
+
+  const local = readLocalJSON();
+  const index = local.reviews.findIndex(r => r.id === id);
+  if (index >= 0) {
+    local.reviews[index] = { ...local.reviews[index], ...req.body };
+    writeLocalJSON(local);
+  }
+  res.json({ success: true });
+});
+
+// 4. TECHNICIANS APIs
+app.get("/api/technicians", async (req, res) => {
+  const pool = await getMySQLPool();
+  if (pool) {
+    try {
+      const [rows] = await pool.query("SELECT * FROM `technicians` ORDER BY `completed_tasks` DESC");
+      const formatted = (rows as any[]).map(t => ({
+        id: t.id,
+        fullName: t.full_name,
+        phone: t.phone,
+        email: t.email,
+        specialty: t.specialty,
+        isActive: !!t.is_active,
+        completedTasks: t.completed_tasks,
+        createdDate: t.created_date,
+        updatedDate: t.updated_date,
+        createdBy: t.created_by,
+      }));
+      return res.json(formatted);
+    } catch (err) {
+      console.error("MySQL read techs query failed:", err);
+    }
+  }
+
+  const local = readLocalJSON();
+  res.json(local.technicians);
+});
+
+app.post("/api/technicians", async (req, res) => {
+  const { id, fullName, phone, email, specialty, isActive, completedTasks, createdDate, updatedDate, createdBy } = req.body;
+  const pool = await getMySQLPool();
+  if (pool) {
+    try {
+      // First ensure the tech user exists in users table as well
+      await pool.query(
+        "INSERT IGNORE INTO `users` (`id`, `full_name`, `email`, `phone`, `role`) VALUES (?, ?, ?, ?, 'technician')",
+        [id, fullName, email || `${id}@easydriver.ir`, phone, 'technician']
+      );
+
+      await pool.query(
+        "INSERT INTO `technicians` (`id`, `full_name`, `phone`, `email`, `specialty`, `is_active`, `completed_tasks`, `created_date`, `updated_date`, `created_by`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [id, fullName, phone, email || null, specialty, isActive ? 1 : 0, completedTasks || 0, createdDate, updatedDate, createdBy]
+      );
+      return res.json({ success: true, id });
+    } catch (err) {
+      console.error("MySQL post technician query failed:", err);
+    }
+  }
+
+  const local = readLocalJSON();
+  local.technicians.push(req.body);
+  writeLocalJSON(local);
+  res.json({ success: true, id });
+});
+
+app.put("/api/technicians/:id", async (req, res) => {
+  const { id } = req.params;
+  const { fullName, phone, email, specialty, isActive, completedTasks, updatedDate } = req.body;
+  const pool = await getMySQLPool();
+  if (pool) {
+    try {
+      await pool.query(
+        "UPDATE `technicians` SET `full_name`=?, `phone`=?, `email`=?, `specialty`=?, `is_active`=?, `completed_tasks`=?, `updated_date`=? WHERE `id`=?",
+        [fullName, phone, email || null, specialty, isActive ? 1 : 0, completedTasks, updatedDate, id]
+      );
+      return res.json({ success: true });
+    } catch (err) {
+      console.error("MySQL update technician failed:", err);
+    }
+  }
+
+  const local = readLocalJSON();
+  const index = local.technicians.findIndex(t => t.id === id);
+  if (index >= 0) {
+    local.technicians[index] = { ...local.technicians[index], ...req.body };
+    writeLocalJSON(local);
+  }
+  res.json({ success: true });
+});
+
+app.delete("/api/technicians/:id", async (req, res) => {
+  const { id } = req.params;
+  const pool = await getMySQLPool();
+  if (pool) {
+    try {
+      await pool.query("DELETE FROM `technicians` WHERE `id`=?", [id]);
+      return res.json({ success: true });
+    } catch (err) {
+      console.error("MySQL delete technician failed:", err);
+    }
+  }
+
+  const local = readLocalJSON();
+  local.technicians = local.technicians.filter(t => t.id !== id);
+  writeLocalJSON(local);
+  res.json({ success: true });
+});
+
+
+
+// API: Check if API key status is available or simulation is active (Always true for simulation mode)
+app.get("/api/check-api-key", (req, res) => {
+  res.json({ available: true, isSimulation: true, engine: "شبیه‌ساز هوش‌مصنوعی محلی پچر ۲.۰" });
+});
+
+// API: Simulated Expert Computer Technician Response Router
 app.post("/api/ai-chat", async (req, res) => {
   try {
     const { subject, messageHistory } = req.body;
     
-    // Format conversation history for Gemini context
-    let conversationText = `موضوع تیکت: ${subject}\n\n`;
+    // Get the user's latest text input
+    let lastUserMessage = "";
     if (Array.isArray(messageHistory)) {
-      messageHistory.forEach((msg: any) => {
-        const sender = msg.senderRole === "admin" ? "کارشناس/پشتیبان ایزی‌درایور" : "مشتری/کاربر سیستم";
-        conversationText += `[${sender}]: ${msg.message}\n`;
-      });
-    }
-
-    const ai = getAIClient();
-    if (!ai) {
-      // High quality Persian realistic system fallbacks
-      const fallbackReplies = [
-        "درود بر شما. تیکت شما در صف بررسی آنی‌دسک کارشناسان فنی قرار گرفت. جهت تسریع در فرآیند، لطفاً ID نرم‌افزار AnyDesk و سیستم عامل خود را بررسی و اعلام کنید.",
-        "سیستم پشتیبانی فنی هوشمند درخواست شما را دریافت کرد. درایورهای مربوطه در حال تطبیق با کلاینت هستند. لطفاً اتصال اینترنت خود را پایدار نگه دارید.",
-        "جزئیات ارسالی ثبت شد. یکی از تکنسین‌های ما مجدداً بررسی می‌کند. لطفاً هرگونه آنتی‌ویروس را موقتاً غیرفعال کنید تا نصب اتوماتیک بدون تداخل شروع شود.",
-        "سلام و احترام، پاسخ شما تا دقایقی دیگر توسط مهندسان بخش بررسی خواهد شد و اقدامات ریموت اعمال می‌گردد. صبور باشید."
-      ];
-      const answer = fallbackReplies[Math.floor(Math.random() * fallbackReplies.length)];
-      return res.json({ text: answer });
-    }
-
-    const systemInstruction = 
-      "You are a highly professional, polite, and expert Persian computer software and hardware technician named 'پشتیبان هوشمند EasyDriver' representing EasyDriver Remote Services. " +
-      "Your goal is to answer the client's questions about Windows driver errors, installation of complex software, and secure AnyDesk connection. " +
-      "Always respond in Persian, be very reassuring, professional, short (2 to 3 sentences max) and provide helpful diagnostic tips. Do not use generic placeholders. Feel free to offer PowerShell or registry hints if relevant.";
-
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: `This is the chat history of a client ticket. Generate a reply as the support expert:\n\n${conversationText}`,
-      config: {
-        systemInstruction,
-        temperature: 0.7,
+      const userMsgs = messageHistory.filter((m: any) => m.senderRole === "customer" || !m.senderRole);
+      if (userMsgs.length > 0) {
+        lastUserMessage = userMsgs[userMsgs.length - 1].message || "";
       }
-    });
+    }
 
-    res.json({ text: response.text || "پاسخ ثبت شد." });
+    const textInput = (lastUserMessage + " " + (subject || "")).toLowerCase();
+    let reply = "";
+
+    // Intelligent Iranian computer technician mock response tree
+    if (textInput.includes("آفیس") || textInput.includes("office") || textInput.includes("اکتیو") || textInput.includes("لایسنس") || textInput.includes("کرک")) {
+      reply = "سلام و احترام. برای رفع مشکل لایسنس آفیس، ابتدا موقتاً بخش Real-time Protection آنتی‌ویروس ویندوز را خاموش بفرمایید. سپس ابزار فعال‌ساز EasyActivator موجود روی میز کار (Desktop) را با دسترسی ادمین باز کرده و کلید [2] را فشار دهید. پس از مشاهده پیام موفقیت، سیستم را ریستارت کنید.";
+    } else if (textInput.includes("گرافیک") || textInput.includes("کارت گرافیک") || textInput.includes("nvidia") || textInput.includes("amd") || textInput.includes("intel") || textInput.includes("radeon") || textInput.includes("بازی") || textInput.includes("درایور")) {
+      reply = "درود فراوان بر شما. بروز اختلال در گرافیک به دلیل فایل‌های کش درایور قبلی رایج است. توصیه می‌شود ابتدا نرم‌افزار DDU را در حالت Safe Mode اجرا کنید تا درایورهای معیوب قبلی کاملاً حذف (Clean Install) شود؛ ما آماده‌ایم آخرین نسخه پایدار و کاملاً تست‌شده WHQL را به طور خودکار روی سیستم شما مچ و بارگذاری کنیم.";
+    } else if (textInput.includes("انی دسک") || textInput.includes("anydesk") || textInput.includes("آی دی") || textInput.includes("وصل") || textInput.includes("کد") || textInput.includes("کنترل")) {
+      reply = "سلام. لطفاً نرم‌افزار AnyDesk را روی سیستم باز بگذارید و شناسه ۹ رقمی قرمز رنگ نمایش داده شده در بخش Your Address را بنویسید. کارشناسان ارشد ایزی‌درایور به محض دریافت شناسه، با دسترسی ایمن اتصال ریموت را جهت بررسی سیستم برقرار خواهند کرد.";
+    } else if (textInput.includes("پرینتر") || textInput.includes("چاپگر") || textInput.includes("اسکنر") || textInput.includes("نصب نشد")) {
+      reply = "سلام کاربر گرامی. مشکل عدم چاپ معمولاً به علت تداخل پورت‌های مجازی و یا توقف سرویس Print Spooler ویندوز است. در عملیات ریموت، ما پورت پیش‌فرض را روی USB001 تنطیم کرده و یک بار سرویس چاپگر را از طریق خط فرمان ری‌استارت خواهیم کرد.";
+    } else if (textInput.includes("کندی") || textInput.includes("هنگ") || textInput.includes("ویندوز") || textInput.includes("اپدیت") || textInput.includes("آپدیت") || textInput.includes("ریستارت")) {
+      reply = "درود. افت سرعت شدید ویندوز اغلب ناشی از انباشته شدن فایل‌های موقت کش درایو C، حضور بدافزارها در Startup و یا دمای نامتعارف سخت‌افزار است. با ابزارهای بهینه‌ساز تخصصی ما، بخش کش مرورگرها، کلیدهای اضافی رجیستری و فایل‌های تکراری سیستم شما را به طور کامل پاکسازی می‌کنیم.";
+    } else if (textInput.includes("صدا") || textInput.includes("میکروفون") || textInput.includes("هدست" ) || textInput.includes("قطع")) {
+      reply = "سلام. اختلال صدا اکثراً به خاطر عدم تطابق درایور Realtek با پچ امنیتی جدید ویندوز رخ می‌دهد. ما درایور اورجینال مادربرد شما را پیدا کرده و با ابزار مدیریت افزونه صوتی همگام خواهیم ساخت.";
+    } else {
+      // General highly realistic technical polite replies
+      const naturalReplies = [
+        "درود و وقت بخیر؛ اطلاعات ثبت‌شده توسط سیستم شبیه‌ساز ما تحلیل شد. کارشناسان فنی ایزی‌درایور هم‌اکنون آماده برقراری اتصال ریموت AnyDesk روی سیستم شما هستند تا به صورت دقیق‌تر عیب‌یابی را نهایی کنند.",
+        "سلام دوست گرامی؛ درخواست شما در صف اولویت‌های مانیتورینگ آنلاین قرار گرفت. برای تایید نهایی ابزارهای نصب درایور، همکاران بخش پشتیبانی فنی تا لحظاتی دیگر مستقیم روی سیستم شما لاگین خواهند کرد.",
+        "ارسال توضیحات با موفقیت ثبت شد. سیستم پیشنهاد می‌دهد برای جلوگیری از هرگونه تداخل در حین اتوماسیون آنلاین نصب درایورها، برنامه‌های سنگین و دانلودهای پس‌زمینه خود را موقتاً متوقف کنید.",
+        "سیستم پشتیبان ارشد ایزی‌درایور پیام شما را تحلیل کرد. جهت سرعت‌بخشی به امر نصب و عیب‌یابی ریموت، پیشنهاد داریم سیستم عامل خود را در حالت آماده‌باش برای مانیتورینگ قرار دهید."
+      ];
+      reply = naturalReplies[Math.floor(Math.random() * naturalReplies.length)];
+    }
+
+    // Delay response slightly to simulate a real-world server calculation/chat typing (extremely appealing)
+    setTimeout(() => {
+      res.json({ text: reply });
+    }, 400);
+
   } catch (error: any) {
-    console.error("Gemini Chat Error:", error);
-    res.json({ text: "پوزش می‌طلبیم؛ خطایی در دریافت پاسخ زنده هوشمند سیستم رخ داد. کارشناسان ما به زودی متصل می‌شوند." });
+    console.error("Simulated Chat Error:", error);
+    res.json({ text: "پاسخ خودکار: سیستم با تداخل اندکی روبرو شد. در اسرع وقت کارشناس دستی ما موضوع را برطرف می‌سازد." });
   }
 });
 
-// API: Intelligent PC Diagnostic Scanner Analysis
+// API: Simulated Intelligent PC Diagnostic Scanner Analysis Generator
 app.post("/api/analyze-system", async (req, res) => {
   try {
     const { hardwareSpec, originalIssue } = req.body;
     
     const cpu = hardwareSpec?.cpu || "Intel/AMD Processor";
     const gpu = hardwareSpec?.gpu || "Unknown GPU Card";
-    const ram = hardwareSpec?.ram || "8 GB";
-    const os = hardwareSpec?.os || "Windows 10/11";
+    const ram = hardwareSpec?.ram || "16 GB DDR4";
+    const os = hardwareSpec?.os || "Windows 11 Enterprise";
     const issue = originalIssue || "درخواست نصب پکیج‌های درایور و نرم‌افزار عمومی";
 
-    const ai = getAIClient();
-    if (!ai) {
-      // Dynamic fallback schema compliant
-      return res.json({
-        status: "warning",
-        analysis: "براساس مشخصات ثبت‌شده، درایورهای کارت گرافیک شما نیاز به بروزرسانی فوری دارند. تداخل جزئی در لایسنس ویندوز به دلیل تداخل فایروال محلی گزارش شده است.",
-        diagnostics: [
-          { name: gpu, status: "outdated", version: "v531.11 (قدیمی)", type: "کارت گرافیک" },
-          { name: "Intel/AMD System Chipset Controller", status: "outdated", version: "v10.1.18 (نیاز به پچ)", type: "چیپست مادربرد" },
-          { name: "Windows Security Essentials Defender", status: "optimal", version: "پایدار", type: "امنیت سکیوریتی" },
-          { name: "AnyDesk Daemon Remote Service", status: "optimal", version: "v7.1.12 (فعال)", type: "اتصال بیس" }
-        ],
-        shellCommands: 
-          "# EasyDriver AI Remote Diagnostics Shell\n" +
-          "Get-WmiObject Win32_VideoController | Select-Object Name, DriverVersion\n" +
-          "Write-Host '[INFO] Scanning active kernel drivers...'\n" +
-          "Test-Connection -ComputerName 1.1.1.1 -Count 2\n" +
-          "Write-Host '[SUCCESS] Safe connection channel initialized for active remote!'"
-      });
-    }
+    // Build dynamic analyses tailored perfectly to user arguments to maintain a jaw-dropping appeal!
+    const isNvidia = gpu.toLowerCase().includes("nvidia") || gpu.toLowerCase().includes("rtx") || gpu.toLowerCase().includes("gtx");
+    const isAmd = gpu.toLowerCase().includes("amd") || gpu.toLowerCase().includes("radeon") || cpu.toLowerCase().includes("ryzen");
+    
+    const gpuStatus = issue.toLowerCase().includes("کارت گرافیک") || issue.toLowerCase().includes("بازی") || issue.toLowerCase().includes("گرافیک") ? "outdated" : "optimal";
+    const ramWarningThreshold = parseInt(ram, 10) < 8 ? "کم‌سرعت (نیاز به ارتقا)" : "مناسب و پایدار";
 
-    const prompt = 
-      `Analyse this PC hardware configuration:\n` +
-      `- CPU: ${cpu}\n` +
-      `- GPU: ${gpu}\n` +
-      `- RAM: ${ram}\n` +
-      `- OS: ${os}\n\n` +
-      `The customer's reported issue:\n"${issue}"\n\n` +
-      `Generate an expert technician diagnosis, pointing out outdated drivers, potential optimization issues, and return exact PowerShell terminal diagnostic commands to run on the machine.`;
-
-    const systemInstruction = 
-      "You are the senior EasyDriver AI Diagnostic Shell. Generate structural analysis in Persian. " +
-      "You must return the dynamic JSON structure complying strictly with the requested schema.";
-
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: prompt,
-      config: {
-        systemInstruction,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          required: ["status", "analysis", "diagnostics", "shellCommands"],
-          properties: {
-            status: {
-              type: Type.STRING,
-              enum: ["optimal", "warning", "success"],
-              description: "The safety rating status of the system configuration."
-            },
-            analysis: {
-              type: Type.STRING,
-              description: "Expert feedback description in Persian."
-            },
-            diagnostics: {
-              type: Type.ARRAY,
-              description: "List of identified drivers/hardware elements.",
-              items: {
-                type: Type.OBJECT,
-                required: ["name", "status", "version", "type"],
-                properties: {
-                  name: { type: Type.STRING },
-                  status: { type: Type.STRING, enum: ["outdated", "optimal", "unknown"] },
-                  version: { type: Type.STRING },
-                  type: { type: Type.STRING }
-                }
-              }
-            },
-            shellCommands: {
-              type: Type.STRING,
-              description: "Raw PowerShell cmdlets or windows commands to execute."
-            }
-          }
-        }
+    let analysisText = `براساس عیب‌یابی مکانیزه سیستم EasyDriver، مشخصات سخت‌افزار ایده آل شما (${cpu}) مجهز به پردازشگر تصویری (${gpu}) و رم (${ram}) کشش فوق‌العاده‌ای برای پردازش‌های بهینه دارد. با این حال تداخل گزارش شده تحت عنوان «${issue}» احتمالاً به علت تداخل مستقیم کلیدهای فرعی رجیستری و قدیمی بودن بسته درایورهای هسته فرعی است. نصب پچ بهینه‌ساز و بروزرسانی درایورها پیشنهاد صریح سیستم است.`;
+    
+    // Custom diagnostic parameters array
+    const diagnosticsArray = [
+      { 
+        name: gpu, 
+        status: gpuStatus, 
+        version: isNvidia ? "v531.11 (پیش‌فرض قدیمی)" : "v23.2.1 (نیاز به ارتقا)", 
+        type: "هدایتگر تصویری (Graphic GPU)" 
+      },
+      { 
+        name: cpu, 
+        status: "optimal", 
+        version: "شناسایی‌شده (تحت بار متعادل)", 
+        type: "پردازشگر مرکزی (CPU)" 
+      },
+      { 
+        name: `ویندوز ${os}`, 
+        status: "warning", 
+        version: "بیلد پایدار (نیازمند هماهنگی رجیستری)", 
+        type: "بستر سیستم‌عامل (OS)" 
+      },
+      { 
+        name: "پورت ریموت AnyDesk Service", 
+        status: "optimal", 
+        version: "کانال امن فعال (SSL 256bit)", 
+        type: "سرویس اتصال پشتیبان" 
       }
-    });
+    ];
 
-    let data = { status: "warning", analysis: "", diagnostics: [], shellCommands: "" };
-    try {
-      data = JSON.parse(response.text || "{}");
-    } catch (e) {
-      console.error("Failed parsing schema output from Gemini", e);
-    }
-    res.json(data);
+    // Gorgeous, high-tech looking PowerShell diagnostic command block with custom Persian comments
+    const customShellCommands = 
+      `# =========================================================================\n` +
+      `#     سند عیب‌یابی سیستم هوشمند EasyDriver - گزارش موقت PowerShell\n` +
+      `#     سازگار با سخت‌افزار: CPU ${cpu} | GPU ${gpu}\n` +
+      `# =========================================================================\n\n` +
+      `Write-Host ">>> در حال شروع اسکن سلامت سیستم برای پردازنده ${cpu} ..."\n` +
+      `# بررسی وضعیت اتصال اینترنت جهت همگام‌سازی ابزارهای ریموت\n` +
+      `$PingCheck = Test-Connection -ComputerName "8.8.8.8" -Count 1 -Quiet\n` +
+      `if ($PingCheck) {\n` +
+      `    Write-Host "[OK] اتصال اینترنت برقرار است. بارگذاری سرورهای ردیاب..." -ForegroundColor Green\n` +
+      `} else {\n` +
+      `    Write-Warning "[WARN] اختلال جزئی در شبکه شناسایی شد؛ پیشنهاد می‌شود اتصالات بررسی شود."\n` +
+      `}\n\n` +
+      `# اسکن کلیورهای فعال تصویر و کش برای کارت گرافیک ${gpu}\n` +
+      `Get-WmiObject Win32_VideoController | Select-Object Name, VideoProcessor, DriverVersion\n` +
+      `Write-Host "[SUCCESS] گزارش اولیه با موفقیت ثبت گردید. آماده اتصال تکنسین ریموت." -ForegroundColor Cyan\n`;
+
+    // Slight timeout for amazing professional scanner feel
+    setTimeout(() => {
+      res.json({
+        status: "warning",
+        analysis: analysisText,
+        diagnostics: diagnosticsArray,
+        shellCommands: customShellCommands
+      });
+    }, 1200);
+
   } catch (error: any) {
-    console.error("Diagnostic API Error:", error);
+    console.error("Diagnostic Simulation API Error:", error);
     res.status(500).json({ error: "Internal Server Error in diagnostic scanning" });
   }
 });

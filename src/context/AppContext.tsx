@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, Request, Review, Ticket, Technician, ChatMessage, UserRole, RequestStatus, RequestPriority, TicketStatus, TicketPriority, TicketCategory } from '../types';
+import { User, Request, Review, Ticket, Technician, ChatMessage, UserRole } from '../types';
 import { INITIAL_REQUESTS, INITIAL_REVIEWS, INITIAL_TICKETS, INITIAL_TECHNICIANS } from '../data/mockData';
 
 interface AppContextProps {
@@ -61,15 +61,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [reviews, setReviews] = useState<Review[]>([]);
   const [technicians, setTechnicians] = useState<Technician[]>([]);
 
-  // Load initial data or localStorage
-  useEffect(() => {
-    const storedUser = localStorage.getItem('ed_user');
-    const storedRequests = localStorage.getItem('ed_requests');
-    const storedTickets = localStorage.getItem('ed_tickets');
-    const storedReviews = localStorage.getItem('ed_reviews');
-    const storedTechs = localStorage.getItem('ed_technicians');
+  // Load backend synchronized data
+  const loadFreshData = () => {
+    // 1. Fetch Requests
+    fetch("/api/requests")
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data)) setRequests(data);
+      })
+      .catch(err => console.error("Error loading requests:", err));
 
-    // Default to mock customer initially if nothing is selected yet to make it fully functional out of box
+    // 2. Fetch Tickets
+    fetch("/api/tickets")
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data)) setTickets(data);
+      })
+      .catch(err => console.error("Error loading tickets:", err));
+
+    // 3. Fetch Reviews
+    fetch("/api/reviews")
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data)) setReviews(data);
+      })
+      .catch(err => console.error("Error loading reviews:", err));
+
+    // 4. Fetch Technicians
+    fetch("/api/technicians")
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data)) setTechnicians(data);
+      })
+      .catch(err => console.error("Error loading technicians:", err));
+  };
+
+  useEffect(() => {
+    // Current user authentication setup
+    const storedUser = localStorage.getItem('ed_user');
     if (storedUser) {
       try {
         setCurrentUser(JSON.parse(storedUser));
@@ -81,36 +110,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem('ed_user', JSON.stringify(MOCK_USERS.customer));
     }
 
-    if (storedRequests) {
-      try { setRequests(JSON.parse(storedRequests)); } catch (e) { setRequests(INITIAL_REQUESTS); }
-    } else {
-      setRequests(INITIAL_REQUESTS);
-      localStorage.setItem('ed_requests', JSON.stringify(INITIAL_REQUESTS));
-    }
-
-    if (storedTickets) {
-      try { setTickets(JSON.parse(storedTickets)); } catch (e) { setTickets(INITIAL_TICKETS); }
-    } else {
-      setTickets(INITIAL_TICKETS);
-      localStorage.setItem('ed_tickets', JSON.stringify(INITIAL_TICKETS));
-    }
-
-    if (storedReviews) {
-      try { setReviews(JSON.parse(storedReviews)); } catch (e) { setReviews(INITIAL_REVIEWS); }
-    } else {
-      setReviews(INITIAL_REVIEWS);
-      localStorage.setItem('ed_reviews', JSON.stringify(INITIAL_REVIEWS));
-    }
-
-    if (storedTechs) {
-      try { setTechnicians(JSON.parse(storedTechs)); } catch (e) { setTechnicians(INITIAL_TECHNICIANS); }
-    } else {
-      setTechnicians(INITIAL_TECHNICIANS);
-      localStorage.setItem('ed_technicians', JSON.stringify(INITIAL_TECHNICIANS));
-    }
+    // Load SQL-backed synchronised tables
+    loadFreshData();
   }, []);
 
-  // Save changes wrapper helpers
   const saveUser = (user: User | null) => {
     setCurrentUser(user);
     if (user) {
@@ -118,26 +121,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else {
       localStorage.removeItem('ed_user');
     }
-  };
-
-  const saveRequests = (newRequests: Request[]) => {
-    setRequests(newRequests);
-    localStorage.setItem('ed_requests', JSON.stringify(newRequests));
-  };
-
-  const saveTickets = (newTickets: Ticket[]) => {
-    setTickets(newTickets);
-    localStorage.setItem('ed_tickets', JSON.stringify(newTickets));
-  };
-
-  const saveReviews = (newReviews: Review[]) => {
-    setReviews(newReviews);
-    localStorage.setItem('ed_reviews', JSON.stringify(newReviews));
-  };
-
-  const saveTechs = (newTechs: Technician[]) => {
-    setTechnicians(newTechs);
-    localStorage.setItem('ed_technicians', JSON.stringify(newTechs));
   };
 
   const login = (email: string, fullName: string, role: UserRole) => {
@@ -171,60 +154,115 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedDate: new Date().toISOString(),
       createdBy: currentUser?.id || 'anonymous',
     };
-    saveRequests([newRequest, ...requests]);
+
+    // Optimistic Update
+    setRequests(prev => [newRequest, ...prev]);
+
+    // DB POST
+    fetch("/api/requests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newRequest)
+    })
+    .then(() => loadFreshData())
+    .catch(err => console.error("Post request sync err:", err));
+
     return newRequest;
   };
 
   const updateRequest = (updated: Request) => {
-    const next = requests.map(r => r.id === updated.id ? { ...updated, updatedDate: new Date().toISOString() } : r);
-    saveRequests(next);
+    const nextRequestObj = { ...updated, updatedDate: new Date().toISOString() };
+    
+    // Optimistic Update
+    setRequests(prev => prev.map(r => r.id === updated.id ? nextRequestObj : r));
+
+    // DB PUT
+    fetch(`/api/requests/${updated.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(nextRequestObj)
+    })
+    .then(() => loadFreshData())
+    .catch(err => console.error("Put request sync err:", err));
   };
 
   const deleteRequest = (id: string) => {
-    saveRequests(requests.filter(r => r.id !== id));
+    // Optimistic Update
+    setRequests(prev => prev.filter(r => r.id !== id));
+
+    // DB DELETE
+    fetch(`/api/requests/${id}`, {
+      method: "DELETE"
+    })
+    .then(() => loadFreshData())
+    .catch(err => console.error("Delete request sync err:", err));
   };
 
   // Tickets functions
   const addTicket = (ticketData: Omit<Ticket, 'id' | 'createdDate' | 'updatedDate' | 'createdBy' | 'status'>) => {
+    const newTicketId = `tick-${Date.now()}`;
+    const initialMsg: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      senderId: currentUser?.id || 'anonymous',
+      senderName: currentUser?.fullName || ticketData.userName || 'کاربر',
+      senderRole: currentUser?.role || 'customer',
+      message: ticketData.message,
+      timestamp: new Date().toISOString(),
+    };
+
     const newTicket: Ticket = {
       ...ticketData,
-      id: `tick-${Date.now()}`,
+      id: newTicketId,
       status: 'open',
       createdDate: new Date().toISOString(),
       updatedDate: new Date().toISOString(),
       createdBy: currentUser?.id || 'anonymous',
-      messages: [
-        {
-          id: `msg-${Date.now()}`,
-          senderId: currentUser?.id || 'anonymous',
-          senderName: currentUser?.fullName || ticketData.userName || 'کاربر',
-          senderRole: currentUser?.role || 'customer',
-          message: ticketData.message,
-          timestamp: new Date().toISOString(),
-        }
-      ],
+      messages: [initialMsg],
     };
-    saveTickets([newTicket, ...tickets]);
+
+    // Optimistic Update
+    setTickets(prev => [newTicket, ...prev]);
+
+    // DB POST
+    fetch("/api/tickets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newTicket)
+    })
+    .then(() => loadFreshData())
+    .catch(err => console.error("Post ticket sync err:", err));
+
     return newTicket;
   };
 
   const updateTicket = (updated: Ticket) => {
-    const next = tickets.map(t => t.id === updated.id ? { ...updated, updatedDate: new Date().toISOString() } : t);
-    saveTickets(next);
+    const nextTicketObj = { ...updated, updatedDate: new Date().toISOString() };
+
+    // Optimistic Update
+    setTickets(prev => prev.map(t => t.id === updated.id ? nextTicketObj : t));
+
+    // DB PUT
+    fetch(`/api/tickets/${updated.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(nextTicketObj)
+    })
+    .then(() => loadFreshData())
+    .catch(err => console.error("Put ticket sync err:", err));
   };
 
   const addTicketMessage = (ticketId: string, messageText: string, senderRole?: UserRole) => {
-    const ticketIndex = tickets.findIndex(t => t.id === ticketId);
-    if (ticketIndex === -1) return;
+    const ticket = tickets.find(t => t.id === ticketId);
+    if (!ticket) return;
 
-    const ticket = tickets[ticketIndex];
     const sender = currentUser || { id: 'anonymous', fullName: 'ناشناس', role: 'customer' as UserRole, email: '', phone: '' };
 
     const roleToSend = senderRole || sender.role;
     const nameToSend = roleToSend === 'admin' ? 'مدیریت پشتیبانی (تکنسین)' : (sender.fullName || ticket.userName || 'کاربر');
 
+    const newMessageId = `msg-${Date.now()}`;
     const newMessage: ChatMessage = {
-      id: `msg-${Date.now()}`,
+      id: newMessageId,
       senderId: roleToSend === 'admin' ? 'admin-1' : sender.id,
       senderName: nameToSend,
       senderRole: roleToSend,
@@ -240,45 +278,78 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedDate: new Date().toISOString(),
     };
 
-    const updatedTickets = tickets.map(t => t.id === ticketId ? updatedTicket : t);
-    saveTickets(updatedTickets);
+    // Optimistic Update
+    setTickets(prev => prev.map(t => t.id === ticketId ? updatedTicket : t));
 
-    // Dynamic support assistant! If the user sent the message (customer), trigger a real Gemini response from our server-side API
-    if (roleToSend === 'customer') {
-      fetch("/api/ai-chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subject: ticket.subject,
-          messageHistory: updatedMessages,
+    // DB Ticket Message POST
+    fetch(`/api/tickets/${ticketId}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        msgId: newMessageId,
+        senderId: newMessage.senderId,
+        senderName: newMessage.senderName,
+        senderRole: newMessage.senderRole,
+        message: newMessage.message,
+        timestamp: newMessage.timestamp
+      })
+    })
+    .then(() => {
+      // Dynamic support assistant auto-response Trigger (for Gemini API Support Assistant)
+      if (roleToSend === 'customer') {
+        fetch("/api/ai-chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subject: ticket.subject,
+            messageHistory: updatedMessages,
+          })
         })
-      })
-      .then(res => res.json())
-      .then(data => {
-        const autoMessage: ChatMessage = {
-          id: `msg-${Date.now() + 1}`,
-          senderId: 'admin-1',
-          senderName: 'پشتیبان هوشمند EasyDriver',
-          senderRole: 'admin',
-          message: data.text || 'سلام، جزئیات خطای ریموت سیستم شما دریافت شد. در حال هماهنگی با مهندسان هستیم.',
-          timestamp: new Date().toISOString(),
-        };
+        .then(res => res.json())
+        .then(data => {
+          const autoMessageId = `msg-${Date.now() + 1}`;
+          const autoMessage: ChatMessage = {
+            id: autoMessageId,
+            senderId: 'admin-1',
+            senderName: 'پشتیبان هوشمند EasyDriver',
+            senderRole: 'admin',
+            message: data.text || 'سلام، جزئیات شما ثبت شد. به زودی در ریموت خدمت‌رسانی می‌کنیم.',
+            timestamp: new Date().toISOString(),
+          };
 
-        // Reload fresh list from state or storage to prevent overwriting
-        const currentTickets = JSON.parse(localStorage.getItem('ed_tickets') || '[]');
-        const targetTick = currentTickets.find((t: Ticket) => t.id === ticketId);
-        if (targetTick) {
-          targetTick.messages = [...(targetTick.messages || []), autoMessage];
-          targetTick.updatedDate = new Date().toISOString();
-          const savedList = currentTickets.map((t: Ticket) => t.id === ticketId ? targetTick : t);
-          setTickets(savedList);
-          localStorage.setItem('ed_tickets', JSON.stringify(savedList));
-        }
-      })
-      .catch(err => {
-        console.error("AI chat assistant fetch error:", err);
-      });
-    }
+          // Optimistically show Gemini reply as well
+          setTickets(prev => prev.map(t => {
+            if (t.id === ticketId) {
+              return {
+                ...t,
+                messages: [...(t.messages || []), autoMessage],
+                updatedDate: new Date().toISOString()
+              };
+            }
+            return t;
+          }));
+
+          // Post Gemini reply to DB in the background
+          fetch(`/api/tickets/${ticketId}/messages`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              msgId: autoMessageId,
+              senderId: autoMessage.senderId,
+              senderName: autoMessage.senderName,
+              senderRole: autoMessage.senderRole,
+              message: autoMessage.message,
+              timestamp: autoMessage.timestamp
+            })
+          }).then(() => loadFreshData());
+
+        })
+        .catch(err => console.error("AI Assistant responder internal fetch err:", err));
+      } else {
+        loadFreshData();
+      }
+    })
+    .catch(err => console.error("Post ticket message sync err:", err));
   };
 
   // Reviews functions
@@ -286,18 +357,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newReview: Review = {
       ...reviewData,
       id: `rev-${Date.now()}`,
-      isApproved: false, // Default pending review
+      isApproved: false, // Default pending review approval
       createdDate: new Date().toISOString(),
       updatedDate: new Date().toISOString(),
       createdBy: currentUser?.id || 'anonymous',
     };
-    saveReviews([newReview, ...reviews]);
+
+    // Optimistic Update
+    setReviews(prev => [newReview, ...prev]);
+
+    // DB POST
+    fetch("/api/reviews", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newReview)
+    })
+    .then(() => loadFreshData())
+    .catch(err => console.error("Post review sync err:", err));
+
     return newReview;
   };
 
   const updateReview = (updated: Review) => {
-    const next = reviews.map(r => r.id === updated.id ? updated : r);
-    saveReviews(next);
+    const nextReviewObj = { ...updated, updatedDate: new Date().toISOString() };
+
+    // Optimistic Update
+    setReviews(prev => prev.map(r => r.id === updated.id ? nextReviewObj : r));
+
+    // DB PUT
+    fetch(`/api/reviews/${updated.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(nextReviewObj)
+    })
+    .then(() => loadFreshData())
+    .catch(err => console.error("Put review sync err:", err));
   };
 
   // Technicians functions
@@ -309,16 +403,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedDate: new Date().toISOString(),
       createdBy: currentUser?.id || 'admin-1',
     };
-    saveTechs([...technicians, newTech]);
+
+    // Optimistic Update
+    setTechnicians(prev => [...prev, newTech]);
+
+    // DB POST
+    fetch("/api/technicians", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newTech)
+    })
+    .then(() => loadFreshData())
+    .catch(err => console.error("Post technician sync err:", err));
   };
 
   const updateTechnician = (updated: Technician) => {
-    const next = technicians.map(t => t.id === updated.id ? { ...updated, updatedDate: new Date().toISOString() } : t);
-    saveTechs(next);
+    const nextTechObj = { ...updated, updatedDate: new Date().toISOString() };
+
+    // Optimistic Update
+    setTechnicians(prev => prev.map(t => t.id === updated.id ? nextTechObj : t));
+
+    // DB PUT
+    fetch(`/api/technicians/${updated.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(nextTechObj)
+    })
+    .then(() => loadFreshData())
+    .catch(err => console.error("Put technician sync err:", err));
   };
 
   const deleteTechnician = (id: string) => {
-    saveTechs(technicians.filter(t => t.id !== id));
+    // Optimistic Update
+    setTechnicians(prev => prev.filter(t => t.id !== id));
+
+    // DB DELETE
+    fetch(`/api/technicians/${id}`, {
+      method: "DELETE"
+    })
+    .then(() => loadFreshData())
+    .catch(err => console.error("Delete technician sync err:", err));
   };
 
   return (

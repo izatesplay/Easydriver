@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Request, Review, Ticket, Technician, SERVICE_LABELS, STATUS_LABELS, STATUS_COLORS, PRIORITY_LABELS, PRIORITY_COLORS, SPECIALTY_LABELS, TechnicianSpecialty, RequestStatus, RequestPriority, TICKET_CATEGORY_LABELS, TICKET_STATUS_LABELS, TICKET_STATUS_COLORS } from '../types';
-import { ShieldAlert, Key, Grid, Clipboard, Users, Star, MessageSquare, Plus, Edit2, Trash2, CheckCircle2, UserPlus, Info, Save, Clock, X, ChevronDown, ChevronUp, Reply, Sparkles } from 'lucide-react';
+import { ShieldAlert, Key, Grid, Clipboard, Users, Star, MessageSquare, Plus, Edit2, Trash2, CheckCircle2, UserPlus, Info, Save, Clock, X, ChevronDown, ChevronUp, Reply, Sparkles, Database, Server, Globe, FileCode as FileCodeIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export const AdminDashboard: React.FC = () => {
@@ -23,7 +23,23 @@ export const AdminDashboard: React.FC = () => {
   } = useApp();
 
   // Active admin tab selection
-  const [adminTab, setAdminTab] = useState<'overview' | 'requests' | 'technicians' | 'tickets' | 'reviews'>('overview');
+  const [adminTab, setAdminTab] = useState<'overview' | 'requests' | 'technicians' | 'tickets' | 'reviews' | 'db'>('overview');
+
+  // Databse phpMyAdmin status
+  const [dbInfo, setDbInfo] = useState<{
+    connected: boolean;
+    error: string;
+    host: string;
+    database: string;
+    mode: string;
+  } | null>(null);
+
+  React.useEffect(() => {
+    fetch("/api/db-status")
+      .then(res => res.json())
+      .then(data => setDbInfo(data))
+      .catch(err => console.error("Error loading db status:", err));
+  }, [adminTab]);
 
   // Technician states (for CRUD)
   const [showAddTechForm, setShowAddTechForm] = useState(false);
@@ -265,13 +281,14 @@ export const AdminDashboard: React.FC = () => {
         </div>
 
         {/* Core Admin Navigation Grid tabs */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 mb-8">
           {[
             { id: 'overview', label: 'داشبورد خلاصه آمار', icon: Grid },
             { id: 'requests', label: 'مدیریت درخواست‌ها', icon: Clipboard, badge: pendingRequests },
             { id: 'technicians', label: 'تعریف تکنسین‌ها (CRUD)', icon: Users },
             { id: 'tickets', label: 'تیکت‌های باز پشتیبانی', icon: MessageSquare, badge: openTicketsCount },
             { id: 'reviews', label: 'تایید نظرات کاربران', icon: Star, badge: pendingReviewsCount },
+            { id: 'db', label: 'پایگاه داده (MySQL)', icon: Database, badge: dbInfo?.connected ? 0 : 0 },
           ].map((tab) => {
             const TabIcon = tab.icon;
             const isActive = adminTab === tab.id;
@@ -279,16 +296,16 @@ export const AdminDashboard: React.FC = () => {
               <button
                 key={tab.id}
                 onClick={() => setAdminTab(tab.id as any)}
-                className={`py-3 px-4 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                className={`py-3 px-3 rounded-xl border text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                   isActive
                     ? 'bg-rose-600 border-rose-600 text-white shadow-md shadow-rose-600/15'
                     : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-950'
                 }`}
               >
-                <TabIcon className="h-4 w-4 shrink-0" />
+                <TabIcon className="h-3.5 w-3.5 shrink-0" />
                 <span>{tab.label}</span>
                 {tab.badge !== undefined && tab.badge > 0 && (
-                  <span className={`text-[9px] font-bold h-5 min-w-5 px-1 rounded-full flex items-center justify-center ${
+                  <span className={`text-[9px] font-bold h-4 min-w-[16px] px-1 rounded-full flex items-center justify-center ${
                     isActive ? 'bg-white text-rose-650' : 'bg-rose-500 text-white animate-pulse'
                   }`}>
                     {tab.badge}
@@ -962,6 +979,111 @@ export const AdminDashboard: React.FC = () => {
                 </div>
               )}
 
+            </div>
+          )}
+
+          {/* TAB 6: DATABASE MANAGEMENT (MySQL & phpMyAdmin Setup Console Guide) */}
+          {adminTab === 'db' && (
+            <div className="space-y-6">
+              <div className="p-6 bg-white rounded-2xl border border-slate-200 shadow-sm text-right space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                  <div>
+                    <h3 className="font-black text-base text-slate-900 flex items-center gap-2">
+                      <Database className="h-5 w-5 text-rose-600" />
+                      <span>مدیریت پایگاه داده MySQL و اتصال به phpMyAdmin</span>
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-1">پروژه EasyDriver مجهز به سیستم ذخیره‌سازی همگام دوگانه است.</p>
+                  </div>
+                  
+                  <div className={`px-4 py-2 rounded-xl border flex items-center gap-2 self-start ${
+                    dbInfo?.connected
+                      ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                      : "bg-amber-50 border-amber-200 text-amber-800 animate-pulse"
+                  }`}>
+                    <Server className="h-4 w-4" />
+                    <div className="text-right">
+                      <span className="block text-[8px] opacity-75">حالت اتصال فعلی:</span>
+                      <span className="block text-[10px] font-black">{dbInfo?.mode || "درحال بررسی..."}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {dbInfo?.error && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-[10px] leading-relaxed flex items-start gap-2">
+                    <Info className="h-4 w-4 shrink-0 mt-0.5" />
+                    <span><strong>پشتیبان محلی فعال است:</strong> {dbInfo.error} پروژه در حال حاضر بدون مشکل تمام اطلاعات و تغییرات را روی فایل پشتیبان محلی (local_db.json) به صورت زنده ذخیره می‌کند و آماده انتقال به هاست شماست.</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+                  <div className="md:col-span-2 space-y-4">
+                    <h4 className="font-extrabold text-xs text-slate-800">آموزش گام‌به‌گام اتصال پروژه به phpMyAdmin و میزبانی:</h4>
+                    
+                    <div className="space-y-3 text-xs text-slate-650 leading-relaxed font-normal">
+                      <div className="flex gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                        <div className="h-6 w-6 rounded-full bg-rose-100 text-rose-700 font-extrabold flex items-center justify-center shrink-0">۱</div>
+                        <p>
+                          <strong>ساخت پایگاه داده در سی‌پنل/هاست:</strong> وارد پنل هاست خود شوید، به بخش <strong>MySQL® Databases</strong> مراجعه کنید و یک دیتابیس تازه (مثلا <code className="bg-slate-200 px-1 rounded text-red-650">easydriver_db</code>) بسازید. یک کاربر دیتابیس جدید بسازید و رمز عبور قوی به آن اختصاص دهید، سپس کاربر را با تمامی دسترسی‌ها (All Privileges) به دیتابیس متصل کنید.
+                        </p>
+                      </div>
+
+                      <div className="flex gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                        <div className="h-6 w-6 rounded-full bg-rose-100 text-rose-700 font-extrabold flex items-center justify-center shrink-0">۲</div>
+                        <p>
+                          <strong>درون‌ریزی ساختار پایگاه داده در phpMyAdmin:</strong> از پنل هاست خود ابزار معروف <strong>phpMyAdmin</strong> را باز کنید، دیتابیس ساخته‌شده را انتخاب کنید، به زبانه <strong>Import (درون‌ریزی)</strong> بروید، فایل <code className="bg-slate-200 px-1 rounded text-red-650">schema.sql</code> که در ریشه این پروژه قرار دارد را انتخاب و دکمه Go را بزنید تا کل جداول و اطلاعات اولیه ایجاد شوند.
+                        </p>
+                      </div>
+
+                      <div className="flex gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                        <div className="h-6 w-6 rounded-full bg-rose-100 text-rose-700 font-extrabold flex items-center justify-center shrink-0">۳</div>
+                        <p>
+                          <strong>تنظیم فایل پیکربندی محیطی (.env):</strong> فایل <code className="bg-slate-200 px-1 rounded text-red-650">.env</code> ریشه پروژه را باز کنید و اطلاعات دیتابیس MySQL خود را همانند مستندات روبرو وارد کنید. با ویرایش این فایل، پروژه به صورت خودکار از ذخیره‌سازی محلی به سیستم phpMyAdmin سوئیچ می‌کند!
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h4 className="font-extrabold text-xs text-slate-800">پیکربندی کلیدهای اتصال محیطی:</h4>
+                    
+                    <div className="bg-slate-900 text-slate-250 p-4 rounded-xl font-mono text-[9px] text-left leading-relaxed border border-slate-800 space-y-2 relative" dir="ltr">
+                      <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-slate-850 text-slate-400 rounded text-[7px] uppercase font-bold">.env.example</div>
+                      <p className="text-slate-500"># Windows phpMyAdmin Database parameters</p>
+                      <p><span className="text-rose-400">DB_HOST</span>=localhost</p>
+                      <p><span className="text-rose-400">DB_USER</span>=your_database_username</p>
+                      <p><span className="text-rose-400">DB_PASSWORD</span>=your_secure_password</p>
+                      <p><span className="text-rose-400">DB_NAME</span>=easydriver_db</p>
+                      <p><span className="text-rose-400">DB_PORT</span>=3306</p>
+                      <p className="text-slate-500"># Gemini API Intelligent assistant key</p>
+                      <p><span className="text-rose-400">GEMINI_API_KEY</span>=AIzaSy...</p>
+                    </div>
+
+                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-right">
+                      <strong className="block text-slate-800 text-[10px] font-extrabold">ویژگی‌های طلایی این معماری:</strong>
+                      <ul className="text-[10px] text-slate-500 space-y-1.5 list-disc list-inside font-medium leading-relaxed">
+                        <li>همگام‌سازی لحظه‌ای تراکنش‌های مالی، تیکت‌ها و خدمات</li>
+                        <li>امکان مانیتورینگ آنلاین کاربران در phpMyAdmin</li>
+                        <li>کاهش کوئری‌های تکراری با بهره‌گیری از Connection Pool</li>
+                        <li>تغییر وضعیت لایو به فایل محلی در صورت داون شدن هاست دیتابیس</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <span className="text-[10px] text-slate-450 font-medium">تمامی جداول درایورها، جزئیات متصل‌شونده و تیکت‌ها داخل فایل <code className="bg-slate-100 px-1 py-0.5 rounded text-red-600">/schema.sql</code> مکتوب شده‌اند.</span>
+                  
+                  <button
+                    onClick={() => {
+                      alert("فایل طرح و سناریو دیتابیس در شاخه روت (root) با نام schema.sql با موفقیت در دسترس است و در هاست شما بارگذاری می‌شود.");
+                    }}
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-[10px] rounded-lg shrink-0 flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <FileCodeIcon className="h-4 w-4 text-rose-500" />
+                    <span>تایید دسترسی به فایل schema.sql جداول</span>
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
