@@ -163,6 +163,14 @@ export const SPECIALTY_LABELS: Record<TechnicianSpecialty, string> = {
   all: 'همه‌فن حریف (تمام خدمات)',
 };
 
+export interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  unlockedAt: string;
+  iconName: string;
+}
+
 export interface Technician {
   id: string;
   fullName: string;
@@ -174,6 +182,8 @@ export interface Technician {
   createdDate: string;
   updatedDate: string;
   createdBy: string;
+  points?: number;
+  unlockedAchievements?: Achievement[];
 }
 
 export interface Notification {

@@ -666,6 +666,17 @@ app.put("/api/requests/:id", async (req, res) => {
   const pool = await getMySQLPool();
   if (pool) {
     try {
+      if (status === "completed") {
+        const [oldReq] = await pool.query("SELECT `status` FROM `requests` WHERE `id`=?", [id]);
+        if (oldReq && (oldReq as any[]).length > 0 && (oldReq as any[])[0].status !== "completed") {
+          if (assignedToId) {
+            await pool.query(
+              "UPDATE `technicians` SET `completed_tasks` = `completed_tasks` + 1, `updated_date` = ? WHERE `id`=?",
+              [new Date().toISOString(), assignedToId]
+            );
+          }
+        }
+      }
       await pool.query(
         "UPDATE `requests` SET `full_name`=?, `phone`=?, `service_type`=?, `description`=?, `status`=?, `priority`=?, `admin_notes`=?, `scheduled_date`=?, `assigned_to_id`=?, `assigned_to_name`=?, `is_approved`=?, `approved_at`=?, `assigned_at`=?, `updated_date`=?, `rating`=?, `rating_comment`=?, `rated_at`=? WHERE `id`=?",
         [fullName, phone, serviceType, description, status, priority, adminNotes || null, scheduledDate || null, assignedToId || null, assignedToName || null, isApproved ? 1 : 0, approvedAt || null, assignedAt || null, updatedDate, rating || null, ratingComment || null, ratedAt || null, id]
@@ -677,8 +688,21 @@ app.put("/api/requests/:id", async (req, res) => {
 
   const local = readLocalJSON();
   const index = local.requests.findIndex(r => r.id === id);
+  let justCompleted = false;
   if (index >= 0) {
+    const oldStatus = local.requests[index].status;
+    if (oldStatus !== "completed" && status === "completed") {
+      justCompleted = true;
+    }
     local.requests[index] = { ...local.requests[index], ...req.body };
+    
+    if (justCompleted && assignedToId) {
+      const techIdx = local.technicians.findIndex(t => t.id === assignedToId);
+      if (techIdx >= 0) {
+        local.technicians[techIdx].completedTasks = (local.technicians[techIdx].completedTasks || 0) + 1;
+        local.technicians[techIdx].updatedDate = new Date().toISOString();
+      }
+    }
     writeLocalJSON(local);
   }
 

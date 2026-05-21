@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Request, RequestStatus, STATUS_LABELS, STATUS_COLORS, SERVICE_LABELS, PRIORITY_LABELS, PRIORITY_COLORS, Ticket } from '../types';
-import { ShieldAlert, Key, Clipboard, Laptop, Star, User, Phone, CheckCircle, Clock, Play, CheckCircle2, XCircle, AlertTriangle, Terminal, Save, HelpCircle, ChevronRight, MessageSquare, Reply } from 'lucide-react';
+import { ShieldAlert, Key, Clipboard, Laptop, Star, User, Phone, CheckCircle, Clock, Play, CheckCircle2, XCircle, AlertTriangle, Terminal, Save, HelpCircle, ChevronRight, MessageSquare, Reply, Trophy, Medal, Award, Zap, Heart, ShieldCheck, Crown, Rocket, TrendingUp, Sparkles, ChevronLeft } from 'lucide-react';
 import { motion } from 'motion/react';
+import { calculateTechnicianStats } from '../utils/pointsCalculator';
+import { MonthlyPerformanceChart } from './MonthlyPerformanceChart';
 
 export const TechnicianDashboard: React.FC = () => {
   const {
@@ -25,7 +27,7 @@ export const TechnicianDashboard: React.FC = () => {
     ? (techReviews.reduce((sum, r) => sum + r.rating, 0) / techReviews.length).toFixed(1)
     : '5.0';
 
-  const [activeTab, setActiveTab] = useState<'tasks' | 'tickets'>('tasks');
+  const [activeTab, setActiveTab] = useState<'tasks' | 'tickets' | 'achievements'>('tasks');
 
   // Notes state
   const [techNotes, setTechNotes] = useState<string>('');
@@ -136,6 +138,21 @@ export const TechnicianDashboard: React.FC = () => {
     );
   }
 
+  // Find current technician object
+  const currentTech = (technicians || []).find((t) => t.id === currentUser?.id) || {
+    id: currentUser?.id || 'tech-1',
+    fullName: currentUser?.fullName || 'مهندس نوید مرادی',
+    phone: currentUser?.phone || '09123456789',
+    specialty: 'all' as any,
+    isActive: true,
+    completedTasks: 34,
+    createdDate: '2026-01-10T08:30:00Z',
+    updatedDate: '2026-05-18T10:20:00Z',
+    createdBy: 'admin-1',
+  };
+
+  const techStats = calculateTechnicianStats(currentTech, requests, reviews);
+
   // Filter tasks assigned to this technician
   // Both: check if assignedToId matches currentUser.id
   // To keep it comprehensive for the demo, if no task is specifically assigned, let also show tasks that are assigned to 'tech-1' (as that's our default mock technician Novid)
@@ -217,7 +234,7 @@ export const TechnicianDashboard: React.FC = () => {
         </div>
 
         {/* Dynamic switcher tabs */}
-        <div className="flex gap-2.5 mb-8">
+        <div className="flex flex-wrap gap-2.5 mb-8">
           <button
             onClick={() => setActiveTab('tasks')}
             className={`py-3 px-5 rounded-xl border text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
@@ -245,6 +262,23 @@ export const TechnicianDashboard: React.FC = () => {
           >
             <MessageSquare className="h-4 w-4 shrink-0" />
             <span>تیکت‌های چت و پشتیبانی فنی</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('achievements')}
+            className={`py-3 px-5 rounded-xl border text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'achievements'
+                ? 'bg-purple-600 border-purple-600 text-white shadow-md shadow-purple-500/15'
+                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            <Trophy className="h-4 w-4 shrink-0 text-amber-500" />
+            <span>مدال‌ها، سطح فنی و جدول رده‌بندی</span>
+            {techStats.achievements.filter(a => a.unlocked).length > 0 && (
+              <span className="h-4.5 px-1.5 bg-amber-400 text-slate-900 rounded-full text-[8.5px] font-black flex items-center justify-center">
+                ★ {techStats.achievements.filter(a => a.unlocked).length}
+              </span>
+            )}
           </button>
         </div>
 
@@ -661,7 +695,7 @@ export const TechnicianDashboard: React.FC = () => {
               </div>
 
             </div>
-          ) : (
+          ) : activeTab === 'tickets' ? (
             /* Tab 2: Technical tickets conversations replies */
             <div className="space-y-4 text-right">
               <h3 className="font-extrabold text-sm sm:text-base text-slate-850 pb-2 border-b border-slate-200">صندوق ورودی تیکت‌های پشتیبانی</h3>
@@ -672,7 +706,7 @@ export const TechnicianDashboard: React.FC = () => {
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                   
                   {/* Left sub-column: Tickets directory */}
-                  <div className="lg:col-span-5 space-y-2.5">
+                  <div className="lg:col-span-12 xl:col-span-5 space-y-2.5">
                     {tickets.map((t) => {
                       const isActive = activeSupportTicketId === t.id;
                       return (
@@ -704,7 +738,7 @@ export const TechnicianDashboard: React.FC = () => {
                   </div>
 
                   {/* Right sub-column: Chats viewer & Quick writer replies */}
-                  <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
+                  <div className="lg:col-span-12 xl:col-span-7 bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
                     {activeSupportTicketId ? (
                       (() => {
                         const activeTicket = tickets.find(t => t.id === activeSupportTicketId);
@@ -774,6 +808,304 @@ export const TechnicianDashboard: React.FC = () => {
 
                 </div>
               )}
+            </div>
+          ) : (
+            /* Tab 3: Points, Achievements & Live Leaderboard */
+            <div className="space-y-8 text-right font-sans">
+              
+              {/* Level progression banner */}
+              <div className="relative overflow-hidden bg-gradient-to-br from-indigo-900 via-slate-900 to-purple-900 rounded-3xl text-white p-6 sm:p-8 border border-white/10 shadow-xl">
+                <div className="absolute top-0 right-0 -mr-16 -mt-16 w-56 h-56 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-56 h-56 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+                
+                <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 bg-purple-500/10 rounded-xl border border-purple-500/25">
+                        <Crown className="h-6 w-6 text-amber-400 animate-pulse" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-purple-300 font-extrabold uppercase tracking-wider block">سطح فعلی رده‌بندی فنی شما</span>
+                        <h3 className="text-xl sm:text-2xl font-black text-white">{techStats.levelName}</h3>
+                      </div>
+                    </div>
+                    
+                    <p className="text-xs text-slate-300 leading-relaxed max-w-xl">
+                      با انجام کارهای پشتیبانی بیشتر، کسب امتیاز کامل ستاره‌های رضایت‌مندی از مشتری و پاسخ فوری در ساعت اولیه، رتبه خود را ارتقا دهید و در قرعه‌کشی مهندس برتر ماه قرار بگیرید!
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col items-end shrink-0">
+                    <div className="flex items-baseline gap-1.5 mb-1.5">
+                      <span className="text-3xl sm:text-4xl font-black text-amber-400 font-mono">{techStats.totalPoints}</span>
+                      <span className="text-xs text-purple-200">امتیاز کل</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-mono">
+                      دریافت {techStats.nextLevelPoints - techStats.totalPoints} امتیاز تعاملی برای سطح بعدی
+                    </div>
+                  </div>
+                </div>
+
+                {/* Level Up progress bar */}
+                <div className="mt-8 space-y-2">
+                  <div className="flex justify-between text-xs font-mono text-slate-300">
+                    <span>{techStats.prevLevelPoints} PTS</span>
+                    <span className="text-amber-300 font-extrabold">{techStats.progressPercent}% کامل شده</span>
+                    <span>{techStats.nextLevelPoints === 100000 ? 'حداکثر رتبه' : `${techStats.nextLevelPoints} PTS`}</span>
+                  </div>
+                  <div className="h-3.5 w-full bg-slate-950/45 rounded-full p-0.5 overflow-hidden border border-white/5">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${techStats.progressPercent}%` }}
+                      transition={{ duration: 1, ease: 'easeOut' }}
+                      className="h-full bg-gradient-to-r from-purple-500 via-indigo-500 to-blue-500 rounded-full relative"
+                    >
+                      <div className="absolute inset-0 bg-[linear-gradient(45deg,rgba(255,255,255,0.15)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.15)_50%,rgba(255,255,255,0.15)_75%,transparent_75%,transparent)] bg-[size:15px_15px] animate-[vibration_1s_linear_infinite]" />
+                    </motion.div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Point allocation grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-start justify-between">
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-slate-400 font-bold block">امتیاز خدمات فنی</span>
+                    <strong className="text-lg font-black text-slate-800 font-mono">{techStats.completedTasksPoints} PTS</strong>
+                    <span className="text-[10px] text-slate-400 block">۵۰+ امتیاز برای هر نصب موفق</span>
+                  </div>
+                  <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
+                    <Clipboard className="h-5 w-5" />
+                  </div>
+                </div>
+
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-start justify-between">
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-slate-400 font-bold block">امتیاز رضایت مشتری</span>
+                    <strong className="text-lg font-black text-slate-800 font-mono">{techStats.ratingsPoints} PTS</strong>
+                    <span className="text-[10px] text-slate-400 block">۱۵۰+ امتیاز برای هر نظر عالی</span>
+                  </div>
+                  <div className="p-2.5 bg-rose-50 text-rose-600 rounded-xl">
+                    <Star className="h-5 w-5 fill-rose-500 text-rose-500" />
+                  </div>
+                </div>
+
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-start justify-between">
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-slate-400 font-bold block">بونوس پاسخگویی سریع</span>
+                    <strong className="text-lg font-black text-slate-800 font-mono">{techStats.responseTimePoints} PTS</strong>
+                    <span className="text-[10px] text-slate-400 block">{techStats.fastResponseCount} پرونده در کمتر از ۶ ساعت</span>
+                  </div>
+                  <div className="p-2.5 bg-amber-50 text-amber-500 rounded-xl">
+                    <Zap className="h-5 w-5 fill-amber-500" />
+                  </div>
+                </div>
+
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-start justify-between">
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-slate-400 font-bold block">امتیاز بونوس مدال‌ها</span>
+                    <strong className="text-lg font-black text-slate-800 font-mono">{techStats.achievementPoints} PTS</strong>
+                    <span className="text-[10px] text-slate-400 block">مرتبط به اهداف و چالش‌های ویژه</span>
+                  </div>
+                  <div className="p-2.5 bg-purple-50 text-purple-600 rounded-xl">
+                    <Trophy className="h-5 w-5" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Monthly Performance Chart using Recharts */}
+              <motion.div
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4 }}
+              >
+                <MonthlyPerformanceChart technician={currentTech} />
+              </motion.div>
+
+              {/* Achievements & Leaderboard Split */}
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+                
+                {/* Unlocked Achievements list */}
+                <div className="xl:col-span-12 xl:order-2 lg:col-span-1 border border-slate-200 bg-white rounded-3xl p-6 shadow-sm space-y-6">
+                  <div>
+                    <h3 className="text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-2">
+                      <Medal className="h-5 w-5 text-purple-600" />
+                      <span>مدال‌ها و افتخارات شایستگی فنی (Achievements)</span>
+                    </h3>
+                    <p className="text-[10px] text-slate-400 mt-1">با دسترسی سریع و پاسخگویی آنلاین باکیفیت قفل شایستگی‌ها را بشکنید</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {techStats.achievements.map((ach) => {
+                      const iconsDict: Record<string, React.ReactNode> = {
+                        Rocket: <Rocket className={`h-5 w-5 ${ach.unlocked ? 'text-rose-500' : 'text-slate-400'}`} />,
+                        Heart: <Heart className={`h-5 w-5 ${ach.unlocked ? 'text-red-500' : 'text-slate-400'}`} />,
+                        Zap: <Zap className={`h-5 w-5 ${ach.unlocked ? 'text-amber-500' : 'text-slate-400'}`} />,
+                        Award: <Award className={`h-5 w-5 ${ach.unlocked ? 'text-cyan-500' : 'text-slate-400'}`} />,
+                        ShieldCheck: <ShieldCheck className={`h-5 w-5 ${ach.unlocked ? 'text-emerald-500' : 'text-slate-400'}`} />,
+                        Crown: <Crown className={`h-5 w-5 ${ach.unlocked ? 'text-purple-600' : 'text-slate-400'}`} />,
+                      };
+
+                      return (
+                        <div
+                          key={ach.id}
+                          className={`relative p-4 rounded-2xl border transition-all ${
+                            ach.unlocked
+                              ? 'bg-gradient-to-br from-white to-slate-50 border-slate-250 shadow-sm'
+                              : 'bg-white border-dashed border-slate-200 opacity-60'
+                          }`}
+                        >
+                          {ach.unlocked && (
+                            <span className="absolute top-3.5 left-3.5 h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
+                          )}
+                          <div className="flex items-start gap-3">
+                            <div className={`p-2 rounded-xl shrink-0 ${
+                              ach.unlocked ? 'bg-slate-100 shadow-inner' : 'bg-slate-50'
+                            }`}>
+                              {iconsDict[ach.icon] || <Trophy className="h-5 w-5 text-slate-400" />}
+                            </div>
+                            <div className="grow space-y-1">
+                              <div className="flex items-center justify-between">
+                                <strong className={`text-xs font-black ${ach.unlocked ? 'text-slate-800' : 'text-slate-500'}`}>
+                                  {ach.title}
+                                </strong>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                                  ach.unlocked ? 'bg-amber-100 text-amber-700 font-bold' : 'bg-slate-100 text-slate-500 font-normal'
+                                }`}>
+                                  +{ach.pointsReward} PTS
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-slate-400 leading-normal">{ach.description}</p>
+                              
+                              <div className="mt-3.5 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[10px]">
+                                <span className={`font-bold ${ach.unlocked ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                  {ach.unlocked ? '✔ با موفقیت آزاد شد' : '🔒 غیزفعال / در حال توسعه'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Competitive Leaderboard */}
+                <div className="xl:col-span-12 xl:order-1 lg:col-span-1 border border-slate-200 bg-white rounded-3xl p-6 shadow-sm space-y-5">
+                  <div className="flex justify-between items-center flex-wrap gap-2">
+                    <div>
+                      <h3 className="text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-2">
+                        <Trophy className="h-5 w-5 text-yellow-500" />
+                        <span>رده‌بندی کل متخصصین پرتال (Live Leaderboard)</span>
+                      </h3>
+                      <p className="text-[10px] text-slate-400 mt-1">مقایسه امتیازات، سطح علمی و تعداد کارهای بسته شده کادر فنی به صورت زنده</p>
+                    </div>
+
+                    <span className="text-[10px] bg-amber-50 text-amber-600 border border-amber-150 px-2 py-1 rounded-full font-bold">
+                      ساعت شمارش ماهانه: ۳ روز و ۱۰ ساعت باقیمانده
+                    </span>
+                  </div>
+
+                  {/* Table lists */}
+                  <div className="overflow-x-auto rounded-xl border border-slate-100">
+                    <table className="w-full text-right text-xs">
+                      <thead className="bg-slate-550 bg-slate-50 text-slate-600 font-bold border-b border-slate-100">
+                        <tr>
+                          <th className="p-3">رتبه</th>
+                          <th className="p-3">نام مهندس فنی</th>
+                          <th className="p-3">تخصص اصلی</th>
+                          <th className="p-3">مجموع کارها</th>
+                          <th className="p-3">امتیاز رضایت</th>
+                          <th className="p-3">امتیاز کل</th>
+                          <th className="p-3">مدال‌ها</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(technicians || []).map(t => {
+                          const stats = calculateTechnicianStats(t, requests, reviews);
+                          return {
+                            techObj: t,
+                            stats,
+                          };
+                        })
+                        .sort((a, b) => b.stats.totalPoints - a.stats.totalPoints)
+                        .map((row, rankIdx) => {
+                          const medIcon = () => {
+                            if (rankIdx === 0) return <span className="h-6 w-6 font-bold text-slate-900 bg-amber-400 rounded-full flex items-center justify-center border border-amber-300 shadow-sm shrink-0">۱</span>;
+                            if (rankIdx === 1) return <span className="h-6 w-6 font-bold text-slate-900 bg-slate-300 rounded-full flex items-center justify-center border border-slate-200 shadow-sm shrink-0">۲</span>;
+                            if (rankIdx === 2) return <span className="h-6 w-6 font-bold text-slate-900 bg-amber-600 rounded-full flex items-center justify-center border border-amber-500 text-white shadow-sm shrink-0">۳</span>;
+                            return <span className="h-6 w-6 text-slate-500 bg-slate-100 rounded-full flex items-center justify-center border border-slate-200 shrink-0 font-mono">{rankIdx + 1}</span>;
+                          };
+
+                          const specLabel = () => {
+                            if (row.techObj.specialty === 'all') return 'پشتیبانی همه جانبه';
+                            if (row.techObj.specialty === 'driver_install') return 'نصب درایور سخت‌افزار';
+                            if (row.techObj.specialty === 'software_install') return 'نصب نرم‌افزار مهندسی';
+                            if (row.techObj.specialty === 'anydesk_support') return 'کارشناس دورکاری انی‌دسک';
+                            return 'امور فنی متفرقه';
+                          };
+
+                          const isCurrent = row.techObj.id === currentUser?.id;
+
+                          return (
+                            <tr
+                              key={row.techObj.id}
+                              className={`border-b border-slate-100/70 last:border-0 hover:bg-slate-50/50 transition-colors ${
+                                isCurrent ? 'bg-purple-50/20 font-extrabold ring-1 ring-purple-600/10' : ''
+                              }`}
+                            >
+                              <td className="p-3">{medIcon()}</td>
+                              <td className="p-3">
+                                <div className="flex items-center gap-2">
+                                  <img
+                                    src={`https://api.dicebear.com/7.x/adventurer/svg?seed=${row.techObj.fullName}`}
+                                    alt="User Avatar"
+                                    className="h-8 w-8 rounded-full border border-slate-100 shadow-sm shrink-0 bg-white"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                  <div>
+                                    <strong className="block text-slate-800 text-xs">{row.techObj.fullName}</strong>
+                                    {isCurrent && (
+                                      <span className="text-[9px] bg-purple-100 text-purple-700 px-1 py-0.2 rounded font-black mt-0.5 inline-block">شما</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="p-3 text-slate-600">{specLabel()}</td>
+                              <td className="p-3 font-mono text-slate-700">{row.stats.fastResponseCount + row.techObj.completedTasks} پرونده</td>
+                              <td className="p-3">
+                                <div className="flex items-center gap-1">
+                                  <Star className="h-3 w-3 fill-amber-400 text-amber-400 shrink-0" />
+                                  <span className="font-mono text-slate-800">{row.stats.averageRating}</span>
+                                </div>
+                              </td>
+                              <td className="p-3 font-mono font-black text-slate-900">{row.stats.totalPoints} PTS</td>
+                              <td className="p-3">
+                                <div className="flex items-center gap-1">
+                                  {row.stats.achievements.filter(ach => ach.unlocked).map(ach => (
+                                    <span
+                                      key={ach.id}
+                                      title={ach.title}
+                                      className="h-4.5 w-4.5 bg-slate-100 rounded-full flex items-center justify-center border border-slate-200 text-[10px]"
+                                    >
+                                      ★
+                                    </span>
+                                  ))}
+                                  {row.stats.achievements.filter(ach => ach.unlocked).length === 0 && (
+                                    <span className="text-[10px] text-slate-400">-</span>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+              </div>
+
             </div>
           )}
         </div>

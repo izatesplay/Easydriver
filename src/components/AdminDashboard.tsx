@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Request, Review, Ticket, Technician, SERVICE_LABELS, STATUS_LABELS, STATUS_COLORS, PRIORITY_LABELS, PRIORITY_COLORS, SPECIALTY_LABELS, TechnicianSpecialty, RequestStatus, RequestPriority, TICKET_CATEGORY_LABELS, TICKET_STATUS_LABELS, TICKET_STATUS_COLORS } from '../types';
-import { ShieldAlert, Key, Grid, Clipboard, Users, Star, MessageSquare, Plus, Edit2, Trash2, CheckCircle2, UserPlus, Info, Save, Clock, X, ChevronDown, ChevronUp, Reply, Sparkles, Database, Server, Globe, FileCode as FileCodeIcon } from 'lucide-react';
+import { ShieldAlert, Key, Grid, Clipboard, Users, Star, MessageSquare, Plus, Edit2, Trash2, CheckCircle2, UserPlus, Info, Save, Clock, X, ChevronDown, ChevronUp, Reply, Sparkles, Database, Server, Globe, FileCode as FileCodeIcon, Trophy, Medal } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { calculateTechnicianStats } from '../utils/pointsCalculator';
 
 export const AdminDashboard: React.FC = () => {
   const {
@@ -744,12 +745,10 @@ export const AdminDashboard: React.FC = () => {
               {/* Grid cards display of Technicians lists */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {technicians.map((tech) => {
+                  const stats = calculateTechnicianStats(tech, requests, reviews);
                   const techReviews = (reviews || []).filter(
                     (r) => r.technicianId === tech.id || (!r.technicianId && tech.id === 'tech-1')
                   );
-                  const avgRating = techReviews.length > 0
-                    ? (techReviews.reduce((sum, r) => sum + r.rating, 0) / techReviews.length).toFixed(1)
-                    : '5.0';
 
                   return (
                     <div key={tech.id} className="p-5 bg-white rounded-2xl border border-slate-200 shadow-xxs text-right flex flex-col justify-between space-y-4">
@@ -757,7 +756,13 @@ export const AdminDashboard: React.FC = () => {
                         
                         {/* Name status cap */}
                         <div className="flex items-center justify-between">
-                          <h4 className="font-extrabold text-sm text-slate-850">{tech.fullName}</h4>
+                          <div className="flex items-center gap-1.5">
+                            <h4 className="font-extrabold text-sm text-slate-850">{tech.fullName}</h4>
+                            <span className="text-[10px] bg-amber-50 text-amber-600 font-bold px-1.5 py-0.2 rounded-md font-mono flex items-center gap-0.5 shadow-sm border border-amber-100">
+                              <Trophy className="h-3 w-3 text-amber-500" />
+                              {stats.totalPoints} PTS
+                            </span>
+                          </div>
                           <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${
                             tech.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
                           }`}>
@@ -771,9 +776,21 @@ export const AdminDashboard: React.FC = () => {
                           {tech.email && <p className="font-mono">ایمیل: {tech.email}</p>}
                           <div className="flex items-center gap-1.5 text-[10px] text-amber-600 font-bold pt-1">
                             <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
-                            <span>میانگین رضایت: {avgRating} از ۵ ({techReviews.length} بازخورد مشتری)</span>
+                            <span>میانگین رضایت: {stats.averageRating} از ۵ ({techReviews.length} بازخورد مشتری)</span>
                           </div>
-                          <span className="block text-[10px] text-indigo-705 font-bold pt-0.5 animate-pulse">تعداد کارهای نهایی شده: {tech.completedTasks} خدمت نصب</span>
+                          
+                          <div className="flex items-center justify-between flex-wrap gap-1.5 pt-1">
+                            <span className="text-[10px] text-slate-500 block font-bold">تعداد کل کارهای بسته شده: {stats.fastResponseCount + tech.completedTasks} خدمت</span>
+                            <span className="text-[9px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded font-extrabold">سطح: {stats.levelName.split(' ')[0]}</span>
+                          </div>
+                          
+                          {/* Mini progress bar */}
+                          <div className="mt-2 space-y-1">
+                            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full" style={{ width: `${stats.progressPercent}%` }} />
+                            </div>
+                            <span className="text-[8px] text-slate-400 font-mono block text-left">سطح {stats.level} • {stats.progressPercent}% تا ارتقا رده</span>
+                          </div>
                         </div>
 
                       </div>
