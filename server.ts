@@ -4,6 +4,8 @@ import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import fs from "fs";
 import mysql from "mysql2/promise";
+import http from "http";
+import { WebSocketServer, WebSocket } from "ws";
 
 dotenv.config();
 
@@ -336,8 +338,45 @@ const INITIAL_DATASET = {
       updatedDate: '2026-05-16T10:00:00Z',
       createdBy: 'user-customer'
     }
+  ],
+  notifications: [
+    {
+      id: 'notif-1',
+      title: 'درخواست خدمات جدید',
+      message: 'درخواست جدیدی برای خدمات «نصب و بروزرسانی درایور» توسط علی رضایی ثبت شد.',
+      type: 'request_created',
+      priority: 'high',
+      targetRole: 'admin',
+      referenceId: 'req-1',
+      createdDate: '2026-05-20T10:00:00Z',
+      read: false
+    },
+    {
+      id: 'notif-2',
+      title: 'تغییر وضعیت تیکت پشتیبانی',
+      message: 'تیکت شما تحت عنوان «عدم فعال‌سازی مجدد لایسنس آفیس» پاسخ داده شد و به وضعیت «در حال بررسی» تغییر یافت.',
+      type: 'ticket_status',
+      priority: 'medium',
+      targetUserId: 'user-customer',
+      referenceId: 'tick-1',
+      createdDate: '2026-05-20T11:30:00Z',
+      read: false
+    }
   ]
 };
+
+interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'request_created' | 'request_status' | 'ticket_created' | 'ticket_reply' | 'ticket_status' | 'review_created';
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  targetUserId?: string;
+  targetRole?: 'admin' | 'customer' | 'technician';
+  referenceId?: string;
+  createdDate: string;
+  read: boolean;
+}
 
 // Ensure JSON backup exists
 function ensureLocalJSON() {
@@ -346,24 +385,196 @@ function ensureLocalJSON() {
   }
 }
 
-function readLocalJSON(): typeof INITIAL_DATASET {
+function readLocalJSON(): any {
   ensureLocalJSON();
   try {
     const raw = fs.readFileSync(BACKUP_FILE_PATH, "utf-8");
-    return JSON.parse(raw);
+    const data = JSON.parse(raw);
+    if (!data.notifications) {
+      data.notifications = [];
+    }
+    return data;
   } catch (e) {
-    return INITIAL_DATASET;
+    return { ...INITIAL_DATASET, notifications: [] };
   }
 }
 
-function writeLocalJSON(data: typeof INITIAL_DATASET) {
+function writeLocalJSON(data: any) {
   fs.writeFileSync(BACKUP_FILE_PATH, JSON.stringify(data, null, 2), "utf-8");
+}
+
+function getNotificationsFromDb(): Notification[] {
+  const local = readLocalJSON();
+  return local.notifications || [];
+}
+
+function saveNotificationToDb(notification: Notification) {
+  const local = readLocalJSON();
+  if (!local.notifications) local.notifications = [];
+  local.notifications.unshift(notification);
+  writeLocalJSON(local);
+}
+
+function markNotificationAsReadInDb(id: string): boolean {
+  const local = readLocalJSON();
+  if (!local.notifications) local.notifications = [];
+  const notif = local.notifications.find((n: any) => n.id === id);
+  if (notif) {
+    notif.read = true;
+    writeLocalJSON(local);
+    return true;
+  }
+  return false;
+}
+
+function markAllNotificationsAsReadInDb(userId?: string, role?: string): boolean {
+  const local = readLocalJSON();
+  if (!local.notifications) local.notifications = [];
+  
+  let modified = false;
+  local.notifications.forEach((n: any) => {
+    let match = false;
+    if (userId && n.targetUserId === userId) {
+      match = true;
+    } else if (!userId && role && n.targetRole === role) {
+      match = true;
+    } else if (!userId && !role) {
+      match = true;
+    }
+    if (match && !n.read) {
+      n.read = true;
+      modified = true;
+    }
+  });
+
+  if (modified) {
+    writeLocalJSON(local);
+  }
+  return modified;
+}
+
+function getRecipientEmailForNotification(notification: Notification): string {
+  if (notification.targetRole === 'admin') {
+    return 'admin@easydriver.ir';
+  }
+  if (notification.targetUserId === 'tech-1') {
+    return 'navid@easydriver.ir';
+  }
+  return 'saeed@customer.ir';
+}
+
+function createAndSendNotification(data: {
+  title: string;
+  message: string;
+  type: 'request_created' | 'request_status' | 'ticket_created' | 'ticket_reply' | 'ticket_status' | 'review_created';
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  targetUserId?: string;
+  targetRole?: 'admin' | 'customer' | 'technician';
+  referenceId?: string;
+}) {
+  const notification: Notification = {
+    id: `notif-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
+    title: data.title,
+    message: data.message,
+    type: data.type,
+    priority: data.priority || 'medium',
+    targetUserId: data.targetUserId,
+    targetRole: data.targetRole,
+    referenceId: data.referenceId,
+    createdDate: new Date().toISOString(),
+    read: false
+  };
+
+  // 1. Save locally
+  saveNotificationToDb(notification);
+
+  // 2. Broadcast via WebSocket if clients connected
+  let wsDeliveredCount = 0;
+  if (wss) {
+    wss.clients.forEach((client: any) => {
+      if (client.readyState === 1) { // OPEN
+        let match = false;
+        if (notification.targetUserId && client.userId === notification.targetUserId) {
+          match = true;
+        } else if (!notification.targetUserId && notification.targetRole && client.userRole === notification.targetRole) {
+          match = true;
+        } else if (!notification.targetUserId && !notification.targetRole) {
+          match = true; // general broadcast
+        }
+
+        if (match) {
+          try {
+            client.send(JSON.stringify({
+              type: "notification",
+              data: notification
+            }));
+            wsDeliveredCount++;
+          } catch (err) {
+            console.error("WS notification dispatch failed:", err);
+          }
+        }
+      }
+    });
+  }
+
+  // 3. Fallback: Simulation of Email channels
+  const isCritical = notification.priority === 'high' || notification.priority === 'urgent';
+  const deliveredRealtime = wsDeliveredCount > 0;
+
+  if (!deliveredRealtime || isCritical) {
+    const emailTo = getRecipientEmailForNotification(notification);
+    const reason = !deliveredRealtime ? "User is currently offline (WebSocket disconnected)" : "Critical high-priority service notification backup copy";
+    
+    console.log(`\n================================================================================`);
+    console.log(`✉️  [FALLBACK EMAIL NOTIFICATION DISPATCHED] to: ${emailTo}`);
+    console.log(`📌 Heading: ${notification.title}`);
+    console.log(`📝 Description: ${notification.message}`);
+    console.log(`💡 Gateway Status: Delivered successfully via Simulated SMTP Pipeline (Reason: ${reason})`);
+    console.log(`================================================================================\n`);
+  }
 }
 
 // Check database status
 app.get("/api/db-status", async (req, res) => {
   await getMySQLPool(); // attempt lazy initialization if envs exist
   res.json(dbStatus);
+});
+
+// Notifications Endpoints
+app.get("/api/notifications", (req, res) => {
+  const { userId, role } = req.query as { userId?: string, role?: string };
+  const allNotifs = getNotificationsFromDb();
+  
+  // Filter notifications correctly
+  const filtered = allNotifs.filter(n => {
+    // If targeted at a specific user and matches
+    if (n.targetUserId && n.targetUserId === userId) {
+      return true;
+    }
+    // If targeted at a specific role but NOT targeted at a different specific user
+    if (!n.targetUserId && n.targetRole && n.targetRole === role) {
+      return true;
+    }
+    // If a general notification and role aligns
+    if (!n.targetUserId && !n.targetRole) {
+      return true;
+    }
+    return false;
+  });
+  
+  res.json(filtered);
+});
+
+app.post("/api/notifications/:id/read", (req, res) => {
+  const { id } = req.params;
+  const success = markNotificationAsReadInDb(id);
+  res.json({ success });
+});
+
+app.post("/api/notifications/read-all", (req, res) => {
+  const { userId, role } = req.body;
+  const success = markAllNotificationsAsReadInDb(userId, role);
+  res.json({ success });
 });
 
 // -------------------------------------------------------------
@@ -413,18 +624,20 @@ app.get("/api/requests", async (req, res) => {
 app.post("/api/requests", async (req, res) => {
   const { id, fullName, phone, serviceType, description, status, priority, adminNotes, scheduledDate, assignedToId, assignedToName, isApproved, approvedAt, assignedAt, createdDate, updatedDate, createdBy } = req.body;
   const pool = await getMySQLPool();
+  let saved = false;
   if (pool) {
     try {
       await pool.query(
         "INSERT INTO `requests` (`id`, `full_name`, `phone`, `service_type`, `description`, `status`, `priority`, `admin_notes`, `scheduled_date`, `assigned_to_id`, `assigned_to_name`, `is_approved`, `approved_at`, `assigned_at`, `created_date`, `updated_date`, `created_by`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [id, fullName, phone, serviceType, description, status, priority, adminNotes || null, scheduledDate || null, assignedToId || null, assignedToName || null, isApproved ? 1 : 0, approvedAt || null, assignedAt || null, createdDate, updatedDate, createdBy]
       );
-      return res.json({ success: true, id });
+      saved = true;
     } catch (err) {
       console.error("MySQL Insert request failed:", err);
     }
   }
 
+  // Always write fallback to guarantee robust, up-to-date data state
   const local = readLocalJSON();
   const index = local.requests.findIndex(r => r.id === id);
   if (index >= 0) {
@@ -433,12 +646,23 @@ app.post("/api/requests", async (req, res) => {
     local.requests.unshift(req.body);
   }
   writeLocalJSON(local);
+
+  // Trigger admin notification for new service request
+  createAndSendNotification({
+    title: "درخواست خدمات جدید در سیستم",
+    message: `مشتری گرامی ${fullName} یک درخواست برای خدمات «${serviceType}» با اولویت «${priority}» ثبت کرد.`,
+    type: "request_created",
+    priority: priority === "urgent" || priority === "high" ? "high" : "medium",
+    targetRole: "admin",
+    referenceId: id
+  });
+
   res.json({ success: true, id });
 });
 
 app.put("/api/requests/:id", async (req, res) => {
   const { id } = req.params;
-  const { fullName, phone, serviceType, description, status, priority, adminNotes, scheduledDate, assignedToId, assignedToName, isApproved, approvedAt, assignedAt, updatedDate, rating, ratingComment, ratedAt } = req.body;
+  const { fullName, phone, serviceType, description, status, priority, adminNotes, scheduledDate, assignedToId, assignedToName, isApproved, approvedAt, assignedAt, updatedDate, rating, ratingComment, ratedAt, createdBy } = req.body;
   const pool = await getMySQLPool();
   if (pool) {
     try {
@@ -446,7 +670,6 @@ app.put("/api/requests/:id", async (req, res) => {
         "UPDATE `requests` SET `full_name`=?, `phone`=?, `service_type`=?, `description`=?, `status`=?, `priority`=?, `admin_notes`=?, `scheduled_date`=?, `assigned_to_id`=?, `assigned_to_name`=?, `is_approved`=?, `approved_at`=?, `assigned_at`=?, `updated_date`=?, `rating`=?, `rating_comment`=?, `rated_at`=? WHERE `id`=?",
         [fullName, phone, serviceType, description, status, priority, adminNotes || null, scheduledDate || null, assignedToId || null, assignedToName || null, isApproved ? 1 : 0, approvedAt || null, assignedAt || null, updatedDate, rating || null, ratingComment || null, ratedAt || null, id]
       );
-      return res.json({ success: true });
     } catch (err) {
       console.error("MySQL update request failed:", err);
     }
@@ -458,6 +681,38 @@ app.put("/api/requests/:id", async (req, res) => {
     local.requests[index] = { ...local.requests[index], ...req.body };
     writeLocalJSON(local);
   }
+
+  // Trigger User and Tech notifications
+  const targetUser = createdBy || (index >= 0 ? local.requests[index].createdBy : 'user-customer');
+
+  let PersianStatus = status;
+  if (status === "approved") PersianStatus = "تایید شده";
+  else if (status === "assigned") PersianStatus = "تخصیص یافته";
+  else if (status === "in_progress") PersianStatus = "در حال انجام";
+  else if (status === "completed") PersianStatus = "کامل شده";
+  else if (status === "cancelled") PersianStatus = "لغو شده";
+  else if (status === "pending") PersianStatus = "در انتظار بررسی";
+
+  createAndSendNotification({
+    title: "بروزرسانی وضعیت درخواست شما",
+    message: `وضعیت درخواست شما با موضوع «${description ? (description.slice(0, 30) + "...") : "خدمات فنی"}» به «${PersianStatus}» تغییر یافت.`,
+    type: "request_status",
+    priority: "medium",
+    targetUserId: targetUser,
+    referenceId: id
+  });
+
+  if (assignedToId) {
+    createAndSendNotification({
+      title: "یک کار جدید به شما محول شد",
+      message: `درخواست پشتیبانی مشتری ${fullName} با اولویت «${priority}» به شما ارجاع داده شد.`,
+      type: "request_status",
+      priority: "medium",
+      targetUserId: assignedToId,
+      referenceId: id
+    });
+  }
+
   res.json({ success: true });
 });
 
@@ -549,21 +804,36 @@ app.post("/api/tickets", async (req, res) => {
           );
         }
       }
-      return res.json({ success: true, id });
     } catch (err) {
       console.error("MySQL post SQL ticket failed:", err);
     }
   }
 
   const local = readLocalJSON();
-  local.tickets.unshift(req.body);
+  const index = local.tickets.findIndex(t => t.id === id);
+  if (index >= 0) {
+    local.tickets[index] = req.body;
+  } else {
+    local.tickets.unshift(req.body);
+  }
   writeLocalJSON(local);
+
+  // Trigger admin notification for new ticket
+  createAndSendNotification({
+    title: `تیکت پشتیبانی جدید: ${subject}`,
+    message: `کاربر ${userName || "مشتری"} تیکتی تحت عنوان «${subject}» با اولویت «${priority}» ثبت کرد.`,
+    type: "ticket_created",
+    priority: priority === "high" || priority === "urgent" ? "high" : "medium",
+    targetRole: "admin",
+    referenceId: id
+  });
+
   res.json({ success: true, id });
 });
 
 app.put("/api/tickets/:id", async (req, res) => {
   const { id } = req.params;
-  const { status, priority, adminReply, updatedDate, userName, userEmail } = req.body;
+  const { status, priority, adminReply, updatedDate, userName, userEmail, createdBy } = req.body;
   const pool = await getMySQLPool();
   if (pool) {
     try {
@@ -571,7 +841,6 @@ app.put("/api/tickets/:id", async (req, res) => {
         "UPDATE `tickets` SET `status`=?, `priority`=?, `admin_reply`=?, `updated_date`=?, `user_name`=?, `user_email`=? WHERE `id`=?",
         [status, priority, adminReply || null, updatedDate, userName || null, userEmail || null, id]
       );
-      return res.json({ success: true });
     } catch (err) {
       console.error("MySQL update ticket details failed:", err);
     }
@@ -583,6 +852,19 @@ app.put("/api/tickets/:id", async (req, res) => {
     local.tickets[index] = { ...local.tickets[index], ...req.body };
     writeLocalJSON(local);
   }
+
+  const targetUser = createdBy || (index >= 0 ? local.tickets[index].createdBy : 'user-customer');
+  let PersianStatus = status === "open" ? "باز شده" : (status === "in_progress" ? "در حال بررسی" : "بسته شده");
+
+  createAndSendNotification({
+    title: "تغییر وضعیت تیکت پشتیبانی",
+    message: `وضعیت تیکت شما با عنوان «${req.body.subject || "پشتیبانی"}» به «${PersianStatus}» تغییر یافت.`,
+    type: "ticket_status",
+    priority: "medium",
+    targetUserId: targetUser,
+    referenceId: id
+  });
+
   res.json({ success: true });
 });
 
@@ -597,7 +879,6 @@ app.post("/api/tickets/:id/messages", async (req, res) => {
         [msgId, id, senderId, senderName, senderRole, message, timestamp]
       );
       await pool.query("UPDATE `tickets` SET `updated_date` = ? WHERE `id` = ?", [timestamp, id]);
-      return res.json({ success: true });
     } catch (err) {
       console.error("MySQL insert ticket message failed:", err);
     }
@@ -605,6 +886,8 @@ app.post("/api/tickets/:id/messages", async (req, res) => {
 
   const local = readLocalJSON();
   const index = local.tickets.findIndex(t => t.id === id);
+  let ticketCreator = 'user-customer';
+  let ticketSubject = 'پشتیبانی فنی';
   if (index >= 0) {
     if (!local.tickets[index].messages) {
       local.tickets[index].messages = [];
@@ -618,8 +901,34 @@ app.post("/api/tickets/:id/messages", async (req, res) => {
       timestamp
     });
     local.tickets[index].updatedDate = timestamp;
+    ticketCreator = local.tickets[index].createdBy || 'user-customer';
+    ticketSubject = local.tickets[index].subject || 'پشتیبانی فنی';
     writeLocalJSON(local);
   }
+
+  // Trigger real-time notifications for responses
+  if (senderRole === 'admin' || senderRole === 'technician') {
+    // Notify customer
+    createAndSendNotification({
+      title: "پاسخ جدید از پشتیبانی",
+      message: `${senderName}: ${message.slice(0, 50)}${message.length > 50 ? '...' : ''}`,
+      type: "ticket_reply",
+      priority: "medium",
+      targetUserId: ticketCreator,
+      referenceId: id
+    });
+  } else {
+    // Customer responded -> notify administrators
+    createAndSendNotification({
+      title: `پیام جدید در تیکت: ${ticketSubject}`,
+      message: `${senderName}: ${message.slice(0, 50)}${message.length > 50 ? '...' : ''}`,
+      type: "ticket_reply",
+      priority: "medium",
+      targetRole: "admin",
+      referenceId: id
+    });
+  }
+
   res.json({ success: true });
 });
 
@@ -661,7 +970,6 @@ app.post("/api/reviews", async (req, res) => {
         "INSERT INTO `reviews` (`id`, `customer_name`, `rating`, `comment`, `service_type`, `is_approved`, `created_date`, `updated_date`, `created_by`, `technician_id`, `technician_name`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [id, customerName, rating, comment, serviceType || null, isApproved ? 1 : 0, createdDate, updatedDate, createdBy, technicianId || null, technicianName || null]
       );
-      return res.json({ success: true, id });
     } catch (err) {
       console.error("MySQL post review query failed:", err);
     }
@@ -670,6 +978,17 @@ app.post("/api/reviews", async (req, res) => {
   const local = readLocalJSON();
   local.reviews.unshift(req.body);
   writeLocalJSON(local);
+
+  // Trigger admin notification for new customer review
+  createAndSendNotification({
+    title: "ثبت نظر و امتیاز جدید",
+    message: `مشتری گرامی ${customerName} امتیاز ${rating} ستاره ثبت کرد. «${comment.slice(0, 50)}${comment.length > 50 ? '...' : ''}»`,
+    type: "review_created",
+    priority: rating <= 3 ? "high" : "low", // flagged high priority for low satisfaction reviews
+    targetRole: "admin",
+    referenceId: id
+  });
+
   res.json({ success: true, id });
 });
 
@@ -937,6 +1256,34 @@ app.post("/api/analyze-system", async (req, res) => {
   }
 });
 
+const server = http.createServer(app);
+
+// Initialize WebSocket server
+const wss = new WebSocketServer({ server });
+
+wss.on("connection", (ws: any) => {
+  console.log("🔌 New client connected to WebSocket Server");
+  
+  ws.on("message", (message: string) => {
+    try {
+      const payload = JSON.parse(message);
+      if (payload.type === "register") {
+        ws.userId = payload.userId;
+        ws.userRole = payload.role;
+        console.log(`👤 Client registered: UserID=${ws.userId}, Role=${ws.userRole}`);
+        // Send connection success acknowledgement
+        ws.send(JSON.stringify({ type: "registered", success: true }));
+      }
+    } catch (err) {
+      console.error("Error parsing WebSocket message:", err);
+    }
+  });
+
+  ws.on("close", () => {
+    console.log("🔌 Client disconnected from WebSocket Server");
+  });
+});
+
 // Vite Server Configuration
 async function initializeVite() {
   if (process.env.NODE_ENV !== "production") {
@@ -953,8 +1300,8 @@ async function initializeVite() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server listening on port ${PORT}`);
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server listening on port ${PORT} with real-time WebSockets`);
   });
 }
 

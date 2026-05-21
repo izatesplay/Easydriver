@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, Request, Review, Ticket, Technician, ChatMessage, UserRole } from '../types';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { User, Request, Review, Ticket, Technician, ChatMessage, UserRole, Notification } from '../types';
 import { INITIAL_REQUESTS, INITIAL_REVIEWS, INITIAL_TICKETS, INITIAL_TECHNICIANS } from '../data/mockData';
 
 interface AppContextProps {
@@ -22,6 +22,11 @@ interface AppContextProps {
   addTechnician: (tech: Omit<Technician, 'id' | 'createdDate' | 'updatedDate' | 'createdBy'>) => void;
   updateTechnician: (tech: Technician) => void;
   deleteTechnician: (id: string) => void;
+  notifications: Notification[];
+  toasts: any[];
+  markNotificationAsRead: (id: string) => void;
+  markAllNotificationsAsRead: () => void;
+  closeToast: (id: string) => void;
 }
 
 const AppContext = createContext<AppContextProps | undefined>(undefined);
@@ -60,6 +65,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [technicians, setTechnicians] = useState<Technician[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [toasts, setToasts] = useState<any[]>([]);
+  const wsRef = useRef<any>(null);
 
   // Load backend synchronized data
   const loadFreshData = () => {
@@ -113,6 +121,126 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Load SQL-backed synchronised tables
     loadFreshData();
   }, []);
+
+  const loadNotifications = (userId: string, role: string) => {
+    fetch(`/api/notifications?userId=${encodeURIComponent(userId)}&role=${encodeURIComponent(role)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setNotifications(data);
+        }
+      })
+      .catch(err => console.error("Error reading notifications client:", err));
+  };
+
+  const showFancyToast = (notif: Notification) => {
+    const id = `toast-${Date.now()}`;
+    const newToast = {
+      id,
+      notification: notif,
+      visible: true
+    };
+    setToasts(prev => [...prev, newToast]);
+    
+    // Auto clear toast notification popup
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 6000);
+  };
+
+  const markNotificationAsRead = (id: string) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    fetch(`/api/notifications/${id}/read`, {
+      method: 'POST'
+    }).catch(err => console.error("Error marking read:", err));
+  };
+
+  const markAllNotificationsAsRead = () => {
+    if (!currentUser) return;
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    fetch(`/api/notifications/read-all`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: currentUser.id, role: currentUser.role })
+    }).catch(err => console.error("Error marking all read:", err));
+  };
+
+  const closeToast = (id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
+
+  // Synchronise WebSocket and Notifications of Active User
+  useEffect(() => {
+    if (!currentUser) return;
+
+    loadNotifications(currentUser.id, currentUser.role);
+
+    // Initialise real-time WebSocket connection
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.host}`;
+    console.log("🔌 Initialising real-time updates socket loop:", wsUrl);
+    
+    let socket: any;
+    try {
+      socket = new WebSocket(wsUrl);
+      wsRef.current = socket;
+    } catch (e) {
+      console.error("Browser unsupported WS:", e);
+      return;
+    }
+
+    socket.onopen = () => {
+      console.log("🔌 WebSocket active connected!");
+      // Authenticate register on socket channel
+      socket.send(JSON.stringify({
+        type: "register",
+        userId: currentUser.id,
+        role: currentUser.role
+      }));
+    };
+
+    socket.onmessage = (event: any) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.type === "notification") {
+          const freshNotif = payload.data;
+          
+          let alertSelf = false;
+          if (freshNotif.targetUserId && freshNotif.targetUserId === currentUser.id) {
+            alertSelf = true;
+          } else if (!freshNotif.targetUserId && freshNotif.targetRole && freshNotif.targetRole === currentUser.role) {
+            alertSelf = true;
+          } else if (!freshNotif.targetUserId && !freshNotif.targetRole) {
+            alertSelf = true;
+          }
+
+          if (alertSelf) {
+            setNotifications(prev => [freshNotif, ...prev]);
+            showFancyToast(freshNotif);
+            
+            // Also load fresh table content depending on event to make it feel responsive!
+            loadFreshData();
+          }
+        }
+      } catch (err) {
+        console.error("Error parsing browser socket payload:", err);
+      }
+    };
+
+    socket.onerror = (err: any) => {
+      console.warn("WS error boundary:", err);
+    };
+
+    socket.onclose = () => {
+      console.log("🔌 WebSocket clean closed");
+    };
+
+    return () => {
+      if (socket) {
+        socket.close();
+      }
+    };
+  }, [currentUser]);
 
   const saveUser = (user: User | null) => {
     setCurrentUser(user);
@@ -466,6 +594,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addTechnician,
       updateTechnician,
       deleteTechnician,
+      notifications,
+      toasts,
+      markNotificationAsRead,
+      markAllNotificationsAsRead,
+      closeToast,
     }}>
       {children}
     </AppContext.Provider>

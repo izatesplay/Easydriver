@@ -175,3 +175,16 @@ export interface Technician {
   updatedDate: string;
   createdBy: string;
 }
+
+export interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'request_created' | 'request_status' | 'ticket_created' | 'ticket_reply' | 'ticket_status' | 'review_created';
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  targetUserId?: string;
+  targetRole?: UserRole;
+  referenceId?: string;
+  createdDate: string;
+  read: boolean;
+}

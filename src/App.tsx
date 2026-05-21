@@ -12,6 +12,7 @@ import { SupportChat } from './components/SupportChat';
 import { AdminDashboard } from './components/AdminDashboard';
 import { Auth } from './components/Auth';
 import { TechnicianDashboard } from './components/TechnicianDashboard';
+import { NotificationToasts } from './components/NotificationToasts';
 import { motion, AnimatePresence } from 'motion/react';
 
 function AppContent() {
@@ -80,6 +81,9 @@ function AppContent() {
 
       {/* 4. Sleek Floating account switcher for quick sandbox testing */}
       <RoleSwitcher />
+
+      {/* 5. Floating real-time slide-in toasts notification stack */}
+      <NotificationToasts />
 
     </div>
   );

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Layers, ShieldCheck, LogOut, Menu, X, Laptop, UserCheck, MessageSquare, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { NotificationBell } from './NotificationBell';
 
 interface HeaderProps {
   activeTab: string;
@@ -99,6 +100,9 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
 
           {/* User Actions & Mobile Trigger */}
           <div className="flex items-center gap-3">
+            {currentUser && (
+              <NotificationBell />
+            )}
             {currentUser ? (
               <div className="flex items-center gap-2">
                 {/* User Info Capsule */}
