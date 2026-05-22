@@ -82,10 +82,14 @@ async function getMySQLPool(): Promise<mysql.Pool | null> {
       mysqlPool = tempPool;
       return tempPool;
     } catch (err: any) {
-      console.error("🔴 MySQL connection test failed (will use Local JSON Backup):", err.message);
+      let friendlyError = err.message;
+      if (err.code === 'EAI_AGAIN' || err.code === 'ENOTFOUND') {
+        friendlyError = `آدرس سرور دیتابیس '${host}' یافت نشد یا غیرقابل دسترسی است. لطفاً تنظیمات DB_HOST را در متغیرهای محیطی یا فایل .env بررسی نمایید. (${err.message})`;
+      }
+      console.error("🔴 MySQL connection test failed (will use Local JSON Backup):", friendlyError);
       dbStatus.connected = false;
       dbStatus.mode = "فایل محلی پشتیبان (Local JSON Backup)";
-      dbStatus.error = `خطا در اتصال به سرور پایگاه داده: ${err.message}`;
+      dbStatus.error = friendlyError;
       
       mysqlPool = null;
       // Clear connectionPromise on failure so client can retry after the cooldown expires
@@ -1058,6 +1062,7 @@ app.get("/api/technicians", async (req, res) => {
         createdDate: t.created_date,
         updatedDate: t.updated_date,
         createdBy: t.created_by,
+        certificationLevel: t.certification_level || 'Junior',
       }));
       return res.json(formatted);
     } catch (err) {
@@ -1070,7 +1075,7 @@ app.get("/api/technicians", async (req, res) => {
 });
 
 app.post("/api/technicians", async (req, res) => {
-  const { id, fullName, phone, email, specialty, isActive, completedTasks, createdDate, updatedDate, createdBy } = req.body;
+  const { id, fullName, phone, email, specialty, isActive, completedTasks, createdDate, updatedDate, createdBy, certificationLevel } = req.body;
   const pool = await getMySQLPool();
   if (pool) {
     try {
@@ -1080,9 +1085,15 @@ app.post("/api/technicians", async (req, res) => {
         [id, fullName, email || `${id}@easydriver.ir`, phone, 'technician']
       );
 
+      try {
+        await pool.query("ALTER TABLE `technicians` ADD COLUMN `certification_level` ENUM('Junior', 'Senior', 'Expert') NOT NULL DEFAULT 'Junior'");
+      } catch (colErr) {
+        // column might exist
+      }
+
       await pool.query(
-        "INSERT INTO `technicians` (`id`, `full_name`, `phone`, `email`, `specialty`, `is_active`, `completed_tasks`, `created_date`, `updated_date`, `created_by`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [id, fullName, phone, email || null, specialty, isActive ? 1 : 0, completedTasks || 0, createdDate, updatedDate, createdBy]
+        "INSERT INTO `technicians` (`id`, `full_name`, `phone`, `email`, `specialty`, `is_active`, `completed_tasks`, `created_date`, `updated_date`, `created_by`, `certification_level`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [id, fullName, phone, email || null, specialty, isActive ? 1 : 0, completedTasks || 0, createdDate, updatedDate, createdBy, certificationLevel || 'Junior']
       );
       return res.json({ success: true, id });
     } catch (err) {
@@ -1098,13 +1109,19 @@ app.post("/api/technicians", async (req, res) => {
 
 app.put("/api/technicians/:id", async (req, res) => {
   const { id } = req.params;
-  const { fullName, phone, email, specialty, isActive, completedTasks, updatedDate } = req.body;
+  const { fullName, phone, email, specialty, isActive, completedTasks, updatedDate, certificationLevel } = req.body;
   const pool = await getMySQLPool();
   if (pool) {
     try {
+      try {
+        await pool.query("ALTER TABLE `technicians` ADD COLUMN `certification_level` ENUM('Junior', 'Senior', 'Expert') NOT NULL DEFAULT 'Junior'");
+      } catch (colErr) {
+        // column might exist
+      }
+
       await pool.query(
-        "UPDATE `technicians` SET `full_name`=?, `phone`=?, `email`=?, `specialty`=?, `is_active`=?, `completed_tasks`=?, `updated_date`=? WHERE `id`=?",
-        [fullName, phone, email || null, specialty, isActive ? 1 : 0, completedTasks, updatedDate, id]
+        "UPDATE `technicians` SET `full_name`=?, `phone`=?, `email`=?, `specialty`=?, `is_active`=?, `completed_tasks`=?, `updated_date`=?, `certification_level`=? WHERE `id`=?",
+        [fullName, phone, email || null, specialty, isActive ? 1 : 0, completedTasks, updatedDate, certificationLevel || 'Junior', id]
       );
       return res.json({ success: true });
     } catch (err) {

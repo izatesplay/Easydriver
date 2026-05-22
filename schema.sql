@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS `technicians` (
   `created_date` VARCHAR(100) NOT NULL,
   `updated_date` VARCHAR(100) NOT NULL,
   `created_by` VARCHAR(50) NOT NULL,
+  `certification_level` ENUM('Junior', 'Senior', 'Expert') NOT NULL DEFAULT 'Junior',
   PRIMARY KEY (`id`),
   FOREIGN KEY (`id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -134,11 +135,11 @@ INSERT INTO `users` (`id`, `full_name`, `email`, `phone`, `role`, `avatar_url`) 
 ('tech-4', 'سهراب شریفی', 'sohrab@easydriver.ir', '09219876543', 'technician', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80'),
 ('admin-1', 'مدیریت ایزی‌درایور (امین)', 'admin@easydriver.ir', '09010009999', 'admin', 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&h=150&q=80');
 
-INSERT INTO `technicians` (`id`, `full_name`, `phone`, `email`, `specialty`, `is_active`, `completed_tasks`, `created_date`, `updated_date`, `created_by`) VALUES
-('tech-1', 'مهندس نوید مرادی', '09123456789', 'navid@easydriver.ir', 'all', 1, 34, '2026-01-10T08:30:00Z', '2026-05-18T10:20:00Z', 'admin-1'),
-('tech-2', 'آرش علوی', '09187654321', 'arash@easydriver.ir', 'driver_install', 1, 51, '2026-02-15T09:12:00Z', '2026-05-19T14:40:00Z', 'admin-1'),
-('tech-3', 'مینا خسروی', '09351234567', 'mina@easydriver.ir', 'software_install', 1, 22, '2026-03-01T15:20:00Z', '2026-05-15T11:00:00Z', 'admin-1'),
-('tech-4', 'سهراب شریفی', '09219876543', 'sohrab@easydriver.ir', 'anydesk_support', 0, 18, '2026-04-12T11:05:00Z', '2026-05-10T16:30:00Z', 'admin-1');
+INSERT INTO `technicians` (`id`, `full_name`, `phone`, `email`, `specialty`, `is_active`, `completed_tasks`, `created_date`, `updated_date`, `created_by`, `certification_level`) VALUES
+('tech-1', 'مهندس نوید مرادی', '09123456789', 'navid@easydriver.ir', 'all', 1, 34, '2026-01-10T08:30:00Z', '2026-05-18T10:20:00Z', 'admin-1', 'Expert'),
+('tech-2', 'آرش علوی', '09187654321', 'arash@easydriver.ir', 'driver_install', 1, 51, '2026-02-15T09:12:00Z', '2026-05-19T14:40:00Z', 'admin-1', 'Senior'),
+('tech-3', 'مینا خسروی', '09351234567', 'mina@easydriver.ir', 'software_install', 1, 22, '2026-03-01T15:20:00Z', '2026-05-15T11:00:00Z', 'admin-1', 'Junior'),
+('tech-4', 'سهراب شریفی', '09219876543', 'sohrab@easydriver.ir', 'anydesk_support', 0, 18, '2026-04-12T11:05:00Z', '2026-05-10T16:30:00Z', 'admin-1', 'Junior');
 
 -- -------------------------------------------------------------
 -- Seed Initial Support Service Requests

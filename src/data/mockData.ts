@@ -12,6 +12,7 @@ export const INITIAL_TECHNICIANS: Technician[] = [
     createdDate: '2026-01-10T08:30:00Z',
     updatedDate: '2026-05-18T10:20:00Z',
     createdBy: 'admin-1',
+    certificationLevel: 'Expert',
   },
   {
     id: 'tech-2',
@@ -24,6 +25,7 @@ export const INITIAL_TECHNICIANS: Technician[] = [
     createdDate: '2026-02-15T09:12:00Z',
     updatedDate: '2026-05-19T14:40:00Z',
     createdBy: 'admin-1',
+    certificationLevel: 'Senior',
   },
   {
     id: 'tech-3',
@@ -36,6 +38,7 @@ export const INITIAL_TECHNICIANS: Technician[] = [
     createdDate: '2026-03-01T15:20:00Z',
     updatedDate: '2026-05-15T11:00:00Z',
     createdBy: 'admin-1',
+    certificationLevel: 'Junior',
   },
   {
     id: 'tech-4',
@@ -48,6 +51,7 @@ export const INITIAL_TECHNICIANS: Technician[] = [
     createdDate: '2026-04-12T11:05:00Z',
     updatedDate: '2026-05-10T16:30:00Z',
     createdBy: 'admin-1',
+    certificationLevel: 'Junior',
   },
 ];
 

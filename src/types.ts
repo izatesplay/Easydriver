@@ -184,6 +184,7 @@ export interface Technician {
   createdBy: string;
   points?: number;
   unlockedAchievements?: Achievement[];
+  certificationLevel?: 'Junior' | 'Senior' | 'Expert';
 }
 
 export interface Notification {

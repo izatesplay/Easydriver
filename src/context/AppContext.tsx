@@ -27,6 +27,7 @@ interface AppContextProps {
   markNotificationAsRead: (id: string) => void;
   markAllNotificationsAsRead: () => void;
   closeToast: (id: string) => void;
+  loadFreshData: () => void;
 }
 
 const AppContext = createContext<AppContextProps | undefined>(undefined);
@@ -599,6 +600,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       markNotificationAsRead,
       markAllNotificationsAsRead,
       closeToast,
+      loadFreshData,
     }}>
       {children}
     </AppContext.Provider>

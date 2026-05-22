@@ -50,6 +50,7 @@ export const AdminDashboard: React.FC = () => {
   const [techEmail, setTechEmail] = useState('');
   const [techSpecialty, setTechSpecialty] = useState<TechnicianSpecialty>('all');
   const [techIsActive, setTechIsActive] = useState(true);
+  const [techCertificationLevel, setTechCertificationLevel] = useState<'Junior' | 'Senior' | 'Expert'>('Junior');
 
   // Expanded editor states for requests, tickets
   const [expandedRequestId, setExpandedRequestId] = useState<string | null>(null);
@@ -61,34 +62,6 @@ export const AdminDashboard: React.FC = () => {
   // Admin reply inputs
   const [adminNotesInput, setAdminNotesInput] = useState('');
   const [ticketReplyInput, setTicketReplyInput] = useState('');
-
-  // Guard: If current user role is not admin, render a premium block prompting them to switch role
-  if (!currentUser || currentUser.role !== 'admin') {
-    return (
-      <div className="font-sans min-h-[70vh] flex items-center justify-center px-4 py-12 bg-slate-50" dir="rtl">
-        <div className="max-w-md w-full bg-white rounded-2xl border border-slate-200 p-8 shadow-xl text-center space-y-6">
-          <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto">
-            <ShieldAlert className="h-8 w-8" />
-          </div>
-          <div className="space-y-2">
-            <h2 className="text-xl font-extrabold text-slate-900">عدم دسترسی به پنل مدیریت</h2>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              شما هم‌اکنون به عنوان کاربر آزمایشی «مشتری» آنلاین هستید. دسترسی به پنل مدیریت صرفاً برای مدیر سیستم فعال می‌باشد.
-            </p>
-          </div>
-          <div className="pt-2">
-            <button
-              onClick={() => switchRole('admin')}
-              className="w-full py-3.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-rose-500/15 flex items-center justify-center gap-2 transition-all cursor-pointer"
-            >
-              <Key className="h-4 w-4" />
-              <span>ارتقا و شبیه‌سازی نقش مدیر کل (Admin)</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   // Statistics summaries calculations
   const totalRequests = requests.length;
@@ -142,6 +115,7 @@ export const AdminDashboard: React.FC = () => {
           email: techEmail || undefined,
           specialty: techSpecialty,
           isActive: techIsActive,
+          certificationLevel: techCertificationLevel,
         });
       }
       setEditingTechId(null);
@@ -154,6 +128,7 @@ export const AdminDashboard: React.FC = () => {
         specialty: techSpecialty,
         isActive: techIsActive,
         completedTasks: 0,
+        certificationLevel: techCertificationLevel,
       });
     }
 
@@ -163,6 +138,7 @@ export const AdminDashboard: React.FC = () => {
     setTechEmail('');
     setTechSpecialty('all');
     setTechIsActive(true);
+    setTechCertificationLevel('Junior');
     setShowAddTechForm(false);
   };
 
@@ -174,6 +150,7 @@ export const AdminDashboard: React.FC = () => {
     setTechEmail(tech.email || '');
     setTechSpecialty(tech.specialty);
     setTechIsActive(tech.isActive);
+    setTechCertificationLevel(tech.certificationLevel || 'Junior');
     setShowAddTechForm(true);
   };
 
@@ -265,6 +242,34 @@ export const AdminDashboard: React.FC = () => {
       })
       .sort((a, b) => b.totalScore - a.totalScore);
   };
+
+  // Guard: If current user role is not admin, render a premium block prompting them to switch role
+  if (!currentUser || currentUser.role !== 'admin') {
+    return (
+      <div className="font-sans min-h-[70vh] flex items-center justify-center px-4 py-12 bg-slate-50" dir="rtl">
+        <div className="max-w-md w-full bg-white rounded-2xl border border-slate-200 p-8 shadow-xl text-center space-y-6">
+          <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto">
+            <ShieldAlert className="h-8 w-8" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-extrabold text-slate-900">عدم دسترسی به پنل مدیریت</h2>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              شما هم‌اکنون به عنوان کاربر آزمایشی «مشتری» آنلاین هستید. دسترسی به این پنل مدیریت صرفاً برای مدیر سیستم فعال می‌باشد.
+            </p>
+          </div>
+          <div className="pt-2">
+            <button
+              onClick={() => switchRole('admin')}
+              className="w-full py-3.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-rose-500/15 flex items-center justify-center gap-2 transition-all cursor-pointer"
+            >
+              <Key className="h-4 w-4" />
+              <span>ارتقا و شبیه‌سازی نقش مدیر کل (Admin)</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="font-sans min-h-screen bg-slate-50 py-12" dir="rtl">
@@ -663,18 +668,18 @@ export const AdminDashboard: React.FC = () => {
                       {editingTechId ? 'ویرایش اطلاعات پرسنل' : 'درج مشخصات تکنسین جدید'}
                     </h4>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
                       
                       {/* Full Name */}
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-500 block">نام و نام خانوادگی</label>
                         <input
-                          type="text"
-                          required
-                          value={techName}
-                          onChange={(e) => setTechName(e.target.value)}
-                          placeholder="مثال: مهندس رادمنش"
-                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none"
+                           type="text"
+                           required
+                           value={techName}
+                           onChange={(e) => setTechName(e.target.value)}
+                           placeholder="مثال: مهندس رادمنش"
+                           className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none"
                         />
                       </div>
 
@@ -682,12 +687,12 @@ export const AdminDashboard: React.FC = () => {
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-500 block">تلفن تماس موبایل</label>
                         <input
-                          type="tel"
-                          required
-                          value={techPhone}
-                          onChange={(e) => setTechPhone(e.target.value)}
-                          placeholder="مثال: 09123456789"
-                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-left text-xs outline-none font-mono"
+                           type="tel"
+                           required
+                           value={techPhone}
+                           onChange={(e) => setTechPhone(e.target.value)}
+                           placeholder="مثال: 09123456789"
+                           className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-left text-xs outline-none font-mono"
                         />
                       </div>
 
@@ -695,11 +700,11 @@ export const AdminDashboard: React.FC = () => {
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-500 block">آدرس ایمیل</label>
                         <input
-                          type="email"
-                          value={techEmail}
-                          onChange={(e) => setTechEmail(e.target.value)}
-                          placeholder="example@mail.com"
-                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-left outline-none font-mono"
+                           type="email"
+                           value={techEmail}
+                           onChange={(e) => setTechEmail(e.target.value)}
+                           placeholder="example@mail.com"
+                           className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-left outline-none font-mono"
                         />
                       </div>
 
@@ -707,13 +712,27 @@ export const AdminDashboard: React.FC = () => {
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-500 block">تخصص اصلی</label>
                         <select
-                          value={techSpecialty}
-                          onChange={(e) => setTechSpecialty(e.target.value as TechnicianSpecialty)}
-                          className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none"
+                           value={techSpecialty}
+                           onChange={(e) => setTechSpecialty(e.target.value as TechnicianSpecialty)}
+                           className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none"
                         >
                           {Object.entries(SPECIALTY_LABELS).map(([key, label]) => (
                             <option key={key} value={key}>{label}</option>
                           ))}
+                        </select>
+                      </div>
+
+                      {/* Certification Level Dropdown */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 block">سطح گواهی گرید (Certification)</label>
+                        <select
+                           value={techCertificationLevel}
+                           onChange={(e) => setTechCertificationLevel(e.target.value as 'Junior' | 'Senior' | 'Expert')}
+                           className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none font-bold text-indigo-700"
+                        >
+                          <option value="Junior">Junior (جونیور)</option>
+                          <option value="Senior">Senior (سینیور)</option>
+                          <option value="Expert">Expert (اکسپرت و حرفه‌ای)</option>
                         </select>
                       </div>
 
@@ -781,7 +800,20 @@ export const AdminDashboard: React.FC = () => {
                           
                           <div className="flex items-center justify-between flex-wrap gap-1.5 pt-1">
                             <span className="text-[10px] text-slate-500 block font-bold">تعداد کل کارهای بسته شده: {stats.fastResponseCount + tech.completedTasks} خدمت</span>
-                            <span className="text-[9px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded font-extrabold">سطح: {stats.levelName.split(' ')[0]}</span>
+                            <div className="flex items-center gap-1.5">
+                              {tech.certificationLevel && (
+                                <span className={`text-[9px] px-2 py-0.5 rounded font-black ${
+                                  tech.certificationLevel === 'Expert'
+                                    ? 'bg-amber-100 text-amber-800 border border-amber-300 shadow-xxs animate-pulse'
+                                    : tech.certificationLevel === 'Senior'
+                                    ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                    : 'bg-slate-100 text-slate-750 border border-slate-200'
+                                }`}>
+                                  گرید: {tech.certificationLevel}
+                                </span>
+                              )}
+                              <span className="text-[9px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded font-extrabold">سطح: {stats.levelName.split(' ')[0]}</span>
+                            </div>
                           </div>
                           
                           {/* Mini progress bar */}

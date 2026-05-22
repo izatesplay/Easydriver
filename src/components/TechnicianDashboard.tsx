@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { Request, RequestStatus, STATUS_LABELS, STATUS_COLORS, SERVICE_LABELS, PRIORITY_LABELS, PRIORITY_COLORS, Ticket } from '../types';
-import { ShieldAlert, Key, Clipboard, Laptop, Star, User, Phone, CheckCircle, Clock, Play, CheckCircle2, XCircle, AlertTriangle, Terminal, Save, HelpCircle, ChevronRight, MessageSquare, Reply, Trophy, Medal, Award, Zap, Heart, ShieldCheck, Crown, Rocket, TrendingUp, Sparkles, ChevronLeft } from 'lucide-react';
-import { motion } from 'motion/react';
-import { calculateTechnicianStats } from '../utils/pointsCalculator';
+import { ShieldAlert, Key, Clipboard, Laptop, Star, User, Phone, CheckCircle, Clock, Play, CheckCircle2, XCircle, AlertTriangle, Terminal, Save, HelpCircle, ChevronRight, MessageSquare, Reply, Trophy, Medal, Award, Zap, Heart, ShieldCheck, Crown, Rocket, TrendingUp, Sparkles, ChevronLeft, PartyPopper, RotateCw } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { calculateTechnicianStats, getLevelInfo } from '../utils/pointsCalculator';
 import { MonthlyPerformanceChart } from './MonthlyPerformanceChart';
 
 export const TechnicianDashboard: React.FC = () => {
@@ -16,8 +16,18 @@ export const TechnicianDashboard: React.FC = () => {
     addTicketMessage,
     updateTicket,
     reviews,
-    technicians
+    technicians,
+    loadFreshData
   } = useApp();
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const handleManualRefresh = () => {
+    setIsRefreshing(true);
+    loadFreshData();
+    setTimeout(() => {
+      setIsRefreshing(false);
+    }, 800);
+  };
 
   const techReviews = (reviews || []).filter(
     (r) => r.technicianId === currentUser?.id || (!r.technicianId && currentUser?.id === 'tech-1')
@@ -42,6 +52,8 @@ export const TechnicianDashboard: React.FC = () => {
 
   // Interactive connection installer steps checklist by taskId
   const [checklist, setChecklist] = useState<Record<string, Record<number, boolean>>>({});
+
+  const [hoveredAchId, setHoveredAchId] = useState<string | null>(null);
 
   // Real-time AI diagnostic terminal states
   const [aiAnalyzing, setAiAnalyzing] = useState(false);
@@ -110,34 +122,6 @@ export const TechnicianDashboard: React.FC = () => {
     });
   };
 
-  // Guard: If role is not technician, prompt them to upgrade role
-  if (!currentUser || currentUser.role !== 'technician') {
-    return (
-      <div className="font-sans min-h-[70vh] flex items-center justify-center px-4 py-12 bg-slate-50" dir="rtl">
-        <div className="max-w-md w-full bg-white rounded-2xl border border-slate-200 p-8 shadow-xl text-center space-y-6">
-          <div className="w-16 h-16 bg-purple-50 text-purple-500 rounded-full flex items-center justify-center mx-auto">
-            <Laptop className="h-8 w-8" />
-          </div>
-          <div className="space-y-2">
-            <h2 className="text-xl font-extrabold text-slate-900">عدم دسترسی به پنل تکنسین</h2>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              شما هم‌اکنون در قالب نقش کاربری «مشتری» به عنوان متقاضی آنلاین هستید. دسترسی به این پنل فنی صرفاً برای تکنسین‌های ارشد تیم مجاز می‌باشد.
-            </p>
-          </div>
-          <div className="pt-2">
-            <button
-              onClick={() => switchRole('technician')}
-              className="w-full py-3.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-purple-500/15 flex items-center justify-center gap-2 transition-all cursor-pointer"
-            >
-              <Key className="h-4 w-4" />
-              <span>شبیه‌سازی و ورود پرسنلی (تکنسین فنی)</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // Find current technician object
   const currentTech = (technicians || []).find((t) => t.id === currentUser?.id) || {
     id: currentUser?.id || 'tech-1',
@@ -151,12 +135,77 @@ export const TechnicianDashboard: React.FC = () => {
     createdBy: 'admin-1',
   };
 
-  const techStats = calculateTechnicianStats(currentTech, requests, reviews);
+  const [showLevelUpModal, setShowLevelUpModal] = useState(false);
+  const [unlockedAchievementToast, setUnlockedAchievementToast] = useState<any | null>(null);
+  const [simulatedPointsBoost, setSimulatedPointsBoost] = useState(0);
+
+  const baseTechStats = calculateTechnicianStats(currentTech, requests, reviews);
+
+  const techStats = useMemo(() => {
+    if (simulatedPointsBoost === 0) return baseTechStats;
+    const boostedTotalPoints = baseTechStats.totalPoints + simulatedPointsBoost;
+    const lvlInfo = getLevelInfo(boostedTotalPoints);
+    const range = lvlInfo.next - lvlInfo.prev;
+    const currentInRange = boostedTotalPoints - lvlInfo.prev;
+    const progressPercent = Math.max(0, Math.min(100, Math.round((currentInRange / range) * 100)));
+
+    const boostedAchievements = baseTechStats.achievements.map((ach) => {
+      let unlocked = ach.unlocked;
+      if (boostedTotalPoints >= 600 && ach.id === 'strong-start') unlocked = true;
+      if (boostedTotalPoints >= 1000 && ach.id === 'customer-favorite') unlocked = true;
+      if (boostedTotalPoints >= 1800 && ach.id === 'speed-demon') unlocked = true;
+      if (boostedTotalPoints >= 2500 && ach.id === 'perfectionist') unlocked = true;
+      if (boostedTotalPoints >= 3800 && ach.id === 'elite-tech') unlocked = true;
+      if (boostedTotalPoints >= 5200 && ach.id === 'legendary') unlocked = true;
+
+      return {
+        ...ach,
+        unlocked,
+        unlockedAt: unlocked ? (ach.unlockedAt || '۱ خرداد ۱۴۰۵') : undefined
+      };
+    });
+
+    return {
+      ...baseTechStats,
+      totalPoints: boostedTotalPoints,
+      level: lvlInfo.level,
+      levelName: lvlInfo.name,
+      nextLevelPoints: lvlInfo.next,
+      prevLevelPoints: lvlInfo.prev,
+      progressPercent,
+      achievements: boostedAchievements
+    };
+  }, [baseTechStats, simulatedPointsBoost]);
+
+  const prevLevelRef = useRef<number | null>(null);
+  const prevUnlockedCountRef = useRef<number | null>(null);
+  const prevAchievementIdsRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    if (techStats) {
+      if (prevLevelRef.current !== null && techStats.level > prevLevelRef.current) {
+        setShowLevelUpModal(true);
+      }
+      prevLevelRef.current = techStats.level;
+
+      const currentlyUnlocked = techStats.achievements.filter(a => a.unlocked);
+      if (prevUnlockedCountRef.current !== null) {
+        const newlyUnlocked = currentlyUnlocked.filter(
+          curr => !prevAchievementIdsRef.current.includes(curr.id)
+        );
+        if (newlyUnlocked.length > 0) {
+          setUnlockedAchievementToast(newlyUnlocked[0]);
+        }
+      }
+      prevUnlockedCountRef.current = currentlyUnlocked.length;
+      prevAchievementIdsRef.current = currentlyUnlocked.map(a => a.id);
+    }
+  }, [techStats]);
 
   // Filter tasks assigned to this technician
   // Both: check if assignedToId matches currentUser.id
   // To keep it comprehensive for the demo, if no task is specifically assigned, let also show tasks that are assigned to 'tech-1' (as that's our default mock technician Novid)
-  const myTasks = requests.filter(r => r.assignedToId === currentUser.id || (!r.assignedToId && currentUser.id === 'tech-1'));
+  const myTasks = currentUser ? requests.filter(r => r.assignedToId === currentUser.id || (!r.assignedToId && currentUser.id === 'tech-1')) : [];
 
   const pendingTasks = myTasks.filter(t => t.status === 'assigned' || t.status === 'approved').length;
   const activeTasks = myTasks.filter(t => t.status === 'in_progress').length;
@@ -218,19 +267,59 @@ export const TechnicianDashboard: React.FC = () => {
     'تایید نهایی و اخذ رضایت مشتری جهت تحویل فاکتور دیجیتال',
   ];
 
+  // Guard: If role is not technician, prompt them to upgrade role
+  if (!currentUser || currentUser.role !== 'technician') {
+    return (
+      <div className="font-sans min-h-[70vh] flex items-center justify-center px-4 py-12 bg-slate-50" dir="rtl">
+        <div className="max-w-md w-full bg-white rounded-2xl border border-slate-200 p-8 shadow-xl text-center space-y-6">
+          <div className="w-16 h-16 bg-purple-50 text-purple-500 rounded-full flex items-center justify-center mx-auto">
+            <Laptop className="h-8 w-8" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-extrabold text-slate-900">عدم دسترسی به پنل تکنسین</h2>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              شما هم‌اکنون در قالب نقش کاربری «مشتری» به عنوان متقاضی آنلاین هستید. دسترسی به این پنل فنی صرفاً برای تکنسین‌های ارشد تیم مجاز می‌باشد.
+            </p>
+          </div>
+          <div className="pt-2">
+            <button
+              onClick={() => switchRole('technician')}
+              className="w-full py-3.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-purple-500/15 flex items-center justify-center gap-2 transition-all cursor-pointer"
+            >
+              <Key className="h-4 w-4" />
+              <span>شبیه‌سازی و ورود پرسنلی (تکنسین فنی)</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="font-sans min-h-screen bg-slate-50 py-12" dir="rtl">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Banner header */}
-        <div className="flex items-center gap-3 border-b border-slate-200 pb-6 mb-8">
-          <div className="p-3 bg-purple-50 text-purple-600 rounded-2xl shadow-sm">
-            <Terminal className="h-6 w-6" />
+        <div className="flex items-center justify-between border-b border-slate-200 pb-6 mb-8 flex-wrap gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-purple-50 text-purple-600 rounded-2xl shadow-sm">
+              <Terminal className="h-6 w-6" />
+            </div>
+            <div>
+              <span className="text-[10px] text-purple-700 font-black tracking-widest uppercase block">پیشخوان متخصصین ایزی‌درایور (Expert Center)</span>
+              <h1 className="text-2xl font-black text-slate-900 mt-1">پرتال مدیریت و اجرای ریموت خدمات نصب</h1>
+            </div>
           </div>
-          <div>
-            <span className="text-[10px] text-purple-700 font-black tracking-widest uppercase block">پیشخوان متخصصین ایزی‌درایور (Expert Center)</span>
-            <h1 className="text-2xl font-black text-slate-900 mt-1">پرتال مدیریت و اجرای ریموت خدمات نصب</h1>
-          </div>
+
+          <button
+            onClick={handleManualRefresh}
+            className={`px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 hover:border-purple-300 text-slate-700 hover:text-purple-700 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-xxs cursor-pointer ${
+              isRefreshing ? 'opacity-70 animate-pulse' : ''
+            }`}
+          >
+            <RotateCw className={`h-3.5 w-3.5 text-purple-650 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>بروزرسانی داشبورد</span>
+          </button>
         </div>
 
         {/* Dynamic switcher tabs */}
@@ -847,7 +936,7 @@ export const TechnicianDashboard: React.FC = () => {
                 </div>
 
                 {/* Level Up progress bar */}
-                <div className="mt-8 space-y-2">
+                <div className="mt-8 space-y-4">
                   <div className="flex justify-between text-xs font-mono text-slate-300">
                     <span>{techStats.prevLevelPoints} PTS</span>
                     <span className="text-amber-300 font-extrabold">{techStats.progressPercent}% کامل شده</span>
@@ -862,6 +951,42 @@ export const TechnicianDashboard: React.FC = () => {
                     >
                       <div className="absolute inset-0 bg-[linear-gradient(45deg,rgba(255,255,255,0.15)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.15)_50%,rgba(255,255,255,0.15)_75%,transparent_75%,transparent)] bg-[size:15px_15px] animate-[vibration_1s_linear_infinite]" />
                     </motion.div>
+                  </div>
+
+                  <div className="pt-2 flex flex-wrap gap-3 items-center justify-between border-t border-white/10">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setShowLevelUpModal(true)}
+                        className="px-4 py-2 bg-white/10 hover:bg-white/15 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-white/5 cursor-pointer"
+                      >
+                        <Sparkles className="h-3.5 w-3.5 text-amber-300 animate-pulse" />
+                        <span>مشاهده جوایز و ساختار سطوح (Reward Chart)</span>
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2 bg-slate-950/30 p-1.5 rounded-xl border border-white/5">
+                      <span className="text-[10px] text-purple-300 font-bold px-1.5">شبیه‌ساز امتیاز:</span>
+                      <button
+                        onClick={() => setSimulatedPointsBoost(prev => prev + 500)}
+                        className="px-2.5 py-1 bg-purple-500 hover:bg-purple-600 text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                      >
+                        ۵۰۰+ امتیاز
+                      </button>
+                      <button
+                        onClick={() => setSimulatedPointsBoost(prev => prev + 1500)}
+                        className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-slate-900 rounded-lg text-[10px] font-black transition-all cursor-pointer"
+                      >
+                        ۱۵۰۰+ امتیاز
+                      </button>
+                      {simulatedPointsBoost > 0 && (
+                        <button
+                          onClick={() => setSimulatedPointsBoost(0)}
+                          className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                        >
+                          بازنشانی
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -949,6 +1074,8 @@ export const TechnicianDashboard: React.FC = () => {
                       return (
                         <div
                           key={ach.id}
+                          onMouseEnter={() => setHoveredAchId(ach.id)}
+                          onMouseLeave={() => setHoveredAchId(null)}
                           className={`relative p-4 rounded-2xl border transition-all ${
                             ach.unlocked
                               ? 'bg-gradient-to-br from-white to-slate-50 border-slate-250 shadow-sm'
@@ -979,11 +1106,40 @@ export const TechnicianDashboard: React.FC = () => {
                               
                               <div className="mt-3.5 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[10px]">
                                 <span className={`font-bold ${ach.unlocked ? 'text-emerald-600' : 'text-slate-400'}`}>
-                                  {ach.unlocked ? '✔ با موفقیت آزاد شد' : '🔒 غیزفعال / در حال توسعه'}
+                                  {ach.unlocked ? '✔ با موفقیت آزاد شد' : '🔒 غیرفعال / در حال توسعه'}
                                 </span>
                               </div>
                             </div>
                           </div>
+
+                          {/* Hover Tooltip Overlay with requirements and unlock date */}
+                          <AnimatePresence>
+                            {hoveredAchId === ach.id && (
+                              <motion.div
+                                initial={{ opacity: 0, scale: 0.95, y: -5 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.95, y: -5 }}
+                                transition={{ duration: 0.15 }}
+                                className="absolute z-30 right-4 left-4 bottom-full mb-2 bg-slate-900 text-white rounded-2xl p-4 shadow-xl border border-slate-705 border-slate-700 text-right space-y-2 pointer-events-none"
+                              >
+                                <span className="text-[9px] text-purple-400 font-extrabold block">مشخصات شایستگی فنی</span>
+                                <div className="space-y-1">
+                                  <p className="text-[10px] font-bold text-slate-200">
+                                    🎯 شرایط آزادسازی:
+                                  </p>
+                                  <p className="text-[10px] text-slate-300 leading-relaxed font-medium">
+                                    {ach.requirement || ach.description}
+                                  </p>
+                                </div>
+                                {ach.unlocked && ach.unlockedAt && (
+                                  <p className="pt-1.5 border-t border-slate-800 text-[9px] text-emerald-400 font-bold flex items-center justify-between">
+                                    <span>تاریخ کسب مدال:</span>
+                                    <span className="font-mono">{ach.unlockedAt}</span>
+                                  </p>
+                                )}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
                         </div>
                       );
                     })}
@@ -1110,7 +1266,153 @@ export const TechnicianDashboard: React.FC = () => {
           )}
         </div>
 
+        {/* Level Up Modal */}
+        <AnimatePresence>
+          {showLevelUpModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              {/* Backdrop */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowLevelUpModal(false)}
+                className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
+              />
+              
+              {/* Container */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 30 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 30 }}
+                className="relative bg-gradient-to-br from-indigo-950 via-slate-900 to-purple-950 border border-purple-500/30 rounded-3xl w-full max-w-2xl p-6 sm:p-8 shadow-2xl space-y-6 font-sans text-right text-white max-h-[90vh] overflow-y-auto z-10"
+                dir="rtl"
+              >
+                <div className="text-center space-y-2 pt-4">
+                  <div className="inline-flex p-4 bg-amber-400/10 text-amber-400 rounded-full border border-amber-400/25 relative mb-2">
+                    <Crown className="h-10 w-10 animate-pulse text-amber-400" />
+                    <Sparkles className="h-5 w-5 text-purple-400 absolute -top-1 -right-1 animate-ping" />
+                  </div>
+                  <h3 className="text-xl sm:text-2xl font-black bg-gradient-to-r from-amber-400 via-yellow-200 to-amber-500 bg-clip-text text-transparent">سطح رتبه‌بندی فنی شما ارتقا یافت!</h3>
+                  <p className="text-xs text-slate-300">تبریک! شما به عنوان مهندس پشتیبان برجسته گام برتری در اهداف ایزی‌درایور ثبت نموده‌اید.</p>
+                </div>
+
+                {/* Level Stats Summary */}
+                <div className="bg-slate-950/40 p-5 rounded-2xl border border-white/5 flex items-center justify-between">
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-purple-300 block">مشخصات سطح فنی جدید شما:</span>
+                    <strong className="text-sm text-white font-black">{techStats.levelName}</strong>
+                  </div>
+                  <div className="text-left">
+                    <span className="text-[10px] text-slate-400 block font-mono">مجموع امتیازات شما:</span>
+                    <strong className="text-sm text-amber-400 font-mono font-black">{techStats.totalPoints} PTS</strong>
+                  </div>
+                </div>
+
+                {/* Levels track with status and rewards list */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-slate-300 flex items-center gap-1.5 justify-start">
+                    <Award className="h-4 w-4 text-purple-400 animate-bounce" />
+                    <span>مسیر ارتقای رتبه و جوایز دوره‌ای سطوح (Milestones & Rewards)</span>
+                  </h4>
+                  
+                  <div className="space-y-2.5">
+                    {[
+                      { level: 1, name: 'تکنسین نوآور (Level 1)', points: '۰ - ۵۰۰ PTS', rewards: ['نشان دیجیتال پرسنلی پایه', 'دسترسی عمومی به تیکت‌های پشتیبانی نوین', 'قابلیت کار روی خدمات اکسپرس محلی'] },
+                      { level: 2, name: 'همکار باسابقه (Level 2)', points: '۵۰۱ - ۱۵۰۰ PTS', rewards: ['اولیت حضور در رویدادهای فصلی عیب‌یابی', 'افزایش حق‌الزحمه پایه به میزان ۵٪', 'پشتیبانی اختصاصی پنل فنی'] },
+                      { level: 3, name: 'متخصص فنی ارشد (Level 3)', points: '۱۵۰۱ - ۳۰۰۰ PTS', rewards: ['دریافت بج «متخصص فنی ارشد» طلایی', 'دسترسی مستقیم به درخواست‌های نصب ممتاز (Premium)', 'ارتقای حق‌الزحمه دریافتی به میزان ۱۰٪'] },
+                      { level: 4, name: 'کاردان طلایی (Level 4)', points: '۳۰۰۱ - ۵۰۰۰ PTS', rewards: ['بونوس نقدی هفتگی هوشمند ویژه کادر باکیفیت', 'افزایش اولویت هوشمند تخصیص لوکیشن مشتریان', 'ارتقای حق‌الزحمه دریافتی به میزان ۱۵٪'] },
+                      { level: 5, name: 'اسطوره ایزی‌درایور (Level 5)', points: 'بالای ۵۰۰۱ PTS', rewards: ['معافیت کارمزد تراکنش‌ها در پایتخت', 'تخصیص مستقیم خودکار بدون پردازش دستی', 'حق حضور در شورای فنی تدوین راهکارها'] },
+                    ].map((lvl) => {
+                      const isCurrentLvl = techStats.level === lvl.level;
+                      const isPassed = techStats.level > lvl.level;
+                      
+                      return (
+                        <div 
+                          key={lvl.level}
+                          className={`p-4 rounded-xl border transition-all text-right flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                            isCurrentLvl 
+                              ? 'bg-purple-900/40 border-purple-500/60 shadow-lg shadow-purple-500/10'
+                              : isPassed
+                              ? 'bg-slate-900/40 border-slate-800 opacity-60'
+                              : 'bg-slate-900/10 border-slate-950/20 opacity-30'
+                          }`}
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className={`text-[9px] px-2 py-0.5 rounded-full font-extrabold ${
+                                isCurrentLvl 
+                                  ? 'bg-amber-400 text-slate-950'
+                                  : isPassed
+                                  ? 'bg-emerald-500/20 text-emerald-400'
+                                  : 'bg-slate-800 text-slate-400'
+                              }`}>
+                                {isCurrentLvl ? 'سطح فعلی شما' : isPassed ? '✔ عبور کرده' : '🔒 قفل شده'}
+                              </span>
+                              <strong className="text-xs text-slate-100 font-black">{lvl.name}</strong>
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-mono">نقطه عطف عبور: {lvl.points}</p>
+                            <div className="flex flex-wrap gap-1.5 pt-1">
+                              {lvl.rewards.map((r, ri) => (
+                                <span key={ri} className="text-[9px] bg-slate-950/60 text-slate-300 px-2 py-0.5 rounded border border-white/5 whitespace-nowrap">
+                                  🎁 {r}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3 text-right">
+                  <p className="text-[10px] text-slate-400 max-w-sm leading-normal">جوایز دریافتی به صورت خودکار تخصیص و در کیف‌پول اینفویی این ماه شما منظور می‌گردند.</p>
+                  <button
+                    onClick={() => setShowLevelUpModal(false)}
+                    className="w-full sm:w-auto px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 font-bold rounded-xl text-xs text-white shadow-lg shadow-purple-500/25 cursor-pointer"
+                  >
+                    بستن پنجره جوایز
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Real-time celebration Achievement Unlock Toast */}
+        <AnimatePresence>
+          {unlockedAchievementToast && (
+            <motion.div
+              initial={{ opacity: 0, x: -100, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: -100, scale: 0.9 }}
+              className="fixed bottom-6 left-6 z-50 max-w-sm w-full bg-slate-900 border border-purple-500 rounded-2xl p-5 shadow-2xl space-y-3 font-sans text-right text-white ring-4 ring-purple-600/30"
+              dir="rtl"
+            >
+              <div className="flex items-start gap-3.5">
+                <div className="p-3 bg-gradient-to-tr from-purple-600 to-indigo-600 rounded-2xl shadow-lg shrink-0 text-white animate-bounce">
+                  <PartyPopper className="h-6 w-6" />
+                </div>
+                <div className="grow space-y-1">
+                  <span className="text-[10px] text-amber-400 font-extrabold tracking-widest block uppercase animate-pulse">🎉 مدال شایستگی جدید آزاد شد!</span>
+                  <h4 className="text-sm font-black text-white">{unlockedAchievementToast.title}</h4>
+                  <p className="text-[10px] text-slate-300 leading-normal">{unlockedAchievementToast.description}</p>
+                </div>
+              </div>
+              <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
+                <span className="text-[9px] text-emerald-400 font-bold font-mono">+{unlockedAchievementToast.pointsReward} PTS پاداش به امتیاز کل</span>
+                <button
+                  onClick={() => setUnlockedAchievementToast(null)}
+                  className="text-[10px] text-slate-300 hover:text-white bg-slate-800 px-3 py-1 rounded-xl transition cursor-pointer"
+                >
+                  فهمیدم، سپاس!
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
+
     </div>
   );
 };
