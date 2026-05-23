@@ -312,7 +312,7 @@ export const Hero: React.FC<HeroProps> = ({ setActiveTab }) => {
                     <Gauge className="h-5 w-5 animate-pulse" />
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 font-bold block">شبیه‌ساز آنلایـن عیب‌یاب</span>
+                    <span className="text-[10px] text-slate-400 font-bold block">عیب‌یاب هوشمند آنلاین</span>
                     <h3 className="text-xs sm:text-sm font-black text-slate-100">تحلیل سازگاری و سلامت سخت‌افزار مـحیطی</h3>
                   </div>
                 </div>
@@ -363,7 +363,7 @@ export const Hero: React.FC<HeroProps> = ({ setActiveTab }) => {
                         className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(99,102,241,0.25)] flex items-center gap-2 mx-auto cursor-pointer"
                       >
                         <Search className="h-3.5 w-3.5" />
-                        <span>اسکن نمادین کارت {activeDiagnosticTab === 'gpu' ? 'گرافیـک' : activeDiagnosticTab === 'audio' ? 'صـدا' : 'مادربـورد'}</span>
+                        <span>اسکن و عیب‌یابی کارت {activeDiagnosticTab === 'gpu' ? 'گرافیـک' : activeDiagnosticTab === 'audio' ? 'صـدا' : 'مادربـورد'}</span>
                       </button>
                     </div>
                   </div>

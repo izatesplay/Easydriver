@@ -7,10 +7,11 @@ import { motion, AnimatePresence } from 'motion/react';
 interface SupportChatProps {
   selectedTicketId: string;
   setSelectedTicketId: (id: string | null) => void;
+  onNavigateToAuth?: () => void;
 }
 
-export const SupportChat: React.FC<SupportChatProps> = ({ selectedTicketId, setSelectedTicketId }) => {
-  const { currentUser, tickets, addTicket, addTicketMessage, switchRole } = useApp();
+export const SupportChat: React.FC<SupportChatProps> = ({ selectedTicketId, setSelectedTicketId, onNavigateToAuth }) => {
+  const { currentUser, tickets, addTicket, addTicketMessage } = useApp();
   const [typedMessage, setTypedMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -24,19 +25,23 @@ export const SupportChat: React.FC<SupportChatProps> = ({ selectedTicketId, setS
             <ShieldAlert className="h-8 w-8" />
           </div>
           <div className="space-y-2">
-            <h2 className="text-xl font-extrabold text-slate-900">نیاز به ورود به چت روم زنده</h2>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              جهت ورود به سیستم چت زنده و هدایت خطاها به اپراتور حاضر روی خط، لطفاً وارد سیستم احراز هویت دمو شوید.
+            <h2 className="text-xl font-extrabold text-slate-900">نیاز به ورود به حساب کاربری</h2>
+            <p className="text-xs text-slate-500 leading-relaxed font-normal">
+              جهت ورود به سیستم چت زنده و هدایت خطاها به اپراتور حاضر روی خط، ابتدا باید وارد حساب کاربری خود شوید یا ثبت‌نام کنید.
             </p>
           </div>
           <div className="pt-2">
-            <button
-               onClick={() => switchRole('customer')}
-              className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-500/15 flex items-center justify-center gap-2 transition-all cursor-pointer"
-            >
-              <Key className="h-4 w-4" />
-              <span>ورود فوری به عنوان مشتری</span>
-            </button>
+            {onNavigateToAuth ? (
+              <button
+                onClick={onNavigateToAuth}
+                className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-500/15 flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <Key className="h-4 w-4" />
+                <span>انتقال به پرتال ورود و ثبت‌نام</span>
+              </button>
+            ) : (
+              <p className="text-xs text-slate-400 font-normal">لطفاً از دکمه بالا برای ورود به پرتال اقدام فرستید.</p>
+            )}
           </div>
         </div>
       </div>

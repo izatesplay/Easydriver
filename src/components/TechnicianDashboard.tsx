@@ -5,11 +5,12 @@ import { ShieldAlert, Key, Clipboard, Laptop, Star, User, Phone, CheckCircle, Cl
 import { motion, AnimatePresence } from 'motion/react';
 import { calculateTechnicianStats, getLevelInfo } from '../utils/pointsCalculator';
 import { MonthlyPerformanceChart } from './MonthlyPerformanceChart';
+import { useRenderTracker } from '../utils/indexedDB';
 
 export const TechnicianDashboard: React.FC = () => {
+  useRenderTracker("پنل تکنسین (Tech)");
   const {
     currentUser,
-    switchRole,
     requests,
     updateRequest,
     tickets,
@@ -277,18 +278,9 @@ export const TechnicianDashboard: React.FC = () => {
           </div>
           <div className="space-y-2">
             <h2 className="text-xl font-extrabold text-slate-900">عدم دسترسی به پنل تکنسین</h2>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              شما هم‌اکنون در قالب نقش کاربری «مشتری» به عنوان متقاضی آنلاین هستید. دسترسی به این پنل فنی صرفاً برای تکنسین‌های ارشد تیم مجاز می‌باشد.
+            <p className="text-xs text-slate-500 leading-relaxed font-normal">
+              دسترسی به این پنل فنی صرفاً برای تکنسین‌های ارشد تیم مجاز می‌باشد. لطفاً با حساب کاربری تکنسین معتبر وارد شوید.
             </p>
-          </div>
-          <div className="pt-2">
-            <button
-              onClick={() => switchRole('technician')}
-              className="w-full py-3.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-purple-500/15 flex items-center justify-center gap-2 transition-all cursor-pointer"
-            >
-              <Key className="h-4 w-4" />
-              <span>شبیه‌سازی و ورود پرسنلی (تکنسین فنی)</span>
-            </button>
           </div>
         </div>
       </div>
@@ -501,7 +493,7 @@ export const TechnicianDashboard: React.FC = () => {
 
                               {/* Live Installation Interactive Checklist of 5 stages */}
                               <div className="space-y-3 pt-2">
-                                <h4 className="font-bold text-slate-855 border-b border-slate-100 pb-1.5">مراحل و پروتکل‌های فنی شبیه‌ساز اتصال برای درایورها</h4>
+                                <h4 className="font-bold text-slate-855 border-b border-slate-100 pb-1.5">مراحل و پروتکل‌های فنی اتصال و پیکربندی سیستم مشتری</h4>
                                 <div className="bg-white p-4 border border-slate-150 rounded-2xl space-y-2.5">
                                   {stepsList.map((step, idx) => {
                                     const isDone = !!taskSteps[idx];
@@ -965,7 +957,7 @@ export const TechnicianDashboard: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2 bg-slate-950/30 p-1.5 rounded-xl border border-white/5">
-                      <span className="text-[10px] text-purple-300 font-bold px-1.5">شبیه‌ساز امتیاز:</span>
+                      <span className="text-[10px] text-purple-300 font-bold px-1.5">امتیاز تشویقی و پاداش:</span>
                       <button
                         onClick={() => setSimulatedPointsBoost(prev => prev + 500)}
                         className="px-2.5 py-1 bg-purple-500 hover:bg-purple-600 text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer"

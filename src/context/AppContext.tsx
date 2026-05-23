@@ -1,12 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { User, Request, Review, Ticket, Technician, ChatMessage, UserRole, Notification } from '../types';
 import { INITIAL_REQUESTS, INITIAL_REVIEWS, INITIAL_TICKETS, INITIAL_TECHNICIANS } from '../data/mockData';
+import { getStoreData, saveStoreData, performanceMonitor } from '../utils/indexedDB';
 
 interface AppContextProps {
   currentUser: User | null;
   login: (email: string, fullName: string, role: UserRole) => void;
   logout: () => void;
-  switchRole: (role: UserRole) => void;
   requests: Request[];
   addRequest: (request: Omit<Request, 'id' | 'createdDate' | 'updatedDate' | 'createdBy' | 'isApproved' | 'status'>) => Request;
   updateRequest: (request: Request) => void;
@@ -52,9 +52,9 @@ export const MOCK_USERS: Record<UserRole, User> = {
   },
   admin: {
     id: 'admin-1',
-    fullName: 'مدیریت ایزی‌درایور (امین)',
-    email: 'admin@easydriver.ir',
-    phone: '09010009999',
+    fullName: 'مدیر کل ایزی‌درایور',
+    email: 'izatesplay@gmail.com',
+    phone: '09386561626',
     role: 'admin',
     avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&h=150&q=80',
   },
@@ -70,13 +70,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [toasts, setToasts] = useState<any[]>([]);
   const wsRef = useRef<any>(null);
 
+  // Load initial cache from IndexedDB for standard data (speed & offline-capability)
+  useEffect(() => {
+    getStoreData<Request>('requests')
+      .then(cached => {
+        if (cached && cached.length > 0) {
+          setRequests(cached);
+        }
+      })
+      .catch(err => console.warn("Error reading requests from IndexedDB cache:", err));
+
+    getStoreData<Ticket>('tickets')
+      .then(cached => {
+        if (cached && cached.length > 0) {
+          setTickets(cached);
+        }
+      })
+      .catch(err => console.warn("Error reading tickets from IndexedDB cache:", err));
+
+    getStoreData<Review>('reviews')
+      .then(cached => {
+        if (cached && cached.length > 0) {
+          setReviews(cached);
+        }
+      })
+      .catch(err => console.warn("Error reading reviews from IndexedDB cache:", err));
+  }, []);
+
+  // Watch state changes and synchronize automatically into browser IndexedDB
+  useEffect(() => {
+    if (requests && requests.length > 0) {
+      saveStoreData('requests', requests).catch(err => console.error("Error writing requests cache:", err));
+    }
+  }, [requests]);
+
+  useEffect(() => {
+    if (tickets && tickets.length > 0) {
+      saveStoreData('tickets', tickets).catch(err => console.error("Error writing tickets cache:", err));
+    }
+  }, [tickets]);
+
+  useEffect(() => {
+    if (reviews && reviews.length > 0) {
+      saveStoreData('reviews', reviews).catch(err => console.error("Error writing reviews cache:", err));
+    }
+  }, [reviews]);
+
   // Load backend synchronized data
   const loadFreshData = () => {
     // 1. Fetch Requests
     fetch("/api/requests")
       .then(r => r.json())
       .then(data => {
-        if (Array.isArray(data)) setRequests(data);
+        if (Array.isArray(data)) {
+          setRequests(data);
+          saveStoreData('requests', data);
+        }
       })
       .catch(err => console.error("Error loading requests:", err));
 
@@ -84,7 +133,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch("/api/tickets")
       .then(r => r.json())
       .then(data => {
-        if (Array.isArray(data)) setTickets(data);
+        if (Array.isArray(data)) {
+          setTickets(data);
+          saveStoreData('tickets', data);
+        }
       })
       .catch(err => console.error("Error loading tickets:", err));
 
@@ -92,7 +144,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch("/api/reviews")
       .then(r => r.json())
       .then(data => {
-        if (Array.isArray(data)) setReviews(data);
+        if (Array.isArray(data)) {
+          setReviews(data);
+          saveStoreData('reviews', data);
+        }
       })
       .catch(err => console.error("Error loading reviews:", err));
 
@@ -112,11 +167,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         setCurrentUser(JSON.parse(storedUser));
       } catch (e) {
-        setCurrentUser(MOCK_USERS.customer);
+        setCurrentUser(null);
       }
     } else {
-      setCurrentUser(MOCK_USERS.customer);
-      localStorage.setItem('ed_user', JSON.stringify(MOCK_USERS.customer));
+      setCurrentUser(null);
     }
 
     // Load SQL-backed synchronised tables
@@ -200,10 +254,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }));
     };
 
+    // Ping loop every 6 seconds to track latency dynamically
+    const pingInterval = setInterval(() => {
+      if (socket && socket.readyState === 1) { // OPEN
+        socket.send(JSON.stringify({
+          type: "ping",
+          timestamp: Date.now()
+        }));
+      }
+    }, 6000);
+
     socket.onmessage = (event: any) => {
       try {
         const payload = JSON.parse(event.data);
-        if (payload.type === "notification") {
+        if (payload.type === "pong") {
+          const latency = Date.now() - payload.timestamp;
+          performanceMonitor.logWsMessage(latency);
+        } else if (payload.type === "notification") {
           const freshNotif = payload.data;
           
           let alertSelf = false;
@@ -237,6 +304,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     return () => {
+      clearInterval(pingInterval);
       if (socket) {
         socket.close();
       }
@@ -266,10 +334,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const logout = () => {
     saveUser(null);
-  };
-
-  const switchRole = (role: UserRole) => {
-    saveUser(MOCK_USERS[role]);
   };
 
   // Requests functions
@@ -590,7 +654,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       currentUser,
       login,
       logout,
-      switchRole,
       requests,
       addRequest,
       updateRequest,

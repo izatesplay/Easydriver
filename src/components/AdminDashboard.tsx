@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Request, Review, Ticket, Technician, SERVICE_LABELS, STATUS_LABELS, STATUS_COLORS, PRIORITY_LABELS, PRIORITY_COLORS, SPECIALTY_LABELS, TechnicianSpecialty, RequestStatus, RequestPriority, TICKET_CATEGORY_LABELS, TICKET_STATUS_LABELS, TICKET_STATUS_COLORS } from '../types';
-import { ShieldAlert, Key, Grid, Clipboard, Users, Star, MessageSquare, Plus, Edit2, Trash2, CheckCircle2, UserPlus, Info, Save, Clock, X, ChevronDown, ChevronUp, Reply, Sparkles, Database, Server, Globe, FileCode as FileCodeIcon, Trophy, Medal } from 'lucide-react';
+import { ShieldAlert, Key, Grid, Clipboard, Users, Star, MessageSquare, Plus, Edit2, Trash2, CheckCircle2, UserPlus, Info, Save, Clock, X, ChevronDown, ChevronUp, Reply, Sparkles, Database, Server, Globe, FileCode as FileCodeIcon, Trophy, Medal, Printer, FileSpreadsheet as FileDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { calculateTechnicianStats } from '../utils/pointsCalculator';
+import { useRenderTracker } from '../utils/indexedDB';
 
 export const AdminDashboard: React.FC = () => {
+  useRenderTracker("پیشخوان ادمین (Admin)");
   const {
     currentUser,
-    switchRole,
     requests,
     updateRequest,
     deleteRequest,
@@ -24,7 +25,16 @@ export const AdminDashboard: React.FC = () => {
   } = useApp();
 
   // Active admin tab selection
-  const [adminTab, setAdminTab] = useState<'overview' | 'requests' | 'technicians' | 'tickets' | 'reviews' | 'db'>('overview');
+  const [adminTab, setAdminTab] = useState<'overview' | 'requests' | 'technicians' | 'tickets' | 'reviews' | 'db' | 'reports'>('overview');
+
+  // Report filters state
+  const [reportReqStatus, setReportReqStatus] = useState<'all' | 'pending' | 'in_progress' | 'completed' | 'cancelled'>('all');
+  const [reportTechActive, setReportTechActive] = useState<'all' | 'active' | 'inactive'>('all');
+  const [reportTicketStatus, setReportTicketStatus] = useState<'all' | 'open' | 'in_progress' | 'closed'>('all');
+  const [reportReviewApproved, setReportReviewApproved] = useState<'all' | 'approved' | 'pending'>('all');
+
+  // Print support preview helper
+  const [currentPrintType, setCurrentPrintType] = useState<'requests' | 'technicians' | 'tickets' | 'reviews' | null>(null);
 
   // Databse phpMyAdmin status
   const [dbInfo, setDbInfo] = useState<{
@@ -162,6 +172,118 @@ export const AdminDashboard: React.FC = () => {
     });
   };
 
+  // Professional CSV (Excel-Compatible UTF-8 BOM) export utility
+  const exportToExcelType = (type: 'requests' | 'technicians' | 'tickets' | 'reviews') => {
+    let headers: string[] = [];
+    let rows: string[][] = [];
+    let filename = '';
+
+    if (type === 'requests') {
+      filename = `گزارش_درخواست‌های_مشتریان_${new Date().toLocaleDateString('fa-IR')}.csv`;
+      headers = ['شناسه درخواست', 'نام متقاضی', 'شماره تماس', 'نوع خدمت فنی', 'اولویت', 'وضعیت اجرایی', 'نام تکنسین ارجاع‌شده', 'تاریخ ثبت اولیه', 'آخرین بروزرسانی', 'توضیحات تکمیلی مشتری', 'یادداشت‌های اختصاصی ادمین'];
+      
+      const targetRequests = reportReqStatus === 'all' ? requests : requests.filter(r => r.status === reportReqStatus);
+      rows = targetRequests.map(r => [
+        r.id,
+        r.fullName || r.customerName || 'بدون نام',
+        r.phone || '',
+        SERVICE_LABELS[r.serviceType] || r.serviceType,
+        PRIORITY_LABELS[r.priority] || r.priority,
+        STATUS_LABELS[r.status] || r.status,
+        r.assignedToName || 'تخصیص نیافته',
+        new Date(r.createdDate).toLocaleDateString('fa-IR'),
+        new Date(r.updatedDate).toLocaleDateString('fa-IR'),
+        r.description || '',
+        r.adminNotes || ''
+      ]);
+    } else if (type === 'technicians') {
+      filename = `گزارش_وضعیت_تکنسین‌ها_${new Date().toLocaleDateString('fa-IR')}.csv`;
+      headers = ['شناسه تکنسین', 'نام و نام خانوادگی', 'تلفن همراه', 'پست الکترونیک', 'تخصص اصلی', 'سطح گواهی', 'وضعیت حضور', 'تعداد تسک‌های کارشده', 'تاریخ ثبت سیستم'];
+      
+      const targetTechs = reportTechActive === 'all' 
+        ? technicians 
+        : technicians.filter(t => reportTechActive === 'active' ? t.isActive : !t.isActive);
+      
+      rows = targetTechs.map(t => [
+        t.id,
+        t.fullName,
+        t.phone,
+        t.email || '',
+        SPECIALTY_LABELS[t.specialty] || t.specialty,
+        t.certificationLevel || 'Junior',
+        t.isActive ? 'آنلاین (آماده کار)' : 'آفلاین',
+        String(t.completedTasks || 0),
+        t.createdDate ? new Date(t.createdDate).toLocaleDateString('fa-IR') : 'پیش فرض'
+      ]);
+    } else if (type === 'tickets') {
+      filename = `گزارش_امور_پشتیبانی_تیکت‌ها_${new Date().toLocaleDateString('fa-IR')}.csv`;
+      headers = ['شناسه تیکت', 'ایجادکننده تیکت', 'موضوع پشتیبانی', 'دسته‌بندی موضوعی', 'سطح اضطرار اولیه', 'وضعیت کنونی تیکت', 'تاریخ گشایش', 'پاسخ لایو ادمین'];
+      
+      const targetTickets = reportTicketStatus === 'all' ? tickets : tickets.filter(t => t.status === reportTicketStatus);
+      rows = targetTickets.map(t => [
+        t.id,
+        t.fullName || t.createdBy || 'مشتری اِیزی درایور',
+        t.subject,
+        TICKET_CATEGORY_LABELS[t.category] || t.category,
+        PRIORITY_LABELS[t.priority] || t.priority,
+        TICKET_STATUS_LABELS[t.status] || t.status,
+        new Date(t.createdDate).toLocaleDateString('fa-IR'),
+        t.adminReply || 'فاقد پاسخ'
+      ]);
+    } else if (type === 'reviews') {
+      filename = `گزارش_امتیازات_و_بازخوردهای_سایت_${new Date().toLocaleDateString('fa-IR')}.csv`;
+      headers = ['شناسه بازخورد', 'نام ثبت‌کننده', 'امتیاز مربوطه (از ۵)', 'خدمات مربوطه', 'متن دیدگاه مشتری', 'وضعیت تایید و انتشار', 'تاریخ ایجاد دیدگاه'];
+      
+      const targetReviews = reportReviewApproved === 'all' 
+        ? reviews 
+        : reviews.filter(r => reportReviewApproved === 'approved' ? r.isApproved : !r.isApproved);
+      
+      rows = targetReviews.map(r => [
+        r.id,
+        r.customerName,
+        `${r.rating} ستاره`,
+        SERVICE_LABELS[r.serviceType as any] || r.serviceType || 'سرویس عمومی',
+        r.comment,
+        r.isApproved ? 'منتشر شده' : 'در انتظار بررسی',
+        new Date(r.createdDate).toLocaleDateString('fa-IR')
+      ]);
+    }
+
+    if (rows.length === 0) {
+      alert("هیچ رکوردی منطبق با این فیلتر جهت خروجی یافت نشد!");
+      return;
+    }
+
+    // Append UTF-8 BOM so Persian is parsed natively by Microsoft Excel
+    const delimiter = ",";
+    const csvContent = "\uFEFF" + [
+      headers.join(delimiter),
+      ...rows.map(row => row.map(val => {
+        // Wrap cells in quotes and escape nested quotes
+        const cleaned = (val || '').toString().replace(/"/g, '""');
+        return `"${cleaned}"`;
+      }).join(delimiter))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Triggers print operation with delay to ensure dom hydration
+  const triggerPrintLayout = (type: 'requests' | 'technicians' | 'tickets' | 'reviews') => {
+    setCurrentPrintType(type);
+    setTimeout(() => {
+      window.print();
+    }, 250);
+  };
+
   // Delete customer review
   const handleDeleteReview = (id: string) => {
     const freshList = reviews.filter(r => r.id !== id);
@@ -253,18 +375,9 @@ export const AdminDashboard: React.FC = () => {
           </div>
           <div className="space-y-2">
             <h2 className="text-xl font-extrabold text-slate-900">عدم دسترسی به پنل مدیریت</h2>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              شما هم‌اکنون به عنوان کاربر آزمایشی «مشتری» آنلاین هستید. دسترسی به این پنل مدیریت صرفاً برای مدیر سیستم فعال می‌باشد.
+            <p className="text-xs text-slate-500 leading-relaxed font-normal">
+              دسترسی به این پنل مدیریت صرفاً برای مدیر سیستم فعال می‌باشد. لطفاً با حساب کاربری ادمین معتبر وارد شوید.
             </p>
-          </div>
-          <div className="pt-2">
-            <button
-              onClick={() => switchRole('admin')}
-              className="w-full py-3.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-rose-500/15 flex items-center justify-center gap-2 transition-all cursor-pointer"
-            >
-              <Key className="h-4 w-4" />
-              <span>ارتقا و شبیه‌سازی نقش مدیر کل (Admin)</span>
-            </button>
           </div>
         </div>
       </div>
@@ -287,7 +400,7 @@ export const AdminDashboard: React.FC = () => {
         </div>
 
         {/* Core Admin Navigation Grid tabs */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 mb-8">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2.5 mb-8">
           {[
             { id: 'overview', label: 'داشبورد خلاصه آمار', icon: Grid },
             { id: 'requests', label: 'مدیریت درخواست‌ها', icon: Clipboard, badge: pendingRequests },
@@ -295,6 +408,7 @@ export const AdminDashboard: React.FC = () => {
             { id: 'tickets', label: 'تیکت‌های باز پشتیبانی', icon: MessageSquare, badge: openTicketsCount },
             { id: 'reviews', label: 'تایید نظرات کاربران', icon: Star, badge: pendingReviewsCount },
             { id: 'db', label: 'پایگاه داده (MySQL)', icon: Database, badge: dbInfo?.connected ? 0 : 0 },
+            { id: 'reports', label: 'خروجی اکسل و PDF', icon: Printer },
           ].map((tab) => {
             const TabIcon = tab.icon;
             const isActive = adminTab === tab.id;
@@ -348,12 +462,12 @@ export const AdminDashboard: React.FC = () => {
               {/* Quick instructions panel */}
               <div className="p-6 bg-white border border-slate-200 rounded-3xl grid grid-cols-1 md:grid-cols-3 gap-6 items-center text-right">
                 <div className="md:col-span-2 space-y-2">
-                  <h3 className="font-extrabold text-sm sm:text-base text-slate-850 flex items-center gap-1.5">
+                  <h3 className="font-extrabold text-sm sm:text-base text-slate-855 flex items-center gap-1.5">
                     <Info className="h-5 w-5 text-indigo-505" />
-                    <span>راهنمای آزمون شبیه‌ساز مدیریت ایزی‌درایور</span>
+                    <span>راهنمای پیشخوان مدیریت ایزی‌درایور (EasyDriver Central)</span>
                   </h3>
                   <p className="text-xs text-slate-500 leading-relaxed font-normal">
-                    پنل ادمین پلتفرم EasyDriver به شما این توانایی فوق‌العاده را می‌دهد تا سناریوی واقعی را رقم بزنید. می‌توانید به عنوان ادمین وارد این بخش شوید، درخواست مشتری را تایید کنید، تکنسین را به سلیقه‌تان ارجاع دهید، در تیکت‌ها چت کنید و سپس از فلوتر شناور، دوباره نقش خود را به <strong>«مشتری عادی»</strong> تغییر دهید تا بروزرسانی‌های لحظه‌ای را مانند کاربر نهایی ببینید!
+                    شما در حال بررسی پنل مرکزی مدیریت سرویس‌ها، تیکت‌ها و اختصاص کارشناسان فنی EasyDriver با دسترسی کامل به تمامی عملیات سیستمی هستید. در این بخش می‌توانید به سرعت درخواست‌های دریافتی جدید را بررسی کرده، هماهنگی‌های ریموت یا حضوری تکنسین‌ها را زمان‌بندی کنید، تیکت‌های پشتیبانی زنده را پاسخ دهید و آمار نهایی رضایت کاربران را تایید و مشاهده فرمایید.
                   </p>
                 </div>
                 <div className="p-4 bg-indigo-50 border border-indigo-100 text-indigo-850 rounded-2xl text-xs space-y-2 font-semibold">
@@ -505,6 +619,11 @@ export const AdminDashboard: React.FC = () => {
                                         >
                                           <div className="space-y-1 grow min-w-0">
                                             <div className="flex items-center gap-1.5 flex-wrap">
+                                              <span 
+                                                className={`h-2 w-2 rounded-full shrink-0 ${
+                                                  tech.isActive ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'
+                                                }`}
+                                              />
                                               <span className="font-extrabold text-[11px] text-slate-850 group-hover:text-indigo-950 truncate">
                                                 {tech.fullName}
                                               </span>
@@ -775,7 +894,16 @@ export const AdminDashboard: React.FC = () => {
                         
                         {/* Name status cap */}
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-2">
+                            {/* Online / Offline status indicator */}
+                            <span 
+                              className={`h-2.5 w-2.5 rounded-full shrink-0 ${
+                                tech.isActive 
+                                  ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.7)]' 
+                                  : 'bg-slate-300'
+                              }`}
+                              title={tech.isActive ? 'آنلاین (آماده کار)' : 'آفلاین'}
+                            />
                             <h4 className="font-extrabold text-sm text-slate-850">{tech.fullName}</h4>
                             <span className="text-[10px] bg-amber-50 text-amber-600 font-bold px-1.5 py-0.2 rounded-md font-mono flex items-center gap-0.5 shadow-sm border border-amber-100">
                               <Trophy className="h-3 w-3 text-amber-500" />
@@ -1136,9 +1264,636 @@ export const AdminDashboard: React.FC = () => {
             </div>
           )}
 
+          {/* TAB 7: REPORTS & EXPORTS CENTER */}
+          {adminTab === 'reports' && (
+            <div className="space-y-6">
+              
+              {/* Informative description banner */}
+              <div className="p-5 bg-gradient-to-r from-rose-900 to-slate-900 rounded-3xl text-white shadow-md text-right flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <h3 className="font-black text-base flex items-center gap-2">
+                    <Printer className="h-5 w-5 text-rose-300" />
+                    <span>مرکز تخصصی گزارش‌گیری و خروجی اکسل / PDF</span>
+                  </h3>
+                  <p className="text-[11px] text-rose-100 font-normal leading-relaxed">
+                    در این بخش می‌توانید از کلیه عملکردهای پلتفرم شامل درخواست‌های سرویس، آمار تکنسین‌ها، تیکت‌های پشتیبانی و دیدگاه‌ها خروجی رسمی تهیه کنید.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <div className="px-3.5 py-2 bg-white/10 rounded-xl text-center self-start">
+                    <span className="block text-[8px] text-rose-200">مجموع تراکنش‌ها</span>
+                    <span className="block text-xs font-black font-mono">{requests.length + tickets.length} رکورد</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bento Grid: 4 Export Categories */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                {/* Card 1: Service Requests */}
+                <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xxs flex flex-col justify-between space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                      <h4 className="font-extrabold text-xs text-slate-800 flex items-center gap-1.5">
+                        <Clipboard className="h-4 w-4 text-rose-600" />
+                        <span>گزارش عملکرد درخواست‌های خدمات فنی</span>
+                      </h4>
+                      <span className="text-[10px] bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full font-bold">
+                        {requests.length} درخواست کل
+                      </span>
+                    </div>
+
+                    <p className="text-[10px] text-slate-500 leading-relaxed font-normal">
+                      خروجی جامع از کلیه اقدامات ثبت‌شده، کارشناسان فنی تخصیص‌یافته، زمان هماهنگ‌شده بازدید ریموت و یادداشت‌ها.
+                    </p>
+
+                    {/* Report filter parameters choice */}
+                    <div className="space-y-1 pt-1">
+                      <label className="text-[9px] text-slate-400 font-bold block">فیلتر وضعیت درخواست‌ها:</label>
+                      <div className="flex flex-wrap gap-1">
+                        {[
+                          { id: 'all', label: 'همه وضعیت‌ها' },
+                          { id: 'pending', label: 'درانتظار بررسی' },
+                          { id: 'assigned', label: 'تخصیص‌یافته' },
+                          { id: 'in_progress', label: 'در حال انجام' },
+                          { id: 'completed', label: 'کامل شده' }
+                        ].map(st => (
+                          <button
+                            key={st.id}
+                            onClick={() => setReportReqStatus(st.id as any)}
+                            className={`px-2 py-1 rounded-md text-[9px] font-bold border transition-all cursor-pointer ${
+                              reportReqStatus === st.id
+                                ? 'bg-rose-50 border-rose-200 text-rose-700'
+                                : 'bg-slate-50 border-slate-150 text-slate-550 hover:bg-slate-100'
+                            }`}
+                          >
+                            {st.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions buttons */}
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-[10px] font-black">
+                    <button
+                      onClick={() => exportToExcelType('requests')}
+                      className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl flex items-center justify-center gap-1 cursor-pointer transition-all"
+                    >
+                      <FileDown className="h-3.5 w-3.5" />
+                      <span>خروجی Excel</span>
+                    </button>
+                    <button
+                      onClick={() => triggerPrintLayout('requests')}
+                      className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl flex items-center justify-center gap-1 cursor-pointer transition-all shadow-sm"
+                    >
+                      <Printer className="h-3.5 w-3.5 text-rose-400" />
+                      <span>چاپ PDF رسمی</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Card 2: Technicians */}
+                <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xxs flex flex-col justify-between space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                      <h4 className="font-extrabold text-xs text-slate-800 flex items-center gap-1.5">
+                        <Users className="h-4 w-4 text-purple-600" />
+                        <span>گزارش عملکرد و امتیازات تکنسین‌ها</span>
+                      </h4>
+                      <span className="text-[10px] bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full font-bold">
+                        {technicians.length} تکنسین کل
+                      </span>
+                    </div>
+
+                    <p className="text-[10px] text-slate-500 leading-relaxed font-normal">
+                      آمار جامع از امتیازات نهایی تکنسین‌ها، تعداد کارهای نهایی‌شده، تخصص‌ها، سطح مدرک و وضعیت دسترسی لایو.
+                    </p>
+
+                    {/* Filter Status select */}
+                    <div className="space-y-1 pt-1">
+                      <label className="text-[9px] text-slate-400 font-bold block">فیلتر وضعیت حضور تکنسین:</label>
+                      <div className="flex gap-1">
+                        {[
+                          { id: 'all', label: 'تمامی تکنسین‌ها' },
+                          { id: 'active', label: 'فقط آنلاین (فعال)' },
+                          { id: 'inactive', label: 'فقط آفلاین (غیرفعال)' }
+                        ].map(st => (
+                          <button
+                            key={st.id}
+                            onClick={() => setReportTechActive(st.id as any)}
+                            className={`px-2 py-1 rounded-md text-[9px] font-bold border transition-all cursor-pointer ${
+                              reportTechActive === st.id
+                                ? 'bg-purple-50 border-purple-200 text-purple-700'
+                                : 'bg-slate-50 border-slate-150 text-slate-550 hover:bg-slate-100'
+                            }`}
+                          >
+                            {st.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions buttons */}
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-[10px] font-black">
+                    <button
+                      onClick={() => exportToExcelType('technicians')}
+                      className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl flex items-center justify-center gap-1 cursor-pointer transition-all"
+                    >
+                      <FileDown className="h-3.5 w-3.5" />
+                      <span>خروجی Excel</span>
+                    </button>
+                    <button
+                      onClick={() => triggerPrintLayout('technicians')}
+                      className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl flex items-center justify-center gap-1 cursor-pointer transition-all shadow-sm"
+                    >
+                      <Printer className="h-3.5 w-3.5 text-purple-400" />
+                      <span>چاپ PDF رسمی</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Card 3: Support Tickets */}
+                <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xxs flex flex-col justify-between space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                      <h4 className="font-extrabold text-xs text-slate-800 flex items-center gap-1.5">
+                        <MessageSquare className="h-4 w-4 text-cyan-600" />
+                        <span>گزارش تیکت‌ها و مکاتبات پشتیبانی آنلاین</span>
+                      </h4>
+                      <span className="text-[10px] bg-cyan-50 text-cyan-700 px-2 py-0.5 rounded-full font-bold">
+                        {tickets.length} تیکت پشتیبانی
+                      </span>
+                    </div>
+
+                    <p className="text-[10px] text-slate-500 leading-relaxed font-normal">
+                      خروجی مکاتبات رسمی، سوالات فنی مشتریان، پیگیری‌های مالی و آخرین پاسخ‌های ارسال‌شده از ادمین استودیو.
+                    </p>
+
+                    {/* Filter Status select */}
+                    <div className="space-y-1 pt-1">
+                      <label className="text-[9px] text-slate-400 font-bold block">فیلتر وضعیت بررسی تیکت:</label>
+                      <div className="flex gap-1 flex-wrap">
+                        {[
+                          { id: 'all', label: 'تمامی تیکت‌ها' },
+                          { id: 'open', label: 'باز / جدید' },
+                          { id: 'in_progress', label: 'درحال مانیتورینگ' },
+                          { id: 'closed', label: 'بسته شده رسمی' }
+                        ].map(st => (
+                          <button
+                            key={st.id}
+                            onClick={() => setReportTicketStatus(st.id as any)}
+                            className={`px-2 py-1 rounded-md text-[9px] font-bold border transition-all cursor-pointer ${
+                              reportTicketStatus === st.id
+                                ? 'bg-cyan-50 border-cyan-200 text-cyan-700'
+                                : 'bg-slate-50 border-slate-150 text-slate-550 hover:bg-slate-100'
+                            }`}
+                          >
+                            {st.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions buttons */}
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-[10px] font-black">
+                    <button
+                      onClick={() => exportToExcelType('tickets')}
+                      className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl flex items-center justify-center gap-1 cursor-pointer transition-all"
+                    >
+                      <FileDown className="h-3.5 w-3.5" />
+                      <span>خروجی Excel</span>
+                    </button>
+                    <button
+                      onClick={() => triggerPrintLayout('tickets')}
+                      className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl flex items-center justify-center gap-1 cursor-pointer transition-all shadow-sm"
+                    >
+                      <Printer className="h-3.5 w-3.5 text-cyan-450" />
+                      <span>چاپ PDF رسمی</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Card 4: Reviews & feedback */}
+                <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xxs flex flex-col justify-between space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                      <h4 className="font-extrabold text-xs text-slate-800 flex items-center gap-1.5">
+                        <Star className="h-4 w-4 text-amber-500" />
+                        <span>گزارش بازخوردها و تاییدیه نظرات سایت</span>
+                      </h4>
+                      <span className="text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full font-bold">
+                        {reviews.length} دیدگاه ثبت مکتوب
+                      </span>
+                    </div>
+
+                    <p className="text-[10px] text-slate-500 leading-relaxed font-normal">
+                      اطلاعات مربوط به رضایت‌سنجی از خدمات تکنسین‌ها، امتیازهای عددی ۱ الی ۵ و دیدگاه‌های تاییدشده یا معلق.
+                    </p>
+
+                    {/* Filter Status select */}
+                    <div className="space-y-1 pt-1">
+                      <label className="text-[9px] text-slate-400 font-bold block">فیلتر وضعیت دیدگاه‌ها:</label>
+                      <div className="flex gap-1">
+                        {[
+                          { id: 'all', label: 'تمامی نظرات عمومی' },
+                          { id: 'approved', label: 'فقط تاییدشده‌ها' },
+                          { id: 'pending', label: 'معلق و بررسی نشده' }
+                        ].map(st => (
+                          <button
+                            key={st.id}
+                            onClick={() => setReportReviewApproved(st.id as any)}
+                            className={`px-2 py-1 rounded-md text-[9px] font-bold border transition-all cursor-pointer ${
+                              reportReviewApproved === st.id
+                                ? 'bg-amber-50 border-amber-200 text-amber-700'
+                                : 'bg-slate-50 border-slate-150 text-slate-550 hover:bg-slate-100'
+                            }`}
+                          >
+                            {st.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions buttons */}
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-[10px] font-black">
+                    <button
+                      onClick={() => exportToExcelType('reviews')}
+                      className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl flex items-center justify-center gap-1 cursor-pointer transition-all"
+                    >
+                      <FileDown className="h-3.5 w-3.5" />
+                      <span>خروجی Excel</span>
+                    </button>
+                    <button
+                      onClick={() => triggerPrintLayout('reviews')}
+                      className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl flex items-center justify-center gap-1 cursor-pointer transition-all shadow-sm"
+                    >
+                      <Printer className="h-3.5 w-3.5 text-amber-500" />
+                      <span>چاپ PDF رسمی</span>
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* On-Screen Print Preview Board */}
+              {currentPrintType && (
+                <div className="bg-slate-50 border border-slate-200 rounded-3xl p-6 space-y-4">
+                  <div className="flex justify-between items-center border-b border-slate-200 pb-3">
+                    <div className="space-y-1">
+                      <span className="text-[9px] font-bold text-indigo-650 tracking-wide uppercase">چشم‌انداز چاپی زنده (Print Preview)</span>
+                      <h4 className="text-xs font-black text-slate-800">پیش‌نمایش خروجی سند رسمی کاغذ A4</h4>
+                    </div>
+                    <button
+                      onClick={() => setCurrentPrintType(null)}
+                      className="text-slate-400 hover:text-slate-700 text-xxs font-bold"
+                    >
+                      بستن پیش‌نمایش
+                    </button>
+                  </div>
+
+                  <div className="bg-white border text-right border-slate-300 p-8 shadow-inner rounded-xl max-h-[400px] overflow-y-auto space-y-6">
+                    <div className="border-b-2 border-slate-800 pb-4 flex justify-between items-end">
+                      <div>
+                        <h1 className="text-sm font-black text-slate-900">سامانه خدمات پشتیبانی و تعمیرات هوشمند EasyDriver</h1>
+                        <p className="text-[10px] text-slate-500 mt-1">پیشخوان مدیریت - گزارش رسمی کارکرد امور فنی</p>
+                      </div>
+                      <div className="text-left text-[9px] text-slate-400 space-y-0.5">
+                        <p>تاریخ رسمی: {new Date().toLocaleDateString('fa-IR')}</p>
+                        <p>تهیه‌کننده: {currentUser?.fullName || 'ادمین اصلی'}</p>
+                      </div>
+                    </div>
+
+                    {currentPrintType === 'requests' && (
+                      <div className="space-y-4">
+                        <h2 className="text-xs font-black text-slate-900">جزئیات تفصیلی کل درخواست‌های فنی خدمات ثبت‌شده:</h2>
+                        <table className="w-full text-[10px] text-right border-collapse border border-slate-300">
+                          <thead>
+                            <tr className="bg-slate-100">
+                              <th className="border border-slate-300 p-2">مشتری</th>
+                              <th className="border border-slate-300 p-2">نوع خدمت</th>
+                              <th className="border border-slate-300 p-2">اولویت</th>
+                              <th className="border border-slate-300 p-2">وضعیت</th>
+                              <th className="border border-slate-300 p-2">تکنسین</th>
+                              <th className="border border-slate-300 p-2">تاریخ</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {requests.map(r => (
+                              <tr key={r.id}>
+                                <td className="border border-slate-300 p-2">{r.fullName || r.customerName}</td>
+                                <td className="border border-slate-300 p-2">{SERVICE_LABELS[r.serviceType]}</td>
+                                <td className="border border-slate-300 p-2">{PRIORITY_LABELS[r.priority]}</td>
+                                <td className="border border-slate-300 p-2">{STATUS_LABELS[r.status]}</td>
+                                <td className="border border-slate-300 p-2">{r.assignedToName || 'تخصیص نیافته'}</td>
+                                <td className="border border-slate-300 p-2">{new Date(r.createdDate).toLocaleDateString('fa-IR')}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {currentPrintType === 'technicians' && (
+                      <div className="space-y-4">
+                        <h2 className="text-xs font-black text-slate-900">تعهد و عملکرد نهایی تکنسین‌های فنی پلتفرم:</h2>
+                        <table className="w-full text-[10px] text-right border-collapse border border-slate-300">
+                          <thead>
+                            <tr className="bg-slate-100">
+                              <th className="border border-slate-300 p-2">تکنسین مسئول</th>
+                              <th className="border border-slate-300 p-2">تخصص کلیدی</th>
+                              <th className="border border-slate-300 p-2">مدرک فنی</th>
+                              <th className="border border-slate-300 p-2">شماره همراه</th>
+                              <th className="border border-slate-300 p-2">تسک‌های موفق</th>
+                              <th className="border border-slate-300 p-2">وضعیت</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {technicians.map(t => (
+                              <tr key={t.id}>
+                                <td className="border border-slate-300 p-2">{t.fullName}</td>
+                                <td className="border border-slate-300 p-2">{SPECIALTY_LABELS[t.specialty]}</td>
+                                <td className="border border-slate-300 p-2">{t.certificationLevel || 'Junior'}</td>
+                                <td className="border border-slate-300 p-2">{t.phone}</td>
+                                <td className="border border-slate-300 p-2">{t.completedTasks || 0}</td>
+                                <td className="border border-slate-300 p-2">{t.isActive ? 'فعال (آنلاین)' : 'غیرفعال'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {currentPrintType === 'tickets' && (
+                      <div className="space-y-4">
+                        <h2 className="text-xs font-black text-slate-900">تیکت‌های در جریان مکاتبه امور پشتیبانی:</h2>
+                        <table className="w-full text-[10px] text-right border-collapse border border-slate-300">
+                          <thead>
+                            <tr className="bg-slate-100">
+                              <th className="border border-slate-300 p-2">موضوع تیکت</th>
+                              <th className="border border-slate-300 p-2">ایجاد کننده</th>
+                              <th className="border border-slate-300 p-2">دسته‌بندی</th>
+                              <th className="border border-slate-300 p-2">اولویت</th>
+                              <th className="border border-slate-300 p-2">وضعیت تیکت</th>
+                              <th className="border border-slate-300 p-2">تاریخ ثبت</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {tickets.map(t => (
+                              <tr key={t.id}>
+                                <td className="border border-slate-300 p-2">{t.subject}</td>
+                                <td className="border border-slate-300 p-2">{t.fullName || t.createdBy}</td>
+                                <td className="border border-slate-300 p-2">{TICKET_CATEGORY_LABELS[t.category]}</td>
+                                <td className="border border-slate-300 p-2">{PRIORITY_LABELS[t.priority]}</td>
+                                <td className="border border-slate-300 p-2">{TICKET_STATUS_LABELS[t.status]}</td>
+                                <td className="border border-slate-300 p-2">{new Date(t.createdDate).toLocaleDateString('fa-IR')}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {currentPrintType === 'reviews' && (
+                      <div className="space-y-4">
+                        <h2 className="text-xs font-black text-slate-900">نظرات، امتیازها و میزان رضایت ثبت شده در پرتال:</h2>
+                        <table className="w-full text-[10px] text-right border-collapse border border-slate-300">
+                          <thead>
+                            <tr className="bg-slate-100">
+                              <th className="border border-slate-300 p-2">نام کاربر</th>
+                              <th className="border border-slate-300 p-2">امتیاز ثبت‌شده</th>
+                              <th className="border border-slate-300 p-2">دیدگاه مکتوب</th>
+                              <th className="border border-slate-300 p-2">وضعیت تایید</th>
+                              <th className="border border-slate-300 p-2">تاریخ ثبت</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {reviews.map(re => (
+                              <tr key={re.id}>
+                                <td className="border border-slate-300 p-2">{re.customerName}</td>
+                                <td className="border border-slate-300 p-2">{re.rating} ستاره</td>
+                                <td className="border border-slate-300 p-2">{re.comment}</td>
+                                <td className="border border-slate-300 p-2">{re.isApproved ? 'تایید و منتشر فنی' : 'درانتظار تایید'}</td>
+                                <td className="border border-slate-300 p-2">{new Date(re.createdDate).toLocaleDateString('fa-IR')}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    <div className="mt-8 pt-4 border-t border-slate-200 grid grid-cols-3 gap-4 text-center text-[10px] text-slate-500">
+                      <div>
+                        <span>مهر و امضا ادمین ارشد</span>
+                      </div>
+                      <div>
+                        <span>ناظر کیفی خدمات فنی</span>
+                      </div>
+                      <div>
+                        <span> تاییدیه نهایی دفتر مرکزی</span>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  <div className="flex justify-end gap-2.5">
+                    <button
+                      onClick={() => triggerPrintLayout(currentPrintType)}
+                      className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xxs font-extrabold cursor-pointer"
+                    >
+                      چاپ رسمی این پیش‌نمایش
+                    </button>
+                    <button
+                      onClick={() => setCurrentPrintType(null)}
+                      className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xxs font-extrabold cursor-pointer"
+                    >
+                      لغو و بستن
+                    </button>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          )}
+
         </div>
 
       </div>
+
+      {/* ========================================== */}
+      {/* PERFECT A4 PRINT VIEW LAYOUT CONTAINER (ONLY VISIBLE ON PRINTER ACTIONS) */}
+      {/* ========================================== */}
+      <div id="print-area" className="hidden print:block text-right font-sans" dir="rtl">
+        {/* Header section of PDF */}
+        <div className="border-b-2 border-slate-950 pb-4 mb-6 flex justify-between items-end">
+          <div>
+            <h1 className="text-lg font-black text-slate-900">سامانه پشتیبانی و خدمات ریموت/حضوری اِیزی‌درایور (EasyDriver)</h1>
+            <p className="text-[10px] text-slate-500 mt-1">پیشخوان مدیریت ادمین - برگه عملکرد گزارش تفصیلی سیستم</p>
+          </div>
+          <div className="text-left text-[9px] text-slate-400">
+            <p>تاریخ چاپ: {new Date().toLocaleDateString('fa-IR')}</p>
+            <p>زمان چاپ: {new Date().toLocaleTimeString('fa-IR')}</p>
+            <p>تهیه‌کننده: {currentUser?.fullName || 'ناظر ارشد مدیریت'}</p>
+          </div>
+        </div>
+
+        {/* Dynamic Data Rows Table Render based on selected request Print Type */}
+        {currentPrintType === 'requests' && (
+          <div className="space-y-4">
+            <h2 className="text-[12px] font-black text-slate-900 border-b border-slate-200 pb-1.5 mb-2">لیست درخواست‌های خدمات و سفارشات فنی مشتریان:</h2>
+            <table className="w-full text-[9px] text-right border-collapse border border-slate-400">
+              <thead>
+                <tr className="bg-slate-100">
+                  <th className="border border-slate-400 p-2">کد</th>
+                  <th className="border border-slate-400 p-2">نام متقاضی</th>
+                  <th className="border border-slate-400 p-2">شماره همراه</th>
+                  <th className="border border-slate-400 p-2">نوع خدمت فنی</th>
+                  <th className="border border-slate-400 p-2">اولویت</th>
+                  <th className="border border-slate-400 p-2">وضعیت</th>
+                  <th className="border border-slate-400 p-2">کارشناس تخصیص‌یافته</th>
+                  <th className="border border-slate-400 p-2">تاریخ آغاز</th>
+                  <th className="border border-slate-400 p-2">یادداشت‌های فنی</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(reportReqStatus === 'all' ? requests : requests.filter(r => r.status === reportReqStatus)).map((r, i) => (
+                  <tr key={r.id}>
+                    <td className="border border-slate-400 p-2 font-mono">{i + 1}</td>
+                    <td className="border border-slate-400 p-2">{r.fullName || r.customerName || 'مشتری بدون نام'}</td>
+                    <td className="border border-slate-400 p-2 font-mono">{r.phone || 'فاقد شماره'}</td>
+                    <td className="border border-slate-400 p-2">{SERVICE_LABELS[r.serviceType]}</td>
+                    <td className="border border-slate-400 p-2">{PRIORITY_LABELS[r.priority]}</td>
+                    <td className="border border-slate-400 p-2">{STATUS_LABELS[r.status]}</td>
+                    <td className="border border-slate-400 p-2">{r.assignedToName || 'تخصیص نیافته'}</td>
+                    <td className="border border-slate-400 p-2">{new Date(r.createdDate).toLocaleDateString('fa-IR')}</td>
+                    <td className="border border-slate-400 p-2 max-w-[150px] truncate">{r.adminNotes || 'بدون یادداشت'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {currentPrintType === 'technicians' && (
+          <div className="space-y-4">
+            <h2 className="text-[12px] font-black text-slate-900 border-b border-slate-200 pb-1.5 mb-2">لیست وضعیت و فعالیت تکنسین‌های فنی پلتفرم:</h2>
+            <table className="w-full text-[9px] text-right border-collapse border border-slate-400">
+              <thead>
+                <tr className="bg-slate-100">
+                  <th className="border border-slate-400 p-2">ردیف</th>
+                  <th className="border border-slate-400 p-2">نام و نام خانوادگی</th>
+                  <th className="border border-slate-400 p-2">تلفن همراه</th>
+                  <th className="border border-slate-400 p-2">پست الکترونیک</th>
+                  <th className="border border-slate-400 p-2">تخصص اصلی فنی</th>
+                  <th className="border border-slate-400 p-2">درجه گواهینامه</th>
+                  <th className="border border-slate-400 p-2">تعداد تسک انجام‌شده</th>
+                  <th className="border border-slate-400 p-2">وضعیت لایو حضور</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(reportTechActive === 'all' ? technicians : technicians.filter(t => reportTechActive === 'active' ? t.isActive : !t.isActive)).map((t, i) => (
+                  <tr key={t.id}>
+                    <td className="border border-slate-400 p-2 font-mono">{i + 1}</td>
+                    <td className="border border-slate-400 p-2">{t.fullName}</td>
+                    <td className="border border-slate-400 p-2 font-mono">{t.phone}</td>
+                    <td className="border border-slate-400 p-2">{t.email || '-'}</td>
+                    <td className="border border-slate-400 p-2">{SPECIALTY_LABELS[t.specialty]}</td>
+                    <td className="border border-slate-400 p-2">{t.certificationLevel || 'Junior'}</td>
+                    <td className="border border-slate-400 p-2 font-mono">{t.completedTasks || 0} تسک</td>
+                    <td className="border border-slate-400 p-2">{t.isActive ? 'فعال (آنلاین)' : 'غیرفعال (آفلاین)'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {currentPrintType === 'tickets' && (
+          <div className="space-y-4">
+            <h2 className="text-[12px] font-black text-slate-900 border-b border-slate-200 pb-1.5 mb-2">لیست تیکت‌ها و مکاتبات پشتیبانی پلتفرم جهت بازرسی:</h2>
+            <table className="w-full text-[9px] text-right border-collapse border border-slate-400">
+              <thead>
+                <tr className="bg-slate-100">
+                  <th className="border border-slate-400 p-2">کد</th>
+                  <th className="border border-slate-400 p-2">ایجاد کننده</th>
+                  <th className="border border-slate-400 p-2">موضوع تیکت پشتیبانی</th>
+                  <th className="border border-slate-400 p-2">دسته‌بندی</th>
+                  <th className="border border-slate-400 p-2">اولویت</th>
+                  <th className="border border-slate-400 p-2">وضعیت تیکت</th>
+                  <th className="border border-slate-400 p-2">تاریخ ارسال</th>
+                  <th className="border border-slate-400 p-2">پاسخ ثبت‌شده ادمین</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(reportTicketStatus === 'all' ? tickets : tickets.filter(t => t.status === reportTicketStatus)).map((t, i) => (
+                  <tr key={t.id}>
+                    <td className="border border-slate-400 p-2 font-mono">{i + 1}</td>
+                    <td className="border border-slate-400 p-2">{t.fullName || t.createdBy}</td>
+                    <td className="border border-slate-400 p-2">{t.subject}</td>
+                    <td className="border border-slate-400 p-2">{TICKET_CATEGORY_LABELS[t.category]}</td>
+                    <td className="border border-slate-400 p-2">{PRIORITY_LABELS[t.priority]}</td>
+                    <td className="border border-slate-400 p-2">{TICKET_STATUS_LABELS[t.status]}</td>
+                    <td className="border border-slate-400 p-2 font-mono">{new Date(t.createdDate).toLocaleDateString('fa-IR')}</td>
+                    <td className="border border-slate-400 p-2 max-w-[200px] truncate">{t.adminReply || 'در انتظار پاسخ کارشناس'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {currentPrintType === 'reviews' && (
+          <div className="space-y-4">
+            <h2 className="text-[12px] font-black text-slate-900 border-b border-slate-200 pb-1.5 mb-2">لیست نظرات مکتوب و میزان رضایت‌سنجی از خدمات:</h2>
+            <table className="w-full text-[9px] text-right border-collapse border border-slate-400">
+              <thead>
+                <tr className="bg-slate-100">
+                  <th className="border border-slate-400 p-2">شماره برگه</th>
+                  <th className="border border-slate-400 p-2">نام مشتری متقاضی</th>
+                  <th className="border border-slate-400 p-2">امتیاز مکتوب</th>
+                  <th className="border border-slate-400 p-2">نوع سرویس انجام‌شده</th>
+                  <th className="border border-slate-400 p-2">دیدگاه فنی تفصیلی</th>
+                  <th className="border border-slate-400 p-2">وضعیت تایید و انتشار</th>
+                  <th className="border border-slate-400 p-2">تاریخ نظر</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(reportReviewApproved === 'all' ? reviews : reviews.filter(r => reportReviewApproved === 'approved' ? r.isApproved : !r.isApproved)).map((re, i) => (
+                  <tr key={re.id}>
+                    <td className="border border-slate-400 p-2 font-mono">{i + 1}</td>
+                    <td className="border border-slate-400 p-2">{re.customerName}</td>
+                    <td className="border border-slate-400 p-2 font-mono">{re.rating} از ۵ ستاره</td>
+                    <td className="border border-slate-400 p-2">{SERVICE_LABELS[re.serviceType as any] || re.serviceType || 'خدمات عمومی'}</td>
+                    <td className="border border-slate-400 p-2 max-w-[220px]">{re.comment}</td>
+                    <td className="border border-slate-400 p-2">{re.isApproved ? 'تایید و منتشر فنی' : 'درانتظار تایید'}</td>
+                    <td className="border border-slate-400 p-2 font-mono">{new Date(re.createdDate).toLocaleDateString('fa-IR')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Official Signature Lines at bottom of PDF page */}
+        <div className="mt-12 pt-8 border-t border-slate-300 grid grid-cols-3 gap-8 text-center text-[10px] text-slate-800">
+          <div>
+            <span className="block font-bold">مهر و امضای ادمین ارشد:</span>
+            <div className="h-10 mt-2 text-[8px] text-slate-350 flex items-center justify-center border border-dashed border-slate-200 rounded">مدیریت لایو EasyDriver</div>
+          </div>
+          <div>
+            <span className="block font-bold">بخش کنترل کیفی و ناظر خدمات ریموت:</span>
+            <div className="h-10 mt-2 text-[8px] text-slate-350 flex items-center justify-center border border-dashed border-slate-200 rounded">تاییدیه استانداردهای فنی</div>
+          </div>
+          <div>
+            <span className="block font-bold"> تاییدیه نهایی دفتر مرکزی شرکت:</span>
+            <div className="h-10 mt-2 text-[8px] text-slate-350 flex items-center justify-center border border-dashed border-slate-200 rounded">دفتر کل فناوری</div>
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 };

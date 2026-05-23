@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
-import { RoleSwitcher } from './components/RoleSwitcher';
 import { Hero } from './components/Hero';
 import { NewRequest } from './components/NewRequest';
 import { MyRequests } from './components/MyRequests';
@@ -14,8 +13,10 @@ import { Auth } from './components/Auth';
 import { TechnicianDashboard } from './components/TechnicianDashboard';
 import { NotificationToasts } from './components/NotificationToasts';
 import { motion, AnimatePresence } from 'motion/react';
+import { useRenderTracker } from './utils/indexedDB';
 
 function AppContent() {
+  useRenderTracker("توسعه پروژه (App)");
   const [activeTab, setActiveTab] = useState<string>('home');
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
 
@@ -26,9 +27,9 @@ function AppContent() {
       case 'new-request':
         return <NewRequest setActiveTab={setActiveTab} />;
       case 'my-requests':
-        return <MyRequests />;
+        return <MyRequests onNavigateToAuth={() => setActiveTab('auth')} />;
       case 'reviews':
-        return <Reviews />;
+        return <Reviews onNavigateToAuth={() => setActiveTab('auth')} />;
       case 'tickets':
         return (
           <Tickets
@@ -41,6 +42,7 @@ function AppContent() {
           <SupportChat
             selectedTicketId={selectedTicketId || ''}
             setSelectedTicketId={setSelectedTicketId}
+            onNavigateToAuth={() => setActiveTab('auth')}
           />
         );
       case 'admin-dashboard':
@@ -78,9 +80,6 @@ function AppContent() {
 
       {/* 3. Footer Segment */}
       <Footer setActiveTab={setActiveTab} />
-
-      {/* 4. Sleek Floating account switcher for quick sandbox testing */}
-      <RoleSwitcher />
 
       {/* 5. Floating real-time slide-in toasts notification stack */}
       <NotificationToasts />

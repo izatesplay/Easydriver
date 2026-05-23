@@ -28,30 +28,41 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, setActiveTab }) => {
   // Success Notification state
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
 
   // Handles actual login submission
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg('');
     if (!loginIdentifier.trim()) return;
 
-    // Simulate login
-    let displayName = loginIdentifier.split('@')[0];
-    displayName = displayName.charAt(0).toUpperCase() + displayName.slice(1);
-    
-    // Discover if mock account
     let selectedRole = loginRole;
-    let actualName = `کاربر ${displayName}`;
+    let actualName = "";
 
-    // Quick match on mocks
-    if (loginIdentifier.includes('admin') || loginIdentifier === 'admin@easydriver.ir') {
-      selectedRole = 'admin';
-      actualName = MOCK_USERS.admin.fullName;
-    } else if (loginIdentifier.includes('navid') || loginIdentifier === 'navid@easydriver.ir') {
-      selectedRole = 'technician';
-      actualName = MOCK_USERS.technician.fullName;
-    } else if (loginIdentifier.includes('saeed') || loginIdentifier === 'saeed@customer.ir') {
-      selectedRole = 'customer';
-      actualName = MOCK_USERS.customer.fullName;
+    // Strictly check admin credentials
+    if (selectedRole === 'admin') {
+      if (loginIdentifier.trim() === 'izatesplay@gmail.com' && loginPassword === '09386561626mM@') {
+        actualName = "مدیر کل ایزی‌درایور (امین)";
+      } else {
+        setErrorMsg('خطای امنیتی: ایمیل کاربری یا رمز عبور مدیریت وارد شده نادرست است.');
+        return;
+      }
+    } else if (selectedRole === 'technician') {
+      if (loginIdentifier.trim() === 'navid@easydriver.ir' || loginIdentifier.trim() === 'navid') {
+        actualName = "مهندس نوید مرادی";
+      } else {
+        let displayName = loginIdentifier.split('@')[0];
+        displayName = displayName.charAt(0).toUpperCase() + displayName.slice(1);
+        actualName = `تکنسین ${displayName}`;
+      }
+    } else {
+      if (loginIdentifier.trim() === 'saeed@customer.ir' || loginIdentifier.trim() === 'saeed') {
+        actualName = "سعید رستمی";
+      } else {
+        let displayName = loginIdentifier.split('@')[0];
+        displayName = displayName.charAt(0).toUpperCase() + displayName.slice(1);
+        actualName = `کاربر ${displayName}`;
+      }
     }
 
     setSuccessMsg(`خوش آمدید، جناب ${actualName}! ورود موفقیت‌آمیز بود.`);
@@ -71,37 +82,25 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, setActiveTab }) => {
   // Handles actual signup submission
   const handleSignupSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg('');
     if (!fullName.trim() || !email.trim() || !phone.trim()) return;
 
-    setSuccessMsg(`حساب کاربری شما با عنوان «${fullName}» در نقش ${signupRole === 'admin' ? 'مدیر سیستم' : signupRole === 'technician' ? 'تکنسین فنی' : 'مشتری'} با موفقیت ساخته شد.`);
+    if (signupRole === 'admin') {
+      setErrorMsg('غیرمجاز: امکان عضویت به عنوان مدیر کل در فرم عمومی وجود ندارد.');
+      return;
+    }
+
+    setSuccessMsg(`حساب کاربری شما با عنوان «${fullName}» در نقش ${signupRole === 'technician' ? 'تکنسین فنی' : 'مشتری'} با موفقیت ساخته شد.`);
     setShowSuccess(true);
 
     setTimeout(() => {
       login(email, fullName, signupRole);
       if (onSuccess) onSuccess();
       if (setActiveTab) {
-        if (signupRole === 'admin') setActiveTab('admin-dashboard');
-        else if (signupRole === 'technician') setActiveTab('tech-dashboard');
+        if (signupRole === 'technician') setActiveTab('tech-dashboard');
         else setActiveTab('home');
       }
     }, 1200);
-  };
-
-  // Handles fast login via mock selection
-  const handleQuickLogin = (role: UserRole) => {
-    const mock = MOCK_USERS[role];
-    setSuccessMsg(`ورود سریع به عنوان ${mock.fullName} (${role === 'admin' ? 'مدیر' : role === 'technician' ? 'تکنسین' : 'مشتری'})`);
-    setShowSuccess(true);
-    
-    setTimeout(() => {
-      login(mock.email, mock.fullName, role);
-      if (onSuccess) onSuccess();
-      if (setActiveTab) {
-        if (role === 'admin') setActiveTab('admin-dashboard');
-        else if (role === 'technician') setActiveTab('tech-dashboard');
-        else setActiveTab('home');
-      }
-    }, 1000);
   };
 
   return (
@@ -197,8 +196,18 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, setActiveTab }) => {
               <form onSubmit={handleLoginSubmit} className="space-y-5">
                 <div className="space-y-1">
                   <h3 className="text-lg font-black text-slate-950">به پرتال EasyDriver وارد شوید</h3>
-                  <p className="text-xs text-slate-400">اطلاعات نمونه یا کاربری شخصی خود را در کادرهای زیر بنویسید</p>
+                  <p className="text-xs text-slate-400">اطلاعات کاربری شخصی خود را در کادرهای زیر بنویسید</p>
                 </div>
+
+                {errorMsg && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-3 bg-rose-50 border border-rose-150 text-rose-600 rounded-xl text-xs font-bold leading-relaxed text-right"
+                  >
+                    {errorMsg}
+                  </motion.div>
+                )}
 
                 <div className="space-y-4">
                   {/* Email & Phone */}
@@ -238,12 +247,12 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, setActiveTab }) => {
 
                   {/* Test Switch Role */}
                   <div className="space-y-1.5 pt-1">
-                    <label className="text-[11px] font-bold text-slate-500 block">مشخص کردن نقش ورود (تست سریع):</label>
+                    <label className="text-[11px] font-bold text-slate-500 block">انتخاب نقش کاربری ورودی:</label>
                     <div className="grid grid-cols-3 gap-2">
                       {[
                         { id: 'customer', name: 'مشتری عادی', icon: Users, color: 'hover:border-blue-500' },
                         { id: 'technician', name: 'تکنسین فنی', icon: Hammer, color: 'hover:border-purple-500' },
-                        { id: 'admin', name: 'مدیر کل شبیه‌ساز', icon: Shield, color: 'hover:border-rose-500' },
+                        { id: 'admin', name: 'مدیر کل (Admin)', icon: Shield, color: 'hover:border-rose-500' },
                       ].map((rl) => (
                         <button
                           key={rl.id}
@@ -270,34 +279,6 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, setActiveTab }) => {
                 >
                   تایید و ورود آنلاین به حساب
                 </button>
-
-                {/* Quick login simulations */}
-                <div className="pt-4 border-t border-slate-100 text-center space-y-2.5">
-                  <span className="text-[10px] text-slate-400 font-bold block">تنظیم شده برای تست! ورود با حساب‌های آزمایشی زیر با یک کلیک:</span>
-                  <div className="flex flex-wrap items-center justify-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleQuickLogin('customer')}
-                      className="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-[10px] font-bold cursor-pointer transition-colors"
-                    >
-                      ورود به عنوان مشتری دمو
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleQuickLogin('technician')}
-                      className="px-3 py-1.5 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg text-[10px] font-bold cursor-pointer transition-colors"
-                    >
-                      ورود به عنوان تکنسین دمو
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleQuickLogin('admin')}
-                      className="px-3 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg text-[10px] font-bold cursor-pointer transition-colors"
-                    >
-                      ورود به عنوان مدیر دمو
-                    </button>
-                  </div>
-                </div>
 
               </form>
             ) : (
@@ -384,7 +365,7 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, setActiveTab }) => {
                 {/* Choose role for signup */}
                 <div className="space-y-1.5 pt-1.5">
                   <label className="text-[11px] font-bold text-slate-500 block">لطفاً نقش کاربری خودتان را تعیین فرمایید:</label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {[
                       { id: 'customer', title: 'مشتری متقاضی خدمت نصب', desc: 'نیاز به آپدیت سیستم ها دارم', icon: Users },
                       { id: 'technician', title: 'تکنسین ریموت و ای‌دی پی‌سی', desc: 'نصب‌های تخصصی را بلد هستم', icon: Hammer },
@@ -406,21 +387,6 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, setActiveTab }) => {
                         <p className={`text-[9px] mt-1 ${signupRole === btn.id ? 'text-slate-350' : 'text-slate-400'}`}>{btn.desc}</p>
                       </button>
                     ))}
-                    <button
-                      type="button"
-                      onClick={() => setSignupRole('admin')}
-                      className={`p-3 rounded-xl border text-right transition-all flex flex-col justify-between h-20 cursor-pointer ${
-                        signupRole === 'admin'
-                          ? 'bg-rose-900 border-rose-950 text-white'
-                          : 'bg-white border-slate-150 text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <Shield className="h-4 w-4 shrink-0 text-rose-500" />
-                        <span className="font-extrabold text-[11px]">توسعه‌دهنده / ادمین</span>
-                      </div>
-                      <p className={`text-[9px] mt-1 ${signupRole === 'admin' ? 'text-rose-200' : 'text-slate-400'}`}>سوپروایزر و پاسخگو درایورها</p>
-                    </button>
                   </div>
                 </div>
 

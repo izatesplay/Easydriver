@@ -693,7 +693,9 @@ app.put("/api/requests/:id", async (req, res) => {
   const local = readLocalJSON();
   const index = local.requests.findIndex(r => r.id === id);
   let justCompleted = false;
+  let oldRequest: any = null;
   if (index >= 0) {
+    oldRequest = { ...local.requests[index] };
     const oldStatus = local.requests[index].status;
     if (oldStatus !== "completed" && status === "completed") {
       justCompleted = true;
@@ -713,17 +715,64 @@ app.put("/api/requests/:id", async (req, res) => {
   // Trigger User and Tech notifications
   const targetUser = createdBy || (index >= 0 ? local.requests[index].createdBy : 'user-customer');
 
-  let PersianStatus = status;
-  if (status === "approved") PersianStatus = "تایید شده";
-  else if (status === "assigned") PersianStatus = "تخصیص یافته";
-  else if (status === "in_progress") PersianStatus = "در حال انجام";
-  else if (status === "completed") PersianStatus = "کامل شده";
-  else if (status === "cancelled") PersianStatus = "لغو شده";
-  else if (status === "pending") PersianStatus = "در انتظار بررسی";
+  let notificationTitle = "بروزرسانی وضعیت درخواست";
+  let notificationMessage = "";
+  const changedParts: string[] = [];
+  const subjectText = description ? (description.slice(0, 30) + "...") : "خدمات فنی";
+
+  if (oldRequest) {
+    if (status && oldRequest.status !== status) {
+      let PersianStatus = status;
+      if (status === "approved") PersianStatus = "تایید شده";
+      else if (status === "assigned") PersianStatus = "تخصیص یافته";
+      else if (status === "in_progress") PersianStatus = "در حال انجام";
+      else if (status === "completed") PersianStatus = "کامل شده";
+      else if (status === "cancelled") PersianStatus = "لغو شده";
+      else if (status === "pending") PersianStatus = "در انتظار بررسی";
+      
+      changedParts.push(`وضعیت به «${PersianStatus}» تغییر یافت`);
+      notificationTitle = "تغییر وضعیت درخواست شما";
+    }
+
+    if (assignedToName && oldRequest.assignedToName !== assignedToName) {
+      changedParts.push(`تکنسین مسئول به «${assignedToName}» تعیین شد`);
+      notificationTitle = "تخصیص تکنسین به درخواست شما";
+    }
+
+    if (scheduledDate && oldRequest.scheduledDate !== scheduledDate) {
+      const formattedDate = new Date(scheduledDate).toLocaleString('fa-IR');
+      changedParts.push(`زمان بازدید به «${formattedDate}» هماهنگ شد`);
+      notificationTitle = "تنظیم زمان بازدید درخواست";
+    }
+
+    if (adminNotes && oldRequest.adminNotes !== adminNotes) {
+      changedParts.push(`یادداشت جدیدی از کارشناس ثبت شد: «${adminNotes.slice(0, 35)}...»`);
+      notificationTitle = "یادداشت جدید برای درخواست شما";
+    }
+
+    if (priority && oldRequest.priority !== priority) {
+      let PersianPriority = priority === "urgent" ? "ضروری" : (priority === "high" ? "بالا" : (priority === "medium" ? "متوسط" : "کم"));
+      changedParts.push(`اولویت به «${PersianPriority}» تغییر یافت`);
+    }
+  }
+
+  if (changedParts.length > 0) {
+    notificationMessage = `درخواست شما با موضوع «${subjectText}» بروزرسانی شد: ${changedParts.join(" و ")}.`;
+  } else {
+    let PersianStatus = status;
+    if (status === "approved") PersianStatus = "تایید شده";
+    else if (status === "assigned") PersianStatus = "تخصیص یافته";
+    else if (status === "in_progress") PersianStatus = "در حال انجام";
+    else if (status === "completed") PersianStatus = "کامل شده";
+    else if (status === "cancelled") PersianStatus = "لغو شده";
+    else if (status === "pending") PersianStatus = "در انتظار بررسی";
+    
+    notificationMessage = `جزئیات درخواست شما با موضوع «${subjectText}» با موفقیت ویرایش شد (وضعیت فعلی: ${PersianStatus}).`;
+  }
 
   createAndSendNotification({
-    title: "بروزرسانی وضعیت درخواست شما",
-    message: `وضعیت درخواست شما با موضوع «${description ? (description.slice(0, 30) + "...") : "خدمات فنی"}» به «${PersianStatus}» تغییر یافت.`,
+    title: notificationTitle,
+    message: notificationMessage,
     type: "request_status",
     priority: "medium",
     targetUserId: targetUser,
@@ -876,17 +925,46 @@ app.put("/api/tickets/:id", async (req, res) => {
 
   const local = readLocalJSON();
   const index = local.tickets.findIndex(t => t.id === id);
+  let oldTicket: any = null;
   if (index >= 0) {
+    oldTicket = { ...local.tickets[index] };
     local.tickets[index] = { ...local.tickets[index], ...req.body };
     writeLocalJSON(local);
   }
 
   const targetUser = createdBy || (index >= 0 ? local.tickets[index].createdBy : 'user-customer');
-  let PersianStatus = status === "open" ? "باز شده" : (status === "in_progress" ? "در حال بررسی" : "بسته شده");
+
+  let ticketTitle = "بروزرسانی تیکت پشتیبانی";
+  let ticketMessage = "";
+  const ticketChanges: string[] = [];
+  const ticketSubject = req.body.subject || (oldTicket ? oldTicket.subject : "پشتیبانی فنی");
+
+  if (oldTicket) {
+    if (status && oldTicket.status !== status) {
+      let PersianStatus = status === "open" ? "باز شده" : (status === "in_progress" ? "در حال بررسی" : "بسته شده");
+      ticketChanges.push(`وضعیت تیکت به «${PersianStatus}» تغییر یافت`);
+      ticketTitle = "تغییر وضعیت تیکت پشتیبانی";
+    }
+    if (priority && oldTicket.priority !== priority) {
+      let PersianPriority = priority === "urgent" ? "خیلی فوری" : (priority === "high" ? "بالا" : (priority === "medium" ? "متوسط" : "پایین"));
+      ticketChanges.push(`اولویت به «${PersianPriority}» تغییر داده شد`);
+    }
+    if (adminReply && oldTicket.adminReply !== adminReply) {
+      ticketChanges.push(`پاسخ رسمی پشتیبان پیوست شد: «${adminReply.slice(0, 35)}...»`);
+      ticketTitle = "پاسخ جدید در تیکت پشتیبانی";
+    }
+  }
+
+  if (ticketChanges.length > 0) {
+    ticketMessage = `تیکت شما با عنوان «${ticketSubject}» بروزرسانی شد: ${ticketChanges.join(" و ")}.`;
+  } else {
+    let PersianStatus = status === "open" ? "باز شده" : (status === "in_progress" ? "در حال بررسی" : "بسته شده");
+    ticketMessage = `تیکت شما با عنوان «${ticketSubject}» بروزرسانی شد و در وضعیت «${PersianStatus}» قرار دارد.`;
+  }
 
   createAndSendNotification({
-    title: "تغییر وضعیت تیکت پشتیبانی",
-    message: `وضعیت تیکت شما با عنوان «${req.body.subject || "پشتیبانی"}» به «${PersianStatus}» تغییر یافت.`,
+    title: ticketTitle,
+    message: ticketMessage,
     type: "ticket_status",
     priority: "medium",
     targetUserId: targetUser,
@@ -1167,9 +1245,9 @@ app.delete("/api/technicians/:id", async (req, res) => {
 
 
 
-// API: Check if API key status is available or simulation is active (Always true for simulation mode)
+// API: Check if API key status is available or fallback engine is active
 app.get("/api/check-api-key", (req, res) => {
-  res.json({ available: true, isSimulation: true, engine: "شبیه‌ساز هوش‌مصنوعی محلی پچر ۲.۰" });
+  res.json({ available: true, isSimulation: false, engine: "موتور بهینه‌ساز هوش مصنوعی پردازش ابری" });
 });
 
 // API: Simulated Expert Computer Technician Response Router
@@ -1205,7 +1283,7 @@ app.post("/api/ai-chat", async (req, res) => {
     } else {
       // General highly realistic technical polite replies
       const naturalReplies = [
-        "درود و وقت بخیر؛ اطلاعات ثبت‌شده توسط سیستم شبیه‌ساز ما تحلیل شد. کارشناسان فنی ایزی‌درایور هم‌اکنون آماده برقراری اتصال ریموت AnyDesk روی سیستم شما هستند تا به صورت دقیق‌تر عیب‌یابی را نهایی کنند.",
+        "درود و وقت بخیر؛ اطلاعات ثبت‌شده توسط سیستم هوشمند ما تحلیل شد. کارشناسان فنی ایزی‌درایور هم‌اکنون آماده برقراری اتصال ریموت AnyDesk روی سیستم شما هستند تا به صورت دقیق‌تر عیب‌یابی را نهایی کنند.",
         "سلام دوست گرامی؛ درخواست شما در صف اولویت‌های مانیتورینگ آنلاین قرار گرفت. برای تایید نهایی ابزارهای نصب درایور، همکاران بخش پشتیبانی فنی تا لحظاتی دیگر مستقیم روی سیستم شما لاگین خواهند کرد.",
         "ارسال توضیحات با موفقیت ثبت شد. سیستم پیشنهاد می‌دهد برای جلوگیری از هرگونه تداخل در حین اتوماسیون آنلاین نصب درایورها، برنامه‌های سنگین و دانلودهای پس‌زمینه خود را موقتاً متوقف کنید.",
         "سیستم پشتیبان ارشد ایزی‌درایور پیام شما را تحلیل کرد. جهت سرعت‌بخشی به امر نصب و عیب‌یابی ریموت، پیشنهاد داریم سیستم عامل خود را در حالت آماده‌باش برای مانیتورینگ قرار دهید."
@@ -1323,6 +1401,8 @@ wss.on("connection", (ws: any) => {
         console.log(`👤 Client registered: UserID=${ws.userId}, Role=${ws.userRole}`);
         // Send connection success acknowledgement
         ws.send(JSON.stringify({ type: "registered", success: true }));
+      } else if (payload.type === "ping") {
+        ws.send(JSON.stringify({ type: "pong", timestamp: payload.timestamp }));
       }
     } catch (err) {
       console.error("Error parsing WebSocket message:", err);

@@ -9,7 +9,7 @@ interface NewRequestProps {
 }
 
 export const NewRequest: React.FC<NewRequestProps> = ({ setActiveTab }) => {
-  const { currentUser, addRequest, switchRole } = useApp();
+  const { currentUser, addRequest } = useApp();
 
   // Form states
   const [fullName, setFullName] = useState(currentUser?.fullName || '');
@@ -126,17 +126,14 @@ export const NewRequest: React.FC<NewRequestProps> = ({ setActiveTab }) => {
           <div className="pt-2">
             <button
               onClick={() => {
-                switchRole('customer');
+                setActiveTab('auth');
               }}
               className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-500/15 flex items-center justify-center gap-2 transition-all cursor-pointer"
             >
               <Key className="h-4 w-4" />
-              <span>ورود فوری و شبیه‌سازی مشتری</span>
+              <span>انتقال به پرتال ورود و ثبت‌نام</span>
             </button>
           </div>
-          <p className="text-[10px] text-slate-400">
-            برای راحتی تست، با فشردن دکمه بالا بلافاصله به عنوان مشتری دمو "سعید رستمی" وارد می‌شوید.
-          </p>
         </div>
       </div>
     );

@@ -3,8 +3,12 @@ import { useApp } from '../context/AppContext';
 import { Star, MessageSquare, AlertCircle, Sparkles, UserCheck, Heart, User, Send } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-export const Reviews: React.FC = () => {
-  const { currentUser, reviews, addReview, switchRole } = useApp();
+interface ReviewsProps {
+  onNavigateToAuth?: () => void;
+}
+
+export const Reviews: React.FC<ReviewsProps> = ({ onNavigateToAuth }) => {
+  const { currentUser, reviews, addReview } = useApp();
 
   // Form states
   const [rating, setRating] = useState<number>(5);
@@ -130,15 +134,19 @@ export const Reviews: React.FC = () => {
           {/* If user not logged in, show elegant placeholder block to force login */}
           {!currentUser ? (
             <div className="p-6 bg-slate-50 border border-slate-150 rounded-2xl text-center space-y-4">
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-500 font-normal">
                 دیدگاه شما برای بهبود کیفیت خدمات تکنسین‌ها بسیار حیاتی است. جهت ثبت امتیاز و بازخورد لطفاً وارد حساب خود شوید.
               </p>
-              <button
-                onClick={() => switchRole('customer')}
-                className="px-5 py-2.5 bg-indigo-650 hover:bg-indigo-700 text-white rounded-xl text-xxs font-bold shadow-md shadow-indigo-600/15 cursor-pointer"
-              >
-                ورود سریع با عنوان مشتری
-              </button>
+              {onNavigateToAuth ? (
+                <button
+                  onClick={onNavigateToAuth}
+                  className="px-5 py-2.5 bg-indigo-650 hover:bg-indigo-700 text-white rounded-xl text-xxs font-bold shadow-md shadow-indigo-600/15 cursor-pointer font-sans"
+                >
+                  انتقال به پرتال ورود و ثبت‌نام
+                </button>
+              ) : (
+                <p className="text-[11px] text-slate-400 font-normal">برای ورود به بخش احراز هویت اقدام نمایید.</p>
+              )}
             </div>
           ) : success ? (
             <AnimatePresence>

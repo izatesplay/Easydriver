@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext';
 import { TicketCategory, TicketPriority, TICKET_CATEGORY_LABELS, TICKET_PRIORITY_LABELS, TICKET_STATUS_LABELS, TICKET_STATUS_COLORS, Ticket } from '../types';
 import { Send, Plus, Inbox, Clipboard, MessageSquare, ShieldAlert, Key, MessageCircle, AlertCircle, Clock, ChevronDown, ChevronUp, Upload, X, File, Trash2, Image, Check, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useRenderTracker } from '../utils/indexedDB';
 
 interface TicketsProps {
   setActiveTab: (tab: string) => void;
@@ -10,7 +11,8 @@ interface TicketsProps {
 }
 
 export const Tickets: React.FC<TicketsProps> = ({ setActiveTab, setSelectedTicketId }) => {
-  const { currentUser, tickets, addTicket, switchRole } = useApp();
+  useRenderTracker("پشتیبانی تیکت (Tickets)");
+  const { currentUser, tickets, addTicket } = useApp();
 
   // Form toggling
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -50,11 +52,11 @@ export const Tickets: React.FC<TicketsProps> = ({ setActiveTab, setSelectedTicke
           </div>
           <div className="pt-2">
             <button
-               onClick={() => switchRole('customer')}
+               onClick={() => setActiveTab('auth')}
               className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-500/15 flex items-center justify-center gap-2 transition-all cursor-pointer"
             >
               <Key className="h-4 w-4" />
-              <span>ورود فوری به عنوان مشتری</span>
+              <span>انتقال به پرتال ورود و ثبت‌نام</span>
             </button>
           </div>
         </div>

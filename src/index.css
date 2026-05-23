@@ -1,16 +1,48 @@
 @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 
+:root {
+  --bg-app: #f8fafc;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f1f5f9;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --border-color: #e2e8f0;
+}
+
+.dark {
+  --bg-app: #090d16;
+  --bg-card: #111827;
+  --bg-card-hover: #1f2937;
+  --text-primary: #f9fafb;
+  --text-secondary: #cbd5e1;
+  --text-muted: #64748b;
+  --border-color: #1f2937;
+}
+
 @theme {
   --font-sans: "Vazirmatn", "Inter", system-ui, -apple-system, sans-serif;
+  
+  /* Remap standard tailwind colors to dark mode responsive CSS variables */
+  --color-white: var(--bg-card);
+  --color-slate-50: var(--bg-app);
+  --color-slate-100: var(--bg-card-hover);
+  --color-slate-200: var(--border-color);
+  --color-slate-900: var(--text-primary);
+  --color-slate-800: var(--text-secondary);
+  --color-slate-700: var(--text-secondary);
+  --color-slate-600: var(--text-secondary);
+  --color-slate-500: var(--text-muted);
 }
 
 body {
   font-family: var(--font-sans);
   direction: rtl;
   text-align: right;
-  background-color: #f8fafc;
-  color: #1e293b;
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  transition: background-color 0.2s ease, color 0.15s ease;
 }
 
 /* Custom scrollbars for professional polish */
@@ -24,10 +56,37 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: var(--border-color);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: var(--text-muted);
 }
+
+/* Custom Print CSS Layout rules */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #print-area, #print-area * {
+    visibility: visible;
+  }
+  #print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 20px;
+    background: white !important;
+    color: black !important;
+    direction: rtl !important;
+    text-align: right !important;
+  }
+  html, body {
+    background: white !important;
+    color: black !important;
+  }
+}
+

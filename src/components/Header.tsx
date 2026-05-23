@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Layers, ShieldCheck, LogOut, Menu, X, Laptop, UserCheck, MessageSquare, AlertCircle } from 'lucide-react';
+import { Layers, ShieldCheck, LogOut, Menu, X, Laptop, UserCheck, MessageSquare, AlertCircle, Sun, Moon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { NotificationBell } from './NotificationBell';
+import { useRenderTracker } from '../utils/indexedDB';
 
 interface HeaderProps {
   activeTab: string;
@@ -10,8 +11,28 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
-  const { currentUser, logout, switchRole, requests, tickets } = useApp();
+  useRenderTracker("هدر اصلی (Header)");
+  const { currentUser, logout, requests, tickets } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('theme');
+      if (saved) return saved === 'dark';
+      return false;
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (darkMode) {
+      root.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      root.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [darkMode]);
 
   const pendingCount = requests.filter(r => r.status === 'pending').length;
   const openTicketCount = tickets.filter(t => t.status === 'open').length;
@@ -100,6 +121,20 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
 
           {/* User Actions & Mobile Trigger */}
           <div className="flex items-center gap-3">
+            {/* Dark Mode Toggle Button */}
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className="p-2 text-slate-500 hover:text-blue-600 hover:bg-slate-150 rounded-xl transition-all duration-300 cursor-pointer"
+              title={darkMode ? "فعال‌سازی حالت روشن" : "فعال‌سازی حالت تاریک"}
+              id="theme-toggle"
+            >
+              {darkMode ? (
+                <Sun className="h-4.5 w-4.5 text-amber-500" />
+              ) : (
+                <Moon className="h-4.5 w-4.5 text-slate-600" />
+              )}
+            </button>
+
             {currentUser && (
               <NotificationBell />
             )}
