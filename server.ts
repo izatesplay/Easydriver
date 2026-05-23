@@ -955,6 +955,15 @@ app.post("/api/tickets/:id/messages", async (req, res) => {
       targetRole: "admin",
       referenceId: id
     });
+    // Also notify technicians
+    createAndSendNotification({
+      title: `پیام جدید در تیکت: ${ticketSubject}`,
+      message: `${senderName}: ${message.slice(0, 50)}${message.length > 50 ? '...' : ''}`,
+      type: "ticket_reply",
+      priority: "medium",
+      targetRole: "technician",
+      referenceId: id
+    });
   }
 
   res.json({ success: true });

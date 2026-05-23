@@ -446,6 +446,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             timestamp: new Date().toISOString(),
           };
 
+          // Show automated notification toast
+          const autoNotification: Notification = {
+            id: `notif-${Date.now()}`,
+            title: "پاسخ جدید از پشتیبان هوشمند",
+            message: autoMessage.message,
+            type: "ticket_reply",
+            createdDate: new Date().toISOString(),
+            read: false
+          };
+          showFancyToast(autoNotification);
+
           // Optimistically show Gemini reply as well
           setTickets(prev => prev.map(t => {
             if (t.id === ticketId) {
