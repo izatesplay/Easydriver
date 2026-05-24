@@ -590,6 +590,13 @@ app.get("/api/requests", async (req, res) => {
   const pool = await getMySQLPool();
   if (pool) {
     try {
+      try {
+        await pool.query("ALTER TABLE `requests` ADD COLUMN `desktop_screenshots` TEXT NULL");
+      } catch (e) {}
+      try {
+        await pool.query("ALTER TABLE `requests` ADD COLUMN `logged_duration_minutes` INT NOT NULL DEFAULT 0");
+      } catch (e) {}
+
       const [rows] = await pool.query("SELECT * FROM `requests` ORDER BY `created_date` DESC");
       // Map database snake_case columns to TS camelCase
       const formatted = (rows as any[]).map(row => ({
@@ -613,6 +620,8 @@ app.get("/api/requests", async (req, res) => {
         rating: row.rating,
         ratingComment: row.rating_comment,
         ratedAt: row.rated_at,
+        desktopScreenshots: row.desktop_screenshots ? JSON.parse(row.desktop_screenshots) : [],
+        loggedDurationMinutes: row.logged_duration_minutes || 0,
       }));
       return res.json(formatted);
     } catch (err: any) {
@@ -626,14 +635,21 @@ app.get("/api/requests", async (req, res) => {
 });
 
 app.post("/api/requests", async (req, res) => {
-  const { id, fullName, phone, serviceType, description, status, priority, adminNotes, scheduledDate, assignedToId, assignedToName, isApproved, approvedAt, assignedAt, createdDate, updatedDate, createdBy } = req.body;
+  const { id, fullName, phone, serviceType, description, status, priority, adminNotes, scheduledDate, assignedToId, assignedToName, isApproved, approvedAt, assignedAt, createdDate, updatedDate, createdBy, desktopScreenshots, loggedDurationMinutes } = req.body;
   const pool = await getMySQLPool();
   let saved = false;
   if (pool) {
     try {
+      try {
+        await pool.query("ALTER TABLE `requests` ADD COLUMN `desktop_screenshots` TEXT NULL");
+      } catch (e) {}
+      try {
+        await pool.query("ALTER TABLE `requests` ADD COLUMN `logged_duration_minutes` INT NOT NULL DEFAULT 0");
+      } catch (e) {}
+
       await pool.query(
-        "INSERT INTO `requests` (`id`, `full_name`, `phone`, `service_type`, `description`, `status`, `priority`, `admin_notes`, `scheduled_date`, `assigned_to_id`, `assigned_to_name`, `is_approved`, `approved_at`, `assigned_at`, `created_date`, `updated_date`, `created_by`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [id, fullName, phone, serviceType, description, status, priority, adminNotes || null, scheduledDate || null, assignedToId || null, assignedToName || null, isApproved ? 1 : 0, approvedAt || null, assignedAt || null, createdDate, updatedDate, createdBy]
+        "INSERT INTO `requests` (`id`, `full_name`, `phone`, `service_type`, `description`, `status`, `priority`, `admin_notes`, `scheduled_date`, `assigned_to_id`, `assigned_to_name`, `is_approved`, `approved_at`, `assigned_at`, `created_date`, `updated_date`, `created_by`, `desktop_screenshots`, `logged_duration_minutes`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [id, fullName, phone, serviceType, description, status, priority, adminNotes || null, scheduledDate || null, assignedToId || null, assignedToName || null, isApproved ? 1 : 0, approvedAt || null, assignedAt || null, createdDate, updatedDate, createdBy, desktopScreenshots ? JSON.stringify(desktopScreenshots) : null, loggedDurationMinutes || 0]
       );
       saved = true;
     } catch (err) {
@@ -666,10 +682,17 @@ app.post("/api/requests", async (req, res) => {
 
 app.put("/api/requests/:id", async (req, res) => {
   const { id } = req.params;
-  const { fullName, phone, serviceType, description, status, priority, adminNotes, scheduledDate, assignedToId, assignedToName, isApproved, approvedAt, assignedAt, updatedDate, rating, ratingComment, ratedAt, createdBy } = req.body;
+  const { fullName, phone, serviceType, description, status, priority, adminNotes, scheduledDate, assignedToId, assignedToName, isApproved, approvedAt, assignedAt, updatedDate, rating, ratingComment, ratedAt, createdBy, desktopScreenshots, loggedDurationMinutes } = req.body;
   const pool = await getMySQLPool();
   if (pool) {
     try {
+      try {
+        await pool.query("ALTER TABLE `requests` ADD COLUMN `desktop_screenshots` TEXT NULL");
+      } catch (e) {}
+      try {
+        await pool.query("ALTER TABLE `requests` ADD COLUMN `logged_duration_minutes` INT NOT NULL DEFAULT 0");
+      } catch (e) {}
+
       if (status === "completed") {
         const [oldReq] = await pool.query("SELECT `status` FROM `requests` WHERE `id`=?", [id]);
         if (oldReq && (oldReq as any[]).length > 0 && (oldReq as any[])[0].status !== "completed") {
@@ -682,8 +705,8 @@ app.put("/api/requests/:id", async (req, res) => {
         }
       }
       await pool.query(
-        "UPDATE `requests` SET `full_name`=?, `phone`=?, `service_type`=?, `description`=?, `status`=?, `priority`=?, `admin_notes`=?, `scheduled_date`=?, `assigned_to_id`=?, `assigned_to_name`=?, `is_approved`=?, `approved_at`=?, `assigned_at`=?, `updated_date`=?, `rating`=?, `rating_comment`=?, `rated_at`=? WHERE `id`=?",
-        [fullName, phone, serviceType, description, status, priority, adminNotes || null, scheduledDate || null, assignedToId || null, assignedToName || null, isApproved ? 1 : 0, approvedAt || null, assignedAt || null, updatedDate, rating || null, ratingComment || null, ratedAt || null, id]
+        "UPDATE `requests` SET `full_name`=?, `phone`=?, `service_type`=?, `description`=?, `status`=?, `priority`=?, `admin_notes`=?, `scheduled_date`=?, `assigned_to_id`=?, `assigned_to_name`=?, `is_approved`=?, `approved_at`=?, `assigned_at`=?, `updated_date`=?, `rating`=?, `rating_comment`=?, `rated_at`=?, `desktop_screenshots`=?, `logged_duration_minutes`=? WHERE `id`=?",
+        [fullName, phone, serviceType, description, status, priority, adminNotes || null, scheduledDate || null, assignedToId || null, assignedToName || null, isApproved ? 1 : 0, approvedAt || null, assignedAt || null, updatedDate, rating || null, ratingComment || null, ratedAt || null, desktopScreenshots ? JSON.stringify(desktopScreenshots) : null, loggedDurationMinutes || 0, id]
       );
     } catch (err) {
       console.error("MySQL update request failed:", err);

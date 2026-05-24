@@ -5,7 +5,7 @@ import { getStoreData, saveStoreData, performanceMonitor } from '../utils/indexe
 
 interface AppContextProps {
   currentUser: User | null;
-  login: (email: string, fullName: string, role: UserRole) => void;
+  login: (email: string, fullName: string, role: UserRole, extra?: Partial<User>) => void;
   logout: () => void;
   requests: Request[];
   addRequest: (request: Omit<Request, 'id' | 'createdDate' | 'updatedDate' | 'createdBy' | 'isApproved' | 'status'>) => Request;
@@ -320,14 +320,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const login = (email: string, fullName: string, role: UserRole) => {
+  const login = (email: string, fullName: string, role: UserRole, extra?: Partial<User>) => {
     const newUser: User = {
-      id: `user-${Date.now()}`,
+      id: extra?.id || `user-${Date.now()}`,
       fullName,
       email,
-      phone: '09120000000',
+      phone: extra?.phone || '09120000000',
       role,
-      avatarUrl: `https://api.dicebear.com/7.x/adventurer/svg?seed=${fullName}`,
+      avatarUrl: extra?.avatarUrl || `https://api.dicebear.com/7.x/adventurer/svg?seed=${fullName}`,
     };
     saveUser(newUser);
   };

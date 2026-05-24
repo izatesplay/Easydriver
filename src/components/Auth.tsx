@@ -1,8 +1,38 @@
 import React, { useState } from 'react';
-import { useApp, MOCK_USERS } from '../context/AppContext';
+import { useApp } from '../context/AppContext';
 import { UserRole } from '../types';
 import { User, Mail, Phone, Lock, Sparkles, Key, CheckCircle, ArrowLeft, Shield, Hammer, Users } from 'lucide-react';
 import { motion } from 'motion/react';
+
+const INITIAL_REGISTERED_USERS = [
+  {
+    id: 'user-customer',
+    fullName: 'سعید رستمی',
+    email: 'saeed@customer.ir',
+    phone: '09121234567',
+    role: 'customer',
+    password: '123',
+    avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80',
+  },
+  {
+    id: 'tech-1',
+    fullName: 'مهندس نوید مرادی',
+    email: 'navid@easydriver.ir',
+    phone: '09123456789',
+    role: 'technician',
+    password: '123',
+    avatarUrl: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&h=150&q=80',
+  },
+  {
+    id: 'admin-1',
+    fullName: 'مدیر کل ایزی‌درایور (امین)',
+    email: 'izatesplay@gmail.com',
+    phone: '09386561626',
+    role: 'admin',
+    password: '09386561626mM@',
+    avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&h=150&q=80',
+  }
+];
 
 interface AuthProps {
   onSuccess?: () => void;
@@ -10,7 +40,7 @@ interface AuthProps {
 }
 
 export const Auth: React.FC<AuthProps> = ({ onSuccess, setActiveTab }) => {
-  const { login } = useApp();
+  const { login, addTechnician, technicians } = useApp();
   const [activeMode, setActiveMode] = useState<'login' | 'signup'>('login');
   
   // Signup State
@@ -30,46 +60,72 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, setActiveTab }) => {
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
+  // Helper to load/save registered users list
+  const getRegisteredUsers = (): any[] => {
+    const stored = localStorage.getItem('ed_registered_users');
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch (e) {
+        return INITIAL_REGISTERED_USERS;
+      }
+    }
+    localStorage.setItem('ed_registered_users', JSON.stringify(INITIAL_REGISTERED_USERS));
+    return INITIAL_REGISTERED_USERS;
+  };
+
   // Handles actual login submission
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
-    if (!loginIdentifier.trim()) return;
+    if (!loginIdentifier.trim()) {
+      setErrorMsg('لطفاً ایمیل یا شماره موبایل را وارد فرمایید.');
+      return;
+    }
+    if (!loginPassword.trim()) {
+      setErrorMsg('لطفاً رمز عبور را وارد فرمایید.');
+      return;
+    }
 
-    let selectedRole = loginRole;
-    let actualName = "";
+    const selectedRole = loginRole;
+    const registered = getRegisteredUsers();
 
-    // Strictly check admin credentials
-    if (selectedRole === 'admin') {
-      if (loginIdentifier.trim() === 'izatesplay@gmail.com' && loginPassword === '09386561626mM@') {
-        actualName = "مدیر کل ایزی‌درایور (امین)";
-      } else {
-        setErrorMsg('خطای امنیتی: ایمیل کاربری یا رمز عبور مدیریت وارد شده نادرست است.');
+    // Find if user is registered for the specified role
+    const matchedUser = registered.find(
+      (u) =>
+        u.role === selectedRole &&
+        (u.email.trim().toLowerCase() === loginIdentifier.trim().toLowerCase() ||
+         u.phone.trim() === loginIdentifier.trim())
+    );
+
+    if (!matchedUser) {
+      setErrorMsg('تطابق ناموفق: حساب کاربری با این ایمیل یا موبایل در نقش انتخاب شده یافت نشد.');
+      return;
+    }
+
+    if (matchedUser.password !== loginPassword) {
+      setErrorMsg('رمز عبور وارد شده اشتباه است. لطفاً مجدداً بررسی فرمایید.');
+      return;
+    }
+
+    // Verify Technician active status
+    if (selectedRole === 'technician') {
+      const activeTech = (technicians || []).find((t) => t.id === matchedUser.id || t.email?.toLowerCase() === matchedUser.email?.toLowerCase());
+      if (!activeTech || !activeTech.isActive) {
+        setErrorMsg('حساب کاربری تکنسینی شما هنوز توسط مدیریت ریموت تایید و فعال نگردیده است. مقتضی است منتظر تایید اولیه بمانید.');
         return;
-      }
-    } else if (selectedRole === 'technician') {
-      if (loginIdentifier.trim() === 'navid@easydriver.ir' || loginIdentifier.trim() === 'navid') {
-        actualName = "مهندس نوید مرادی";
-      } else {
-        let displayName = loginIdentifier.split('@')[0];
-        displayName = displayName.charAt(0).toUpperCase() + displayName.slice(1);
-        actualName = `تکنسین ${displayName}`;
-      }
-    } else {
-      if (loginIdentifier.trim() === 'saeed@customer.ir' || loginIdentifier.trim() === 'saeed') {
-        actualName = "سعید رستمی";
-      } else {
-        let displayName = loginIdentifier.split('@')[0];
-        displayName = displayName.charAt(0).toUpperCase() + displayName.slice(1);
-        actualName = `کاربر ${displayName}`;
       }
     }
 
-    setSuccessMsg(`خوش آمدید، جناب ${actualName}! ورود موفقیت‌آمیز بود.`);
+    setSuccessMsg(`خوش آمدید، جناب ${matchedUser.fullName}! ورود موفقیت‌آمیز بود.`);
     setShowSuccess(true);
 
     setTimeout(() => {
-      login(loginIdentifier, actualName, selectedRole);
+      login(matchedUser.email, matchedUser.fullName, selectedRole, {
+        id: matchedUser.id,
+        phone: matchedUser.phone,
+        avatarUrl: matchedUser.avatarUrl,
+      });
       if (onSuccess) onSuccess();
       if (setActiveTab) {
         if (selectedRole === 'admin') setActiveTab('admin-dashboard');
@@ -83,24 +139,85 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, setActiveTab }) => {
   const handleSignupSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
-    if (!fullName.trim() || !email.trim() || !phone.trim()) return;
+    if (!fullName.trim() || !email.trim() || !phone.trim() || !password.trim()) {
+      setErrorMsg('لطفاً تمامی فیلدها را با مقادیر معتبر تکمیل نمایید.');
+      return;
+    }
 
     if (signupRole === 'admin') {
       setErrorMsg('غیرمجاز: امکان عضویت به عنوان مدیر کل در فرم عمومی وجود ندارد.');
       return;
     }
 
-    setSuccessMsg(`حساب کاربری شما با عنوان «${fullName}» در نقش ${signupRole === 'technician' ? 'تکنسین فنی' : 'مشتری'} با موفقیت ساخته شد.`);
-    setShowSuccess(true);
+    const registered = getRegisteredUsers();
 
-    setTimeout(() => {
-      login(email, fullName, signupRole);
-      if (onSuccess) onSuccess();
-      if (setActiveTab) {
-        if (signupRole === 'technician') setActiveTab('tech-dashboard');
-        else setActiveTab('home');
-      }
-    }, 1200);
+    // Check if duplicate email or phone exists
+    const duplicate = registered.find(
+      (u) =>
+        u.email.trim().toLowerCase() === email.trim().toLowerCase() ||
+        u.phone.trim() === phone.trim()
+    );
+
+    if (duplicate) {
+      setErrorMsg('خطا در ثبت‌نام: یک حساب کاربری با همین ایمیل یا شماره موبایل قبلاً ثبت شده است.');
+      return;
+    }
+
+    const newRegisteredId = signupRole === 'technician' ? `tech-${Date.now()}` : `user-${Date.now()}`;
+    const newRegisteredUser = {
+      id: newRegisteredId,
+      fullName: fullName.trim(),
+      email: email.trim().toLowerCase(),
+      phone: phone.trim(),
+      role: signupRole,
+      password: password,
+      isActive: signupRole === 'technician' ? false : true,
+      avatarUrl: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(fullName.trim())}`,
+    };
+
+    // Save to registered users DB
+    const updatedList = [...registered, newRegisteredUser];
+    localStorage.setItem('ed_registered_users', JSON.stringify(updatedList));
+
+    if (signupRole === 'technician') {
+      // Register in technicians collection as inactive
+      addTechnician({
+        fullName: fullName.trim(),
+        phone: phone.trim(),
+        email: email.trim().toLowerCase(),
+        specialty: 'all',
+        isActive: false,
+        completedTasks: 0,
+        points: 0,
+        certificationLevel: 'Junior'
+      });
+
+      setSuccessMsg(`ثبت‌نام شما با عنوان تکنسین «${fullName}» با موفقیت انجام شد. حساب شما غیرفعال است و پس از تایید مدیریت فعال خواهد شد.`);
+      setShowSuccess(true);
+
+      setTimeout(() => {
+        setShowSuccess(false);
+        setActiveMode('login');
+        setLoginRole('technician');
+        setLoginIdentifier(email.trim().toLowerCase());
+        setLoginPassword('');
+      }, 3500);
+    } else {
+      setSuccessMsg(`حساب کاربری شما با عنوان «${fullName}» در نقش مشتری با موفقیت ساخته شد.`);
+      setShowSuccess(true);
+
+      setTimeout(() => {
+        login(newRegisteredUser.email, newRegisteredUser.fullName, signupRole, {
+          id: newRegisteredUser.id,
+          phone: newRegisteredUser.phone,
+          avatarUrl: newRegisteredUser.avatarUrl,
+        });
+        if (onSuccess) onSuccess();
+        if (setActiveTab) {
+          setActiveTab('home');
+        }
+      }, 1200);
+    }
   };
 
   return (

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { Request, RequestStatus, STATUS_LABELS, STATUS_COLORS, SERVICE_LABELS, PRIORITY_LABELS, PRIORITY_COLORS, Ticket } from '../types';
-import { ShieldAlert, Key, Clipboard, Laptop, Star, User, Phone, CheckCircle, Clock, Play, CheckCircle2, XCircle, AlertTriangle, Terminal, Save, HelpCircle, ChevronRight, MessageSquare, Reply, Trophy, Medal, Award, Zap, Heart, ShieldCheck, Crown, Rocket, TrendingUp, Sparkles, ChevronLeft, PartyPopper, RotateCw } from 'lucide-react';
+import { ShieldAlert, Key, Clipboard, Laptop, Star, User, Phone, CheckCircle, Clock, Play, CheckCircle2, XCircle, AlertTriangle, Terminal, Save, HelpCircle, ChevronRight, MessageSquare, Reply, Trophy, Medal, Award, Zap, Heart, ShieldCheck, Crown, Rocket, TrendingUp, Sparkles, ChevronLeft, PartyPopper, RotateCw, Camera, Monitor, Timer } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { calculateTechnicianStats, getLevelInfo } from '../utils/pointsCalculator';
 import { MonthlyPerformanceChart } from './MonthlyPerformanceChart';
@@ -138,45 +138,10 @@ export const TechnicianDashboard: React.FC = () => {
 
   const [showLevelUpModal, setShowLevelUpModal] = useState(false);
   const [unlockedAchievementToast, setUnlockedAchievementToast] = useState<any | null>(null);
-  const [simulatedPointsBoost, setSimulatedPointsBoost] = useState(0);
-
-  const baseTechStats = calculateTechnicianStats(currentTech, requests, reviews);
 
   const techStats = useMemo(() => {
-    if (simulatedPointsBoost === 0) return baseTechStats;
-    const boostedTotalPoints = baseTechStats.totalPoints + simulatedPointsBoost;
-    const lvlInfo = getLevelInfo(boostedTotalPoints);
-    const range = lvlInfo.next - lvlInfo.prev;
-    const currentInRange = boostedTotalPoints - lvlInfo.prev;
-    const progressPercent = Math.max(0, Math.min(100, Math.round((currentInRange / range) * 100)));
-
-    const boostedAchievements = baseTechStats.achievements.map((ach) => {
-      let unlocked = ach.unlocked;
-      if (boostedTotalPoints >= 600 && ach.id === 'strong-start') unlocked = true;
-      if (boostedTotalPoints >= 1000 && ach.id === 'customer-favorite') unlocked = true;
-      if (boostedTotalPoints >= 1800 && ach.id === 'speed-demon') unlocked = true;
-      if (boostedTotalPoints >= 2500 && ach.id === 'perfectionist') unlocked = true;
-      if (boostedTotalPoints >= 3800 && ach.id === 'elite-tech') unlocked = true;
-      if (boostedTotalPoints >= 5200 && ach.id === 'legendary') unlocked = true;
-
-      return {
-        ...ach,
-        unlocked,
-        unlockedAt: unlocked ? (ach.unlockedAt || '۱ خرداد ۱۴۰۵') : undefined
-      };
-    });
-
-    return {
-      ...baseTechStats,
-      totalPoints: boostedTotalPoints,
-      level: lvlInfo.level,
-      levelName: lvlInfo.name,
-      nextLevelPoints: lvlInfo.next,
-      prevLevelPoints: lvlInfo.prev,
-      progressPercent,
-      achievements: boostedAchievements
-    };
-  }, [baseTechStats, simulatedPointsBoost]);
+    return calculateTechnicianStats(currentTech, requests, reviews);
+  }, [currentTech, requests, reviews]);
 
   const prevLevelRef = useRef<number | null>(null);
   const prevUnlockedCountRef = useRef<number | null>(null);
@@ -557,6 +522,131 @@ export const TechnicianDashboard: React.FC = () => {
                                     {task.adminNotes || 'هیچ یادداشت فنی ثبت نشده است. برای درج آی‌دی آنی‌دسک یا تذکرات فنی روی ویرایش کلیک کنید.'}
                                   </div>
                                 )}
+                              </div>
+
+                              {/* Desktop screenshots and Time Logging in Technician control center */}
+                              <div className="border-t border-slate-200/65 pt-4 grid grid-cols-1 md:grid-cols-2 gap-5 text-right font-sans">
+                                
+                                {/* 1. Time spent logging widget */}
+                                <div className="bg-white border border-slate-150 p-4 rounded-2xl space-y-3 shadow-xxs">
+                                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                                    <h5 className="font-extrabold text-xs text-slate-800 flex items-center gap-1.5">
+                                      <Timer className="h-4 w-4 text-emerald-600 animate-pulse" />
+                                      <span>ثبت زمان کارکرد دقیق (Time Logging)</span>
+                                    </h5>
+                                    <span className="text-[10px] bg-emerald-50 text-emerald-700 font-extrabold px-2 py-0.5 rounded-full font-mono">
+                                      {task.loggedDurationMinutes || 0} دقیقه کارکرد
+                                    </span>
+                                  </div>
+
+                                  <div className="space-y-3 text-xs">
+                                    <p className="text-[10px] text-slate-400 font-normal leading-relaxed">
+                                      مدت زمان دقیق سپری شده برای عیب‌یابی ریموت یا اتصال AnyDesk این درخواست را جهت تایید مدیر ثبت کنید:
+                                    </p>
+
+                                    <div className="flex flex-wrap gap-1">
+                                      {[15, 30, 45, 60, 90, 120].map((mins) => (
+                                        <button
+                                          key={mins}
+                                          type="button"
+                                          onClick={() => {
+                                            const currentMinutes = task.loggedDurationMinutes || 0;
+                                            const nextMins = currentMinutes + mins;
+                                            updateRequest({ ...task, loggedDurationMinutes: nextMins });
+                                          }}
+                                          className="px-2 py-1 bg-slate-50 hover:bg-emerald-50 hover:text-emerald-800 text-slate-600 border border-slate-200 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                                        >
+                                          +{mins < 60 ? `${mins} دقیقه` : `${mins / 60} ساعت`}
+                                        </button>
+                                      ))}
+                                    </div>
+
+                                    <div className="flex items-center gap-2 pt-2 border-t border-dashed border-slate-100">
+                                      <span className="text-[10px] text-slate-500 font-bold shrink-0">ورود دستی:</span>
+                                      <input
+                                        type="number"
+                                        placeholder="مثال: ۴۵"
+                                        className="w-20 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs outline-none font-mono text-center"
+                                        min="0"
+                                        value={task.loggedDurationMinutes || ''}
+                                        onChange={(e) => {
+                                          const val = parseInt(e.target.value) || 0;
+                                          updateRequest({ ...task, loggedDurationMinutes: val });
+                                        }}
+                                      />
+                                      <span className="text-[10px] text-slate-400 font-bold shrink-0">دقیقه کار کارشناسی</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* 2. Screenshot recording widget */}
+                                <div className="bg-white border border-slate-150 p-4 rounded-2xl space-y-3 shadow-xxs">
+                                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                                    <h5 className="font-extrabold text-xs text-slate-800 flex items-center gap-1.5">
+                                      <Camera className="h-4 w-4 text-purple-600" />
+                                      <span>ثبت و ارسال پیوست دسکتاپ مشتری</span>
+                                    </h5>
+                                    <span className="text-[10px] bg-purple-50 text-purple-700 font-extrabold px-2 py-0.5 rounded-full font-mono">
+                                      {task.desktopScreenshots?.length || 0} تصویر پیوست
+                                    </span>
+                                  </div>
+
+                                  <div className="space-y-3 text-xs">
+                                    <p className="text-[10px] text-slate-400 font-normal leading-relaxed">
+                                      تصاویر اتصال AnyDesk، عیب‌یابی لایسنس یا بروزرسانی موفقیت‌آمیز را به عنوان سند ادمین ذخیره نمایید.
+                                    </p>
+
+                                    <div className="space-y-1.5">
+                                      <span className="text-[9px] text-slate-400 font-bold block">انتخاب تصویر مستند محیط شبیه‌ساز AnyDesk:</span>
+                                      <div className="grid grid-cols-2 gap-1.5">
+                                        {[
+                                          { label: '🖥️ صفحه کنترل دسکتاپ', url: 'https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=400&q=80' },
+                                          { label: '⚙️ پیکربندی سیستم‌عامل', url: 'https://images.unsplash.com/photo-1607799279861-4dd421887fb3?auto=format&fit=crop&w=400&q=80' },
+                                          { label: '📦 نصب موفق نرم‌افزار', url: 'https://images.unsplash.com/photo-1542744094-3a31f103e35f?auto=format&fit=crop&w=400&q=80' },
+                                          { label: '🛠️ محیط ترمینال سرور', url: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=400&q=80' }
+                                        ].map((pres) => (
+                                          <button
+                                            key={pres.label}
+                                            type="button"
+                                            onClick={() => {
+                                              const currentScr = task.desktopScreenshots || [];
+                                              if (currentScr.includes(pres.url)) return;
+                                              const nextScr = [...currentScr, pres.url];
+                                              updateRequest({ ...task, desktopScreenshots: nextScr });
+                                            }}
+                                            className="px-2 py-1 bg-slate-50 hover:bg-purple-50 hover:text-purple-700 border border-slate-150 rounded text-[9px] font-bold text-center transition-all cursor-pointer truncate"
+                                          >
+                                            {pres.label}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+
+                                    {/* Display previews with deletion option */}
+                                    {task.desktopScreenshots && task.desktopScreenshots.length > 0 && (
+                                      <div className="flex gap-1.5 overflow-x-auto py-1 border-t border-slate-100 pt-2 shrink-0">
+                                        {task.desktopScreenshots.map((scr, sIdx) => (
+                                          <div key={sIdx} className="relative shrink-0 w-10 h-10 border border-slate-200 rounded-lg overflow-hidden group">
+                                            <img src={scr} alt="Thumb" className="w-full h-full object-cover" />
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const currentScr = task.desktopScreenshots || [];
+                                                const nextScr = currentScr.filter((_, i) => i !== sIdx);
+                                                updateRequest({ ...task, desktopScreenshots: nextScr });
+                                              }}
+                                              className="absolute top-0 right-0 w-3.5 h-3.5 bg-rose-600 hover:bg-rose-700 text-white rounded-full flex items-center justify-center text-[8px] leading-none transition-colors cursor-pointer"
+                                              title="حذف"
+                                            >
+                                              ×
+                                            </button>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
                               </div>
 
                             </div>
@@ -954,30 +1044,6 @@ export const TechnicianDashboard: React.FC = () => {
                         <Sparkles className="h-3.5 w-3.5 text-amber-300 animate-pulse" />
                         <span>مشاهده جوایز و ساختار سطوح (Reward Chart)</span>
                       </button>
-                    </div>
-
-                    <div className="flex items-center gap-2 bg-slate-950/30 p-1.5 rounded-xl border border-white/5">
-                      <span className="text-[10px] text-purple-300 font-bold px-1.5">امتیاز تشویقی و پاداش:</span>
-                      <button
-                        onClick={() => setSimulatedPointsBoost(prev => prev + 500)}
-                        className="px-2.5 py-1 bg-purple-500 hover:bg-purple-600 text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer"
-                      >
-                        ۵۰۰+ امتیاز
-                      </button>
-                      <button
-                        onClick={() => setSimulatedPointsBoost(prev => prev + 1500)}
-                        className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-slate-900 rounded-lg text-[10px] font-black transition-all cursor-pointer"
-                      >
-                        ۱۵۰۰+ امتیاز
-                      </button>
-                      {simulatedPointsBoost > 0 && (
-                        <button
-                          onClick={() => setSimulatedPointsBoost(0)}
-                          className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer"
-                        >
-                          بازنشانی
-                        </button>
-                      )}
                     </div>
                   </div>
                 </div>

@@ -79,6 +79,8 @@ export interface Request {
   rating?: number; // 1-5 stars
   ratingComment?: string; // user feedback text
   ratedAt?: string; // rating timestamp
+  desktopScreenshots?: string[];
+  loggedDurationMinutes?: number;
 }
 
 export interface Review {

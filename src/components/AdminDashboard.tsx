@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Request, Review, Ticket, Technician, SERVICE_LABELS, STATUS_LABELS, STATUS_COLORS, PRIORITY_LABELS, PRIORITY_COLORS, SPECIALTY_LABELS, TechnicianSpecialty, RequestStatus, RequestPriority, TICKET_CATEGORY_LABELS, TICKET_STATUS_LABELS, TICKET_STATUS_COLORS } from '../types';
-import { ShieldAlert, Key, Grid, Clipboard, Users, Star, MessageSquare, Plus, Edit2, Trash2, CheckCircle2, UserPlus, Info, Save, Clock, X, ChevronDown, ChevronUp, Reply, Sparkles, Database, Server, Globe, FileCode as FileCodeIcon, Trophy, Medal, Printer, FileSpreadsheet as FileDown } from 'lucide-react';
+import { ShieldAlert, Key, Grid, Clipboard, Users, Star, MessageSquare, Plus, Edit2, Trash2, CheckCircle2, UserPlus, Info, Save, Clock, X, ChevronDown, ChevronUp, Reply, Sparkles, Database, Server, Globe, FileCode as FileCodeIcon, Trophy, Medal, Printer, FileSpreadsheet as FileDown, UserCheck, Camera, Monitor, Timer } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { calculateTechnicianStats } from '../utils/pointsCalculator';
 import { useRenderTracker } from '../utils/indexedDB';
@@ -65,6 +65,7 @@ export const AdminDashboard: React.FC = () => {
   // Expanded editor states for requests, tickets
   const [expandedRequestId, setExpandedRequestId] = useState<string | null>(null);
   const [expandedTicketId, setExpandedTicketId] = useState<string | null>(null);
+  const [selectedFullScreenImage, setSelectedFullScreenImage] = useState<string | null>(null);
   
   // Overruled technician suggestions map (reqId -> techId)
   const [assignedTechOverride, setAssignedTechOverride] = useState<Record<string, string>>({});
@@ -704,6 +705,51 @@ export const AdminDashboard: React.FC = () => {
 
                             </div>
 
+                            {/* Customer Desktop documentation & Time Logs row */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-3 border-t border-slate-150">
+                              {/* Desktop screenshots list */}
+                              <div className="bg-white border border-slate-200 p-4 rounded-xl space-y-2 text-right">
+                                <h5 className="font-extrabold text-[11px] text-slate-800 flex items-center gap-1.5 pb-2 border-b border-slate-100">
+                                  <Camera className="h-4 w-4 text-purple-600" />
+                                  <span>مستندات محیط دسکتاپ مشتری</span>
+                                </h5>
+                                {!req.desktopScreenshots || req.desktopScreenshots.length === 0 ? (
+                                  <p className="text-[10px] text-slate-400 py-4 text-center">عکسی توسط تکنسین در حین کار ثبت نشده است.</p>
+                                ) : (
+                                  <div className="grid grid-cols-3 gap-2">
+                                    {req.desktopScreenshots.map((scr, sIdx) => (
+                                      <div key={sIdx} className="group relative border border-slate-200 rounded-lg overflow-hidden h-14 bg-slate-50">
+                                        <img
+                                          src={scr}
+                                          alt="Desktop screenshot"
+                                          className="w-full h-full object-cover cursor-pointer hover:scale-110 transition-transform duration-300"
+                                          onClick={() => setSelectedFullScreenImage(scr)}
+                                        />
+                                        <span className="absolute bottom-0 inset-x-0 bg-slate-900/60 text-[8px] text-white text-center font-mono py-0.5">#{sIdx + 1}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Time spent logging details */}
+                              <div className="bg-white border border-slate-200 p-4 rounded-xl space-y-2 text-right">
+                                <h5 className="font-extrabold text-[11px] text-slate-800 flex items-center gap-1.5 pb-2 border-b border-slate-100">
+                                  <Clock className="h-4 w-4 text-emerald-600" />
+                                  <span>گزارش زمان کارکرد تکنسین</span>
+                                </h5>
+                                <div className="flex items-center justify-between py-2">
+                                  <span className="text-[10px] text-slate-500 font-semibold">مدت زمان صرف شده:</span>
+                                  <span className="text-sm font-black text-slate-800 font-mono bg-slate-100 px-3 py-1 rounded-lg">
+                                    {req.loggedDurationMinutes || 0} دقیقه
+                                  </span>
+                                </div>
+                                <p className="text-[9px] text-slate-400 leading-normal">
+                                  این زمان توسط کارشناس در حین عیب‌یابی در کارت کار ثبت شده و جهت تصفیه حساب با تکنسین استفاده می‌شود.
+                                </p>
+                              </div>
+                            </div>
+
                             {/* Submits changes */}
                             <div className="pt-3 border-t border-slate-200 flex justify-between gap-4">
                               <button
@@ -911,9 +957,9 @@ export const AdminDashboard: React.FC = () => {
                             </span>
                           </div>
                           <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${
-                            tech.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                            tech.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
                           }`}>
-                            {tech.isActive ? 'فعال و آزاد جهت ریموت' : 'مشغول / آفلاین'}
+                            {tech.isActive ? 'فعال و آزاد جهت ریموت' : 'غیرفعال / درانتظار تایید'}
                           </span>
                         </div>
 
@@ -958,6 +1004,27 @@ export const AdminDashboard: React.FC = () => {
 
                     {/* Action buttons modifiers for CRUD */}
                     <div className="pt-3.5 border-t border-slate-100 flex justify-end gap-2 text-xxs font-black">
+                      {!tech.isActive && (
+                        <button
+                          onClick={() => {
+                            updateTechnician({
+                              ...tech,
+                              isActive: true,
+                            });
+                            const registered = JSON.parse(localStorage.getItem('ed_registered_users') || '[]');
+                            const idx = registered.findIndex((u: any) => u.id === tech.id || u.email?.toLowerCase() === tech.email?.toLowerCase());
+                            if (idx >= 0) {
+                              registered[idx].isActive = true;
+                              localStorage.setItem('ed_registered_users', JSON.stringify(registered));
+                            }
+                          }}
+                          className="p-1 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition-colors flex items-center gap-1 cursor-pointer shadow-sm animate-pulse"
+                        >
+                          <UserCheck className="h-3.5 w-3.5" />
+                          <span>تایید و فعال‌سازی اکانت</span>
+                        </button>
+                      )}
+
                       <button
                         onClick={() => handleTriggerEditTech(tech)}
                         className="p-1 px-2.5 bg-slate-50 border border-slate-200 text-slate-500 hover:text-slate-800 rounded-md transition-colors flex items-center gap-1 cursor-pointer"
@@ -1539,6 +1606,77 @@ export const AdminDashboard: React.FC = () => {
 
               </div>
 
+              {/* Technician Time Logging details Report card element */}
+              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xxs space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-3 gap-2">
+                  <div className="space-y-1 text-right">
+                    <h4 className="font-extrabold text-xs text-slate-800 flex items-center gap-1.5">
+                      <Timer className="h-4.5 w-4.5 text-indigo-650 animate-pulse" />
+                      <span>گزارش جامع زمانی کارکرد تکنسین‌ها (Time Logging Stats)</span>
+                    </h4>
+                    <p className="text-[10px] text-slate-400">محاسبه بر اساس کل دقایق ثبت‌شده توسط تکنسین‌ها روی درخواست‌های منتسب به هر کارشناس</p>
+                  </div>
+                  <div className="px-3 py-1 bg-indigo-50 border border-indigo-100 text-indigo-700 text-[9px] font-bold rounded-lg font-mono">
+                    مجموع کل زمان ثبت‌شده: {(requests || []).reduce((sum, r) => sum + (r.loggedDurationMinutes || 0), 0)} دقیقه
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto text-right">
+                  <table className="w-full text-right text-[11px] border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-slate-500 font-bold">
+                        <th className="pb-2">نام تکنسین کارشناس</th>
+                        <th className="pb-2">تخصص</th>
+                        <th className="pb-2">تعداد درخواست‌ها</th>
+                        <th className="pb-2">مجموع کل زمان (ساعت:دقیقه)</th>
+                        <th className="pb-2">میانگین کار روی هر درخواست</th>
+                        <th className="pb-2">رتبه‌بندی عملکردی</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {technicians.map((tech) => {
+                        const techRequests = (requests || []).filter(r => r.assignedToId === tech.id);
+                        const totalMin = techRequests.reduce((sum, r) => sum + (r.loggedDurationMinutes || 0), 0);
+                        const hrs = Math.floor(totalMin / 60);
+                        const remainingMins = totalMin % 60;
+                        const avgDuration = techRequests.length > 0 ? (totalMin / techRequests.length).toFixed(1) : '0';
+
+                        return (
+                          <tr key={tech.id} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="py-3 font-semibold text-slate-800 flex items-center gap-2">
+                              <div className="w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center font-bold text-[9px] text-slate-600 font-mono">
+                                {tech.fullName.slice(0, 1)}
+                              </div>
+                              <span>{tech.fullName}</span>
+                              {!tech.isActive && (
+                                <span className="text-[8px] bg-amber-50 text-amber-600 border border-amber-200 px-1 py-0.2 rounded font-bold">در انتظار تایید</span>
+                              )}
+                            </td>
+                            <td className="py-3 text-slate-500">{SPECIALTY_LABELS[tech.specialty]}</td>
+                            <td className="py-3 font-mono font-bold text-slate-700">{techRequests.length} درخواست</td>
+                            <td className="py-3 font-mono font-extrabold text-indigo-650">
+                              {hrs > 0 ? `${hrs} ساعت و ` : ''}{remainingMins} دقیقه
+                            </td>
+                            <td className="py-3 text-slate-500 font-mono">~ {avgDuration} دقیقه بر کار</td>
+                            <td className="py-3">
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black border ${
+                                totalMin > 180
+                                  ? 'bg-emerald-50 border-emerald-100 text-emerald-800'
+                                  : totalMin > 40
+                                  ? 'bg-blue-50 border-blue-100 text-blue-800'
+                                  : 'bg-slate-50 border-slate-150 text-slate-500'
+                              }`}>
+                                {totalMin > 180 ? 'بسیار فعال (سخت‌کوش)' : totalMin > 40 ? 'فعالیت نرمال' : 'بدون کارکرد زمانی'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
               {/* On-Screen Print Preview Board */}
               {currentPrintType && (
                 <div className="bg-slate-50 border border-slate-200 rounded-3xl p-6 space-y-4">
@@ -1893,6 +2031,45 @@ export const AdminDashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Full Screen Image overlay Modal */}
+      <AnimatePresence>
+        {selectedFullScreenImage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setSelectedFullScreenImage(null)}
+            className="fixed inset-0 z-[999] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 cursor-zoom-out"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 15 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 15 }}
+              onClick={(e) => e.stopPropagation()}
+              className="relative max-w-4xl w-full bg-slate-900 border border-slate-700/60 p-2 rounded-3xl overflow-hidden shadow-2xl flex flex-col cursor-default text-right"
+            >
+              <button
+                onClick={() => setSelectedFullScreenImage(null)}
+                className="absolute top-4 right-4 z-10 w-8 h-8 bg-slate-950/70 hover:bg-slate-950 text-white rounded-full flex items-center justify-center transition-colors cursor-pointer border border-white/10"
+                title="بستن"
+              >
+                <X className="h-4 w-4" />
+              </button>
+
+              <img
+                src={selectedFullScreenImage}
+                alt="Fullscreen Preview"
+                className="w-full h-auto max-h-[75vh] object-contain rounded-2xl"
+              />
+
+              <div className="p-4 text-center text-slate-300 text-xs font-semibold leading-relaxed border-t border-slate-800/80 mt-2">
+                سند مستندات ثبت‌شده دسکتاپ مشتری از سیستم نظارتی AnyDesk کارشناس ریموت
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );
