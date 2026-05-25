@@ -1703,7 +1703,7 @@ export const AdminDashboard: React.FC = () => {
                       </div>
                       <div className="flex items-center gap-2">
                         <strong>نام دیتابیس سیستمی:</strong>
-                        <span className="font-mono text-slate-300">{dbInfo?.database || 'easydriver_db'}</span>
+                        <span className="font-mono text-slate-300">{dbInfo?.database || 'easydri1_mmd'}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <strong>استخر اتصالات:</strong>
@@ -1754,7 +1754,7 @@ export const AdminDashboard: React.FC = () => {
                       <div className="flex gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
                         <div className="h-6 w-6 rounded-full bg-rose-100 text-rose-700 font-extrabold flex items-center justify-center shrink-0">۱</div>
                         <p>
-                          <strong>ساخت پایگاه داده در سی‌پنل/هاست:</strong> وارد پنل هاست خود شوید، به بخش <strong>MySQL® Databases</strong> مراجعه کنید و یک دیتابیس تازه (مثلا <code className="bg-slate-200 px-1 rounded text-red-650">easydriver_db</code>) بسازید. یک کاربر دیتابیس جدید بسازید و رمز عبور قوی به آن اختصاص دهید، سپس کاربر را با تمامی دسترسی‌ها (All Privileges) به دیتابیس متصل کنید.
+                          <strong>ساخت پایگاه داده در سی‌پنل/هاست:</strong> وارد پنل هاست خود شوید، به بخش <strong>MySQL® Databases</strong> مراجعه کنید و یک دیتابیس تازه (مثلا <code className="bg-slate-200 px-1 rounded text-red-650">easydri1_mmd</code>) بسازید. یک کاربر دیتابیس جدید بسازید و رمز عبور قوی به آن اختصاص دهید، سپس کاربر را با تمامی دسترسی‌ها (All Privileges) به دیتابیس متصل کنید.
                         </p>
                       </div>
 
@@ -1783,7 +1783,7 @@ export const AdminDashboard: React.FC = () => {
                       <p><span className="text-rose-400">DB_HOST</span>=localhost</p>
                       <p><span className="text-rose-400">DB_USER</span>=your_database_username</p>
                       <p><span className="text-rose-400">DB_PASSWORD</span>=your_secure_password</p>
-                      <p><span className="text-rose-400">DB_NAME</span>=easydriver_db</p>
+                      <p><span className="text-rose-400">DB_NAME</span>=easydri1_mmd</p>
                       <p><span className="text-rose-400">DB_PORT</span>=3306</p>
                       <p className="text-slate-500"># Gemini API Intelligent assistant key</p>
                       <p><span className="text-rose-400">GEMINI_API_KEY</span>=AIzaSy...</p>
