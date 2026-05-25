@@ -2,8 +2,8 @@
 -- Created: 2026-05-20
 -- Compatible with MySQL 5.7+ and MySQL 8.0+
 
-CREATE DATABASE IF NOT EXISTS `easydriver_db` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE `easydriver_db`;
+CREATE DATABASE IF NOT EXISTS `easydri1_mmd` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE `easydri1_mmd`;
 
 -- -------------------------------------------------------------
 -- Table Structure for `users` (Roles, admins, customers, techs)

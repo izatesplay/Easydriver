@@ -29,7 +29,7 @@ let dbStatus = {
   connected: false,
   error: "تلاش برای اتصال به دیتابیس صورت نگرفته یا متغیرهای محیطی ست نشده‌اند.",
   host: process.env.DB_HOST || "",
-  database: process.env.DB_NAME || "easydriver_db",
+  database: process.env.DB_NAME || "easydri1_mmd",
   mode: "فایل محلی پشتیبان (Local JSON Backup)"
 };
 
@@ -42,7 +42,7 @@ async function getMySQLPool(): Promise<mysql.Pool | null> {
   const host = process.env.DB_HOST;
   const user = process.env.DB_USER;
   const password = process.env.DB_PASSWORD;
-  const database = process.env.DB_NAME || "easydriver_db";
+  const database = process.env.DB_NAME || "easydri1_mmd";
   const port = parseInt(process.env.DB_PORT || "3306", 10);
 
   if (!host || !user) {
