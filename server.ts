@@ -28,7 +28,7 @@ const serverStartTime = Date.now();
 let dbStatus = {
   connected: false,
   error: "تلاش برای اتصال به دیتابیس صورت نگرفته یا متغیرهای محیطی ست نشده‌اند.",
-  host: process.env.DB_HOST || "",
+  host: process.env.DB_HOST || "localhost",
   database: process.env.DB_NAME || "easydri1_mmd",
   mode: "فایل محلی پشتیبان (Local JSON Backup)"
 };
@@ -39,18 +39,11 @@ async function getMySQLPool(): Promise<mysql.Pool | null> {
   if (mysqlPool) return mysqlPool;
   if (connectionPromise) return connectionPromise;
 
-  const host = process.env.DB_HOST;
-  const user = process.env.DB_USER;
-  const password = process.env.DB_PASSWORD;
+  const host = process.env.DB_HOST || "localhost";
+  const user = process.env.DB_USER || "easydri1_mmd";
+  const password = process.env.DB_PASSWORD || "09386561626mM@";
   const database = process.env.DB_NAME || "easydri1_mmd";
   const port = parseInt(process.env.DB_PORT || "3306", 10);
-
-  if (!host || !user) {
-    dbStatus.connected = false;
-    dbStatus.mode = "فایل محلی پشتیبان (Local JSON Backup)";
-    dbStatus.error = "اطلاعات اتصال MySQL (مانند DB_HOST یا DB_USER) در فایل .env تعریف نشده است.";
-    return null;
-  }
 
   // Rate-limit connection retries on failure to keep the app blazing fast and silent
   const now = Date.now();
