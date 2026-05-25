@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Request, Review, Ticket, Technician, SERVICE_LABELS, STATUS_LABELS, STATUS_COLORS, PRIORITY_LABELS, PRIORITY_COLORS, SPECIALTY_LABELS, TechnicianSpecialty, RequestStatus, RequestPriority, TICKET_CATEGORY_LABELS, TICKET_STATUS_LABELS, TICKET_STATUS_COLORS } from '../types';
-import { ShieldAlert, Key, Grid, Clipboard, Users, Star, MessageSquare, Plus, Edit2, Trash2, CheckCircle2, UserPlus, Info, Save, Clock, X, ChevronDown, ChevronUp, Reply, Sparkles, Database, Server, Globe, FileCode as FileCodeIcon, Trophy, Medal, Printer, FileSpreadsheet as FileDown, UserCheck, Camera, Monitor, Timer } from 'lucide-react';
+import { ShieldAlert, Key, Grid, Clipboard, Users, Star, MessageSquare, Plus, Edit2, Trash2, CheckCircle2, UserPlus, Info, Save, Clock, X, ChevronDown, ChevronUp, Reply, Sparkles, Database, Server, Globe, FileCode as FileCodeIcon, Trophy, Medal, Printer, FileSpreadsheet as FileDown, UserCheck, Camera, Monitor, Timer, BarChart3 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { calculateTechnicianStats } from '../utils/pointsCalculator';
 import { useRenderTracker } from '../utils/indexedDB';
+import { ResponsiveContainer, BarChart as RechartsBarChart, Bar as RechartsBar, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid, Cell } from 'recharts';
 
 export const AdminDashboard: React.FC = () => {
   useRenderTracker("پیشخوان ادمین (Admin)");
@@ -32,9 +33,14 @@ export const AdminDashboard: React.FC = () => {
   const [reportTechActive, setReportTechActive] = useState<'all' | 'active' | 'inactive'>('all');
   const [reportTicketStatus, setReportTicketStatus] = useState<'all' | 'open' | 'in_progress' | 'closed'>('all');
   const [reportReviewApproved, setReportReviewApproved] = useState<'all' | 'approved' | 'pending'>('all');
+  const [reportStartDate, setReportStartDate] = useState<string>('');
+  const [reportEndDate, setReportEndDate] = useState<string>('');
 
   // Print support preview helper
   const [currentPrintType, setCurrentPrintType] = useState<'requests' | 'technicians' | 'tickets' | 'reviews' | null>(null);
+
+  // Interval state for demand distribution chart
+  const [chartInterval, setChartInterval] = useState<'monthly' | 'weekly'>('monthly');
 
   // Databse phpMyAdmin status
   const [dbInfo, setDbInfo] = useState<{
@@ -43,13 +49,30 @@ export const AdminDashboard: React.FC = () => {
     host: string;
     database: string;
     mode: string;
+    totalQueries?: number;
+    uptimeSeconds?: number;
+    poolLimit?: number;
+    activeConnections?: number;
+    idleConnections?: number;
+    activeQueries?: number;
   } | null>(null);
 
   React.useEffect(() => {
-    fetch("/api/db-status")
-      .then(res => res.json())
-      .then(data => setDbInfo(data))
-      .catch(err => console.error("Error loading db status:", err));
+    const fetchStatus = () => {
+      fetch("/api/db-status")
+        .then(res => res.json())
+        .then(data => setDbInfo(data))
+        .catch(err => console.error("Error loading db status:", err));
+    };
+    fetchStatus();
+
+    let timer: any = null;
+    if (adminTab === 'db') {
+      timer = setInterval(fetchStatus, 5000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
   }, [adminTab]);
 
   // Technician states (for CRUD)
@@ -63,6 +86,7 @@ export const AdminDashboard: React.FC = () => {
   const [techCertificationLevel, setTechCertificationLevel] = useState<'Junior' | 'Senior' | 'Expert'>('Junior');
 
   // Expanded editor states for requests, tickets
+  const [selectedRequestIds, setSelectedRequestIds] = useState<string[]>([]);
   const [expandedRequestId, setExpandedRequestId] = useState<string | null>(null);
   const [expandedTicketId, setExpandedTicketId] = useState<string | null>(null);
   const [selectedFullScreenImage, setSelectedFullScreenImage] = useState<string | null>(null);
@@ -84,6 +108,78 @@ export const AdminDashboard: React.FC = () => {
   const openTicketsCount = tickets.filter(t => t.status === 'open').length;
 
   const pendingReviewsCount = reviews.filter(r => !r.isApproved).length;
+
+  const toggleRequestSelection = (id: string) => {
+    setSelectedRequestIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAllRequests = () => {
+    if (selectedRequestIds.length === requests.length) {
+      setSelectedRequestIds([]);
+    } else {
+      setSelectedRequestIds(requests.map(r => r.id));
+    }
+  };
+
+  const handleBulkStatusUpdate = (newStatus: RequestStatus) => {
+    selectedRequestIds.forEach(id => {
+      const r = requests.find(x => x.id === id);
+      if (r) {
+        updateRequest({
+          ...r,
+          status: newStatus,
+          isApproved: true,
+          lastUpdatedDate: new Date().toISOString()
+        });
+      }
+    });
+    setSelectedRequestIds([]);
+  };
+
+  const handleBulkDelete = () => {
+    if (window.confirm(`آیا از حذف گروهی ${selectedRequestIds.length} درخواست انتخاب‌شده مطمئن هستید؟ این عملیات غیرقابل بازگشت است.`)) {
+      selectedRequestIds.forEach(id => {
+        deleteRequest(id);
+      });
+      setSelectedRequestIds([]);
+    }
+  };
+
+  const serviceStatsData = React.useMemo(() => {
+    const stats: Record<string, number> = {
+      driver_install: 0,
+      software_install: 0,
+      anydesk_support: 0,
+      other: 0,
+    };
+
+    // Filter requests depending on selected chart interval
+    const now = new Date();
+    const cutoffDate = new Date();
+    if (chartInterval === 'weekly') {
+      cutoffDate.setDate(now.getDate() - 7);
+    } else {
+      cutoffDate.setDate(now.getDate() - 30);
+    }
+
+    requests.forEach(r => {
+      const reqDate = r.createdDate ? new Date(r.createdDate) : new Date();
+      if (reqDate >= cutoffDate) {
+        if (stats[r.serviceType] !== undefined) {
+          stats[r.serviceType]++;
+        } else {
+          stats.other = (stats.other || 0) + 1;
+        }
+      }
+    });
+
+    return Object.keys(stats).map(key => ({
+      name: SERVICE_LABELS[key as any] || key,
+      value: stats[key],
+    }));
+  }, [requests, chartInterval]);
 
   // Handles approving a service request
   const handleApproveRequest = (req: Request) => {
@@ -183,7 +279,13 @@ export const AdminDashboard: React.FC = () => {
       filename = `گزارش_درخواست‌های_مشتریان_${new Date().toLocaleDateString('fa-IR')}.csv`;
       headers = ['شناسه درخواست', 'نام متقاضی', 'شماره تماس', 'نوع خدمت فنی', 'اولویت', 'وضعیت اجرایی', 'نام تکنسین ارجاع‌شده', 'تاریخ ثبت اولیه', 'آخرین بروزرسانی', 'توضیحات تکمیلی مشتری', 'یادداشت‌های اختصاصی ادمین'];
       
-      const targetRequests = reportReqStatus === 'all' ? requests : requests.filter(r => r.status === reportReqStatus);
+      let targetRequests = reportReqStatus === 'all' ? requests : requests.filter(r => r.status === reportReqStatus);
+      if (reportStartDate) {
+        targetRequests = targetRequests.filter(r => (r.createdDate || '').substring(0, 10) >= reportStartDate);
+      }
+      if (reportEndDate) {
+        targetRequests = targetRequests.filter(r => (r.createdDate || '').substring(0, 10) <= reportEndDate);
+      }
       rows = targetRequests.map(r => [
         r.id,
         r.fullName || r.customerName || 'بدون نام',
@@ -390,13 +492,43 @@ export const AdminDashboard: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Title cap banner */}
-        <div className="flex items-center gap-3 border-b border-slate-205 pb-6 mb-8">
-          <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl shadow-sm">
-            <Clipboard className="h-6 w-6" />
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-205 pb-6 mb-8">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl shadow-sm">
+              <Clipboard className="h-6 w-6" />
+            </div>
+            <div>
+              <span className="text-[10px] text-rose-650 font-black tracking-widest uppercase block">ادمین استودیو EasyDriver</span>
+              <h1 className="text-2xl font-black text-slate-900 mt-0.5">پنل جامع مدیریت خدمات تعمیراتی</h1>
+            </div>
           </div>
-          <div>
-            <span className="text-[10px] text-rose-650 font-black tracking-widest uppercase block">ادمین استودیو EasyDriver</span>
-            <h1 className="text-2xl font-black text-slate-900 mt-1">پنل جامع مدیریت خدمات تعمیراتی</h1>
+
+          {/* Database Connectivity Status Indicator */}
+          <div className={`p-3 rounded-2xl border text-right flex items-center gap-3 shadow-xxs max-w-full ${
+            dbInfo?.connected
+              ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+              : 'bg-amber-50/70 border-amber-200 text-amber-900 animate-pulse'
+          }`}>
+            <span className="relative flex h-2 w-2 shrink-0">
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                dbInfo?.connected ? 'bg-emerald-400' : 'bg-amber-400'
+              }`}></span>
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${
+                dbInfo?.connected ? 'bg-emerald-500' : 'bg-amber-500'
+              }`}></span>
+            </span>
+
+            <div className="text-[10px]">
+              <div className="font-extrabold flex items-center gap-1.5">
+                <span>وضعیت پایگاه داده:</span>
+                <span className={`font-black uppercase ${dbInfo?.connected ? 'text-emerald-700' : 'text-amber-700'}`}>
+                  {dbInfo?.connected ? 'متصل (MySQL)' : 'پشتیبان محلی زنده'}
+                </span>
+              </div>
+              <div className="text-[9px] text-slate-500 mt-0.5 font-mono leading-none" dir="ltr">
+                Host: <strong className="text-slate-800">{dbInfo?.host || 'localhost'}</strong> | DB: <strong className="text-slate-800">{dbInfo?.database || 'easydri1_mmd'}</strong>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -460,6 +592,95 @@ export const AdminDashboard: React.FC = () => {
                 ))}
               </div>
 
+              {/* Service Types Demand Distribution Bar Chart */}
+              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xxs space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-3 gap-3 text-right">
+                  <div className="space-y-1">
+                    <h4 className="font-extrabold text-sm text-slate-800 flex items-center gap-1.5 justify-start">
+                      <BarChart3 className="h-4.5 w-4.5 text-rose-500 animate-pulse" />
+                      <span>نمودار تحلیل تقاضای انواع خدمات فنی (Service Type Demands)</span>
+                    </h4>
+                    <p className="text-[10px] text-slate-400 font-semibold">تعداد تقاضا به تفکیک حوزه کاری در بازه زمانی تعیین‌شده جهت پایش لود کاری تکنسین‌ها</p>
+                  </div>
+                  
+                  <div className="flex items-center gap-2 self-stretch sm:self-auto justify-between sm:justify-end">
+                    {/* Interval Dropdown Toggle */}
+                    <div className="flex items-center bg-slate-100 rounded-xl p-0.5 border border-slate-200 text-[10px] font-black">
+                      <button
+                        type="button"
+                        onClick={() => setChartInterval('weekly')}
+                        className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                          chartInterval === 'weekly'
+                            ? 'bg-rose-600 text-white shadow-xxs'
+                            : 'text-slate-600 hover:text-slate-800'
+                        }`}
+                      >
+                        هفتگی (۷ روز اخیر)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setChartInterval('monthly')}
+                        className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                          chartInterval === 'monthly'
+                            ? 'bg-rose-600 text-white shadow-xxs'
+                            : 'text-slate-600 hover:text-slate-800'
+                        }`}
+                      >
+                        ماهانه (۳۰ روز اخیر)
+                      </button>
+                    </div>
+
+                    <div className="px-3 py-1.5 bg-rose-50 border border-rose-100 text-rose-705 text-[10px] font-extrabold rounded-lg leading-none">
+                      سفارشات این بازه: {serviceStatsData.reduce((acc, curr) => acc + curr.value, 0)} مورد
+                    </div>
+                  </div>
+                </div>
+
+                <div className="h-72 w-full text-xs font-semibold" dir="ltr">
+                  <ResponsiveContainer width="100%" height="105%">
+                    <RechartsBarChart
+                      data={serviceStatsData}
+                      margin={{ top: 20, right: 30, left: 10, bottom: 20 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                      <XAxis
+                        dataKey="name"
+                        stroke="#64748b"
+                        fontSize={10}
+                        tickLine={false}
+                        axisLine={false}
+                        dy={10}
+                      />
+                      <YAxis
+                        stroke="#64748b"
+                        fontSize={10}
+                        tickLine={false}
+                        axisLine={false}
+                        dx={-10}
+                      />
+                      <RechartsTooltip
+                        cursor={{ fill: 'rgba(244, 63, 94, 0.04)' }}
+                        contentStyle={{
+                          backgroundColor: '#0f172a',
+                          borderRadius: '12px',
+                          color: '#f8fafc',
+                          border: 'none',
+                          fontSize: '11px',
+                          fontFamily: 'sans-serif',
+                          textAlign: 'right',
+                        }}
+                      />
+                      <RechartsBar dataKey="value" radius={[8, 8, 0, 0]} maxBarSize={45}>
+                        {serviceStatsData.map((entry, index) => {
+                          const colors = ['#f43f5e', '#6366f1', '#a855f7', '#06b6d4'];
+                          return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
+                        })}
+                      </RechartsBar>
+                    </RechartsBarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
               {/* Quick instructions panel */}
               <div className="p-6 bg-white border border-slate-200 rounded-3xl grid grid-cols-1 md:grid-cols-3 gap-6 items-center text-right">
                 <div className="md:col-span-2 space-y-2">
@@ -485,7 +706,33 @@ export const AdminDashboard: React.FC = () => {
           {/* TAB 2: REQUESTS MANAGER */}
           {adminTab === 'requests' && (
             <div className="space-y-4">
-              <h3 className="font-extrabold text-sm sm:text-base text-slate-850 pb-2 border-b border-slate-200">فهرست کل درخواست‌های خدمات فنی</h3>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-2 border-b border-slate-200">
+                <h3 className="font-extrabold text-sm sm:text-base text-slate-850">فهرست کل درخواست‌های خدمات فنی</h3>
+                
+                {/* Select All Toggle button */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={toggleSelectAllRequests}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-705 rounded-xl text-[10px] font-bold cursor-pointer transition-all flex items-center gap-1.5"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedRequestIds.length === requests.length && requests.length > 0}
+                      onChange={() => {}} // handled by click
+                      className="h-3.5 w-3.5 rounded text-rose-650 cursor-pointer pointer-events-none"
+                    />
+                    <span>{selectedRequestIds.length === requests.length && requests.length > 0 ? "لغو انتخاب همه" : "انتخاب گروهی همه"}</span>
+                  </button>
+                  {selectedRequestIds.length > 0 && (
+                    <button
+                      onClick={() => setSelectedRequestIds([])}
+                      className="text-rose-600 hover:text-rose-700 text-[10px] font-extrabold cursor-pointer"
+                    >
+                      (لغو انتخاب {selectedRequestIds.length} مورد)
+                    </button>
+                  )}
+                </div>
+              </div>
 
               {requests.length === 0 ? (
                 <div className="bg-white p-8 rounded-2xl border text-center text-xs text-slate-400">هیچ درخواستی در سیستم وجود ندارد.</div>
@@ -493,8 +740,11 @@ export const AdminDashboard: React.FC = () => {
                 <div className="space-y-3">
                   {requests.map((req) => {
                     const isExpanded = expandedRequestId === req.id;
+                    const isSelected = selectedRequestIds.includes(req.id);
                     return (
-                      <div key={req.id} className="bg-white border border-slate-200 rounded-2xl overflow-hidden text-right">
+                      <div key={req.id} className={`bg-white border rounded-2xl overflow-hidden text-right transition-all duration-300 ${
+                        isSelected ? 'border-rose-300 ring-1 ring-rose-200/50 shadow-xxs' : 'border-slate-200'
+                      }`}>
                         
                         {/* Interactive toggle header */}
                         <div
@@ -502,20 +752,39 @@ export const AdminDashboard: React.FC = () => {
                             setExpandedRequestId(isExpanded ? null : req.id);
                             setAdminNotesInput(req.adminNotes || '');
                           }}
-                          className="p-4 sm:p-5 flex items-center justify-between gap-4 cursor-pointer hover:bg-slate-50/50"
+                          className={`p-4 sm:p-5 flex items-center justify-between gap-4 cursor-pointer hover:bg-slate-50/50 transition-colors ${
+                            isSelected ? 'bg-rose-50/20' : ''
+                          }`}
                         >
-                          <div className="space-y-1 grow">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-[9px] bg-slate-100 font-mono text-slate-600 px-1.5 rounded font-bold">#{req.id}</span>
-                              <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold ${STATUS_COLORS[req.status]}`}>
-                                {STATUS_LABELS[req.status]}
-                              </span>
-                              <span className="text-xs font-black text-slate-800 mr-1">{SERVICE_LABELS[req.serviceType]}</span>
-                            </div>
-                            <div className="text-slate-450 text-[10px] flex items-center gap-2 pt-1 font-semibold">
-                              <span>ثبت‌کننده: {req.fullName}</span>
-                              <span>•</span>
-                              <span>تماس: {req.phone}</span>
+                          <div className="flex items-center gap-3.5 grow">
+                            {/* Row selection check element */}
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={() => toggleRequestSelection(req.id)}
+                              className="h-4.5 w-4.5 text-rose-600 border-slate-300 rounded focus:ring-rose-500 cursor-pointer shrink-0"
+                            />
+
+                            <div className="space-y-1 grow">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-[9px] bg-slate-100 font-mono text-slate-600 px-1.5 rounded font-bold">#{req.id}</span>
+                                <motion.span
+                                  key={`${req.id}-${req.status}`}
+                                  initial={{ scale: 0.9, opacity: 0.8 }}
+                                  animate={{ scale: 1, opacity: 1, filter: ["brightness(1.5)", "brightness(1)"] }}
+                                  transition={{ duration: 0.45 }}
+                                  className={`text-[10px] px-2 py-0.5 rounded-full border font-bold ${STATUS_COLORS[req.status]}`}
+                                >
+                                  {STATUS_LABELS[req.status]}
+                                </motion.span>
+                                <span className="text-xs font-black text-slate-800 mr-1">{SERVICE_LABELS[req.serviceType]}</span>
+                              </div>
+                              <div className="text-slate-450 text-[10px] flex items-center gap-2 pt-1 font-semibold">
+                                <span>ثبت‌کننده: {req.fullName}</span>
+                                <span>•</span>
+                                <span>تماس: {req.phone}</span>
+                              </div>
                             </div>
                           </div>
 
@@ -591,6 +860,21 @@ export const AdminDashboard: React.FC = () => {
                                       </option>
                                     ))}
                                   </select>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const recs = getRecommendations(req);
+                                      if (recs && recs.length > 0) {
+                                        const bestTech = recs[0].tech;
+                                        setAssignedTechOverride(prev => ({ ...prev, [req.id]: bestTech.id }));
+                                      }
+                                    }}
+                                    className="w-full mt-2 py-1.5 px-3 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-lg text-[10px] font-black flex items-center justify-center gap-1 cursor-pointer transition-all shadow-sm"
+                                  >
+                                    <Sparkles className="h-3.5 w-3.5 text-amber-300 animate-pulse shrink-0" />
+                                    <span>پیشنهاد هوشمند (ارجاع خودکار برترین نیرو)</span>
+                                  </button>
                                 </div>
 
                                 {/* Intelligent Recommendation Helper system */}
@@ -677,6 +961,60 @@ export const AdminDashboard: React.FC = () => {
                                         </div>
                                       );
                                     })}
+                                  </div>
+
+                                  {/* Smart recommendation scoring system Audit Log section */}
+                                  <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-3 space-y-2 mt-2.5">
+                                    <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                                      <span className="text-[9px] font-extrabold text-indigo-900 flex items-center gap-1.5 leading-none">
+                                        <FileCodeIcon className="h-3.5 w-3.5 text-indigo-600 animate-pulse shrink-0" />
+                                        <span>سیاهه ارزیابی نمرات هوشمند (Recommendation Engine Audit Log)</span>
+                                      </span>
+                                      <span className="text-[7.5px] bg-indigo-50 text-indigo-650 font-bold px-1.5 py-0.5 rounded leading-none">
+                                        تطابق ریاضی (Max 115)
+                                      </span>
+                                    </div>
+
+                                    <div className="space-y-2.5 divide-y divide-slate-100">
+                                      {getRecommendations(req).slice(0, 3).map(({ tech, avgRating, totalScore, activeTasksCount, matchPercentage }) => {
+                                        const specSc = tech.specialty === req.serviceType ? 60 : (tech.specialty === 'all' ? 40 : 15);
+                                        const ratSc = avgRating * 8;
+                                        const loadPen = activeTasksCount * 12;
+                                        const availSc = tech.isActive ? 20 : -60;
+                                        return (
+                                          <div key={`audit-log-${tech.id}`} className="pt-2.5 first:pt-0 text-[10px] space-y-1">
+                                            <div className="flex justify-between items-center font-bold">
+                                              <span className="text-slate-800">{tech.fullName}</span>
+                                              <span className="font-mono text-[9px] text-slate-500 bg-slate-100 px-1 rounded">
+                                                خلاصه: {totalScore.toFixed(0)} امتیاز ({matchPercentage}%)
+                                              </span>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[8.5px] text-slate-500 pt-1 font-semibold">
+                                              <div className="flex justify-between items-center text-right">
+                                                <span>انطباق رسته تخصص:</span>
+                                                <span className="text-emerald-700 font-bold text-left">+{specSc} امتیازی ({tech.specialty === 'all' ? 'عمومی' : SPECIALTY_LABELS[tech.specialty]})</span>
+                                              </div>
+                                              <div className="flex justify-between items-center text-right">
+                                                <span>شاخص رضایتمندی:</span>
+                                                <span className="text-emerald-700 font-bold text-left">+{ratSc.toFixed(1)} (ستاره {avgRating.toFixed(1)})</span>
+                                              </div>
+                                              <div className="flex justify-between items-center col-span-2 sm:col-span-1 text-right">
+                                                <span className="truncate">جریمه حجم کار فعال:</span>
+                                                <span className={loadPen > 0 ? "text-rose-600 font-bold text-left" : "text-emerald-700 font-bold text-left"}>
+                                                  -{loadPen} امتیاز ({activeTasksCount} تسک)
+                                                </span>
+                                              </div>
+                                              <div className="flex justify-between items-center col-span-2 sm:col-span-1 text-right">
+                                                <span className="truncate">وضعیت آنلاین/آمادگی:</span>
+                                                <span className={tech.isActive ? "text-emerald-700 font-bold text-left" : "text-rose-600 font-bold text-left"}>
+                                                  {availSc > 0 ? `+${availSc}` : availSc} امتیاز ({tech.isActive ? 'آنلاین' : 'آفلاین'})
+                                                </span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
                                   </div>
                                 </div>
 
@@ -1229,6 +1567,155 @@ export const AdminDashboard: React.FC = () => {
           {/* TAB 6: DATABASE MANAGEMENT (MySQL & phpMyAdmin Setup Console Guide) */}
           {adminTab === 'db' && (
             <div className="space-y-6">
+              {/* Real-Time Database Connection Statistics Panel */}
+              <div className="bg-slate-900 text-white rounded-3xl p-6 border border-slate-850 shadow-xl space-y-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-800 pb-4">
+                  <div className="space-y-1">
+                    <h3 className="font-extrabold text-sm sm:text-base flex items-center gap-2 text-rose-400">
+                      <span className="flex h-3 w-3 relative">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                      </span>
+                      <span>پیشخوان مانیتورینگ زنده پایگاه داده (Real-time DB Connection Statistics)</span>
+                    </h3>
+                    <p className="text-[10px] text-slate-400">پایش بی‌وقفه ترافیک اتصالات استخر کوئری‌ها، پردازش‌ها و وضعیت سلامت سرور اصلی</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] bg-slate-800 text-slate-300 font-bold px-3 py-1 rounded-lg border border-slate-700">
+                      بروزرسانی زنده: هر ۵ ثانیه
+                    </span>
+                    <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black border uppercase ${
+                      dbInfo?.connected
+                        ? 'bg-emerald-950/50 border-emerald-800/80 text-emerald-400'
+                        : 'bg-amber-950/40 border-amber-800/80 text-amber-400'
+                    }`}>
+                      {dbInfo?.connected ? 'MySQL Live' : 'SQLite/Local DB'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-center">
+                  
+                  {/* Gauge Chart representing Connection Pool Load */}
+                  <div className="bg-slate-950/40 border border-slate-800 p-5 rounded-2xl flex flex-col items-center justify-center text-center space-y-2 h-56">
+                    <span className="text-[10px] font-bold text-slate-400">لود استخر اتصالات (Pool Capacity)</span>
+                    
+                    {/* SVG Gauge Chart */}
+                    <div className="relative w-36 h-24 flex items-center justify-center overflow-hidden">
+                      <svg className="w-full h-full" viewBox="0 0 100 60">
+                        {/* Background track */}
+                        <path
+                          d="M 10 50 A 40 40 0 0 1 90 50"
+                          fill="none"
+                          stroke="#334155"
+                          strokeWidth="8"
+                          strokeLinecap="round"
+                        />
+                        {/* Interactive dynamic status stroke */}
+                        <path
+                          d="M 10 50 A 40 40 0 0 1 90 50"
+                          fill="none"
+                          stroke="url(#gaugeGradient)"
+                          strokeWidth="8"
+                          strokeLinecap="round"
+                          strokeDasharray="125.6"
+                          // Active percent out of 10 limit: default mapping
+                          strokeDashoffset={125.6 - (125.6 * (Math.min(10, dbInfo?.activeConnections || 1) / 10))}
+                          className="transition-all duration-1000 ease-out"
+                        />
+                        <defs>
+                          <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stopColor="#ef4444" />
+                            <stop offset="50%" stopColor="#f59e0b" />
+                            <stop offset="100%" stopColor="#10b981" />
+                          </linearGradient>
+                        </defs>
+                        {/* Text labels */}
+                        <text x="50" y="44" textAnchor="middle" className="fill-white font-black text-[12px]">
+                          {(((dbInfo?.activeConnections || 1) / (dbInfo?.poolLimit || 10)) * 100).toFixed(0)}%
+                        </text>
+                      </svg>
+                    </div>
+
+                    <div className="space-y-0.5">
+                      <span className="text-[12px] font-extrabold text-slate-200">
+                        {dbInfo?.activeConnections || 0} از {dbInfo?.poolLimit || 10} اتصال فعال
+                      </span>
+                      <p className="text-[8px] text-slate-500">تعداد کلاینت‌های موازی متصل در ثانیه به کانکشن پول</p>
+                    </div>
+                  </div>
+
+                  {/* Micro Statistics Cards */}
+                  <div className="md:col-span-3 grid grid-cols-2 lg:grid-cols-3 gap-4 h-full">
+                    {/* Card 1: Active Queries */}
+                    <div className="bg-slate-950/20 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between text-right space-y-1">
+                      <div className="flex justify-between items-start">
+                        <span className="text-[10px] text-slate-400 font-extrabold">پردازش‌های فعال (Active Queries)</span>
+                        <Timer className="h-4 w-4 text-rose-500 animate-spin" style={{ animationDuration: '3s' }} />
+                      </div>
+                      <div className="py-2">
+                        <strong className="text-2xl font-black text-white font-mono block">
+                          {dbInfo?.activeQueries || 0} <span className="text-xs text-rose-450">کوئری/ثانیه</span>
+                        </strong>
+                      </div>
+                      <p className="text-[8px] text-slate-500">پردازش‌های همزمان فعال در صف تراکنش‌ها</p>
+                    </div>
+
+                    {/* Card 2: Total queries count */}
+                    <div className="bg-slate-950/20 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between text-right space-y-1">
+                      <div className="flex justify-between items-start">
+                        <span className="text-[10px] text-slate-400 font-extrabold">تعداد کل درخواست‌ها (Lifetime)</span>
+                        <Globe className="h-4 w-4 text-indigo-400 animate-pulse" />
+                      </div>
+                      <div className="py-2">
+                        <strong className="text-2xl font-black text-white font-mono block">
+                          {dbInfo?.totalQueries || 0} <span className="text-xs text-indigo-400">ارتباط</span>
+                        </strong>
+                      </div>
+                      <p className="text-[8px] text-slate-500">مجموع کوئری‌های ثبت شده از زمان بوت سرور</p>
+                    </div>
+
+                    {/* Card 3: Server Uptime */}
+                    <div className="bg-slate-950/20 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between text-right space-y-1 col-span-2 lg:col-span-1">
+                      <div className="flex justify-between items-start">
+                        <span className="text-[10px] text-slate-400 font-extrabold">مدت زمان فعالیت (Server Uptime)</span>
+                        <Clock className="h-4 w-4 text-emerald-450 animate-pulse" />
+                      </div>
+                      <div className="py-2">
+                        <strong className="text-xs font-black text-emerald-400 block font-mono leading-tight whitespace-normal">
+                          {(() => {
+                            const uptime = dbInfo?.uptimeSeconds || 0;
+                            const h = Math.floor(uptime / 3600);
+                            const m = Math.floor((uptime % 3600) / 60);
+                            const s = uptime % 60;
+                            return `${h} ساعت و ${m} دقیقه و ${s} ثانیه`;
+                          })()}
+                        </strong>
+                      </div>
+                      <p className="text-[8px] text-slate-500">زمان روشن بودن ممتد سرویس دسکتاپ پس‌زمینه</p>
+                    </div>
+
+                    {/* Meta stats detail */}
+                    <div className="col-span-2 lg:col-span-3 bg-slate-950/40 p-3 rounded-xl border border-slate-850 text-slate-400 text-[9px] flex flex-wrap justify-between items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        <strong>میزبان سرویس:</strong>
+                        <span className="font-mono text-slate-300">{dbInfo?.host || 'localhost'}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <strong>نام دیتابیس سیستمی:</strong>
+                        <span className="font-mono text-slate-300">{dbInfo?.database || 'easydriver_db'}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <strong>استخر اتصالات:</strong>
+                        <span className="text-emerald-400 font-bold font-mono">Idle: {dbInfo?.idleConnections || 10} | Max: {dbInfo?.poolLimit || 10}</span>
+                      </div>
+                    </div>
+
+                  </div>
+
+                </div>
+              </div>
+
               <div className="p-6 bg-white rounded-2xl border border-slate-200 shadow-sm text-right space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
                   <div>
@@ -1350,6 +1837,73 @@ export const AdminDashboard: React.FC = () => {
                   <div className="px-3.5 py-2 bg-white/10 rounded-xl text-center self-start">
                     <span className="block text-[8px] text-rose-200">مجموع تراکنش‌ها</span>
                     <span className="block text-xs font-black font-mono">{requests.length + tickets.length} رکورد</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Universal Date Range Filter Widget for Reports */}
+              <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xxs text-right space-y-3.5">
+                <div className="flex items-center gap-2 border-b border-slate-105 pb-2">
+                  <Clock className="h-4 w-4 text-rose-600" />
+                  <span className="font-extrabold text-xs text-slate-800">فیلتر هوشمند بازه زمانی (جهت گزارش‌های دقیق ماهانه و هفتگی عملکرد تکنسین‌ها)</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs font-semibold">
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-500 block">از تاریخ ثبت (میلادی):</label>
+                    <input
+                      type="date"
+                      value={reportStartDate}
+                      onChange={(e) => setReportStartDate(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-rose-400 font-mono text-center"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-500 block">تا تاریخ ثبت (میلادی):</label>
+                    <input
+                      type="date"
+                      value={reportEndDate}
+                      onChange={(e) => setReportEndDate(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-rose-400 font-mono text-center"
+                    />
+                  </div>
+                  <div className="flex items-end gap-1.5Col">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date();
+                        d.setDate(d.getDate() - 7);
+                        setReportStartDate(d.toISOString().substring(0, 10));
+                        setReportEndDate(new Date().toISOString().substring(0, 10));
+                      }}
+                      className="px-2.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[10px] font-bold cursor-pointer transition-all flex-1 text-center"
+                    >
+                      گزارش هفتگی اخیر
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date();
+                        d.setDate(d.getDate() - 30);
+                        setReportStartDate(d.toISOString().substring(0, 10));
+                        setReportEndDate(new Date().toISOString().substring(0, 10));
+                      }}
+                      className="px-2.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[10px] font-bold cursor-pointer transition-all flex-1 text-center"
+                    >
+                      گزارش ماهانه اخیر
+                    </button>
+                    {(reportStartDate || reportEndDate) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReportStartDate('');
+                          setReportEndDate('');
+                        }}
+                        className="px-3 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-[10px] font-bold cursor-pointer transition-all shrink-0"
+                        title="پاک‌کردن فیلتر تاریخ"
+                      >
+                        حذف فیلتر
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1705,35 +2259,95 @@ export const AdminDashboard: React.FC = () => {
                       </div>
                     </div>
 
-                    {currentPrintType === 'requests' && (
-                      <div className="space-y-4">
-                        <h2 className="text-xs font-black text-slate-900">جزئیات تفصیلی کل درخواست‌های فنی خدمات ثبت‌شده:</h2>
-                        <table className="w-full text-[10px] text-right border-collapse border border-slate-300">
-                          <thead>
-                            <tr className="bg-slate-100">
-                              <th className="border border-slate-300 p-2">مشتری</th>
-                              <th className="border border-slate-300 p-2">نوع خدمت</th>
-                              <th className="border border-slate-300 p-2">اولویت</th>
-                              <th className="border border-slate-300 p-2">وضعیت</th>
-                              <th className="border border-slate-300 p-2">تکنسین</th>
-                              <th className="border border-slate-300 p-2">تاریخ</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {requests.map(r => (
-                              <tr key={r.id}>
-                                <td className="border border-slate-300 p-2">{r.fullName || r.customerName}</td>
-                                <td className="border border-slate-300 p-2">{SERVICE_LABELS[r.serviceType]}</td>
-                                <td className="border border-slate-300 p-2">{PRIORITY_LABELS[r.priority]}</td>
-                                <td className="border border-slate-300 p-2">{STATUS_LABELS[r.status]}</td>
-                                <td className="border border-slate-300 p-2">{r.assignedToName || 'تخصیص نیافته'}</td>
-                                <td className="border border-slate-300 p-2">{new Date(r.createdDate).toLocaleDateString('fa-IR')}</td>
+                    {currentPrintType === 'requests' && (() => {
+                      const printedRequests = selectedRequestIds.length > 0
+                        ? requests.filter(r => selectedRequestIds.includes(r.id))
+                        : requests.filter(r => {
+                            const statusMatch = reportReqStatus === 'all' || r.status === reportReqStatus;
+                            const startMatch = !reportStartDate || (r.createdDate || '').substring(0, 10) >= reportStartDate;
+                            const endMatch = !reportEndDate || (r.createdDate || '').substring(0, 10) <= reportEndDate;
+                            return statusMatch && startMatch && endMatch;
+                          });
+
+                      const totalCount = printedRequests.length;
+                      const completedCount = printedRequests.filter(r => r.status === 'completed').length;
+                      const pendingCount = printedRequests.filter(r => r.status === 'pending').length;
+                      const inProgressCount = printedRequests.filter(r => r.status === 'in_progress').length;
+                      const totalTimeLogged = printedRequests.reduce((sum, r) => sum + (r.loggedDurationMinutes || 0), 0);
+                      const averageCompletionTime = totalCount > 0 ? (totalTimeLogged / totalCount).toFixed(1) : '0';
+
+                      return (
+                        <div className="space-y-6">
+                          {/* Corporate Company Header */}
+                          <div className="bg-slate-50 p-4 border border-slate-300 rounded-xl flex justify-between items-center text-right leading-relaxed mb-4">
+                            <div className="space-y-1">
+                              <h3 className="text-[10px] font-black text-rose-700">شرکت پشتیبانی فنی و مهندسی ایزی‌درایور (سهامی خاص)</h3>
+                              <h2 className="text-xs font-black text-slate-900">گزارش کار رسمی کارکرد و سفارش‌های فنی مشتریان</h2>
+                              <p className="text-[8px] text-slate-400">بخش کنترل کیفی عملیات دسکتاپ ریموت و حضوری</p>
+                            </div>
+                            <div className="text-left text-[8px] text-slate-500 space-y-0.5" dir="rtl">
+                              <div><strong>شماره سند:</strong> EDX-{Math.floor(Math.random() * 8999) + 1000}</div>
+                              <div><strong>تاریخ گزارش:</strong> {new Date().toLocaleDateString('fa-IR')}</div>
+                              <div><strong>طبقه سند:</strong> رسمی / سیستمی</div>
+                              <div><strong>پشتیبان داده:</strong> {dbInfo?.connected ? 'MySQL Live' : 'پشتیبان محلی'}</div>
+                            </div>
+                          </div>
+
+                          {/* Professional Statistical Summary Box */}
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-50/50 p-3.5 border border-slate-200 rounded-xl text-right text-[9px]">
+                            <div className="space-y-0.5">
+                              <span className="text-slate-400 block">تعداد سفارشات گزارش:</span>
+                              <strong className="text-slate-800 text-[11px] font-extrabold">{totalCount} مورد سفارش</strong>
+                            </div>
+                            <div className="space-y-0.5">
+                              <span className="text-slate-400 block">سفارشات موفق نهایی:</span>
+                              <strong className="text-emerald-700 text-[11px] font-extrabold">{completedCount} مورد تکمیل شده</strong>
+                            </div>
+                            <div className="space-y-0.5">
+                              <span className="text-slate-400 block">سفارشات معلق / اقدام:</span>
+                              <strong className="text-amber-700 text-[11px] font-extrabold">{pendingCount + inProgressCount} مورد در جریان</strong>
+                            </div>
+                            <div className="space-y-0.5">
+                              <span className="text-slate-400 block">میانگین کارکرد ریموت:</span>
+                              <strong className="text-indigo-700 text-[11px] font-extrabold">{averageCompletionTime} دقیقه بر خدمت</strong>
+                            </div>
+                          </div>
+
+                          <h2 className="text-xs font-black text-slate-900 pt-2 border-b border-slate-100 pb-1.5">
+                            {selectedRequestIds.length > 0 
+                              ? `لیست فیلترشده درخواست‌های انتخابی جهت صدور PDF (${selectedRequestIds.length} مورد):`
+                              : 'کل درخواست‌های فیلترشده سیستم:'}
+                          </h2>
+
+                          <table className="w-full text-[9px] text-right border-collapse border border-slate-300">
+                            <thead>
+                              <tr className="bg-slate-100 text-slate-700">
+                                <th className="border border-slate-300 p-2 font-black">شناسه</th>
+                                <th className="border border-slate-300 p-2 font-black">مشتری متقاضی</th>
+                                <th className="border border-slate-300 p-2 font-black">نوع خدمت فنی</th>
+                                <th className="border border-slate-300 p-2 font-black">اولویت</th>
+                                <th className="border border-slate-300 p-2 font-black">وضعیت بررسی</th>
+                                <th className="border border-slate-300 p-2 font-black">تکنسین مسئول</th>
+                                <th className="border border-slate-300 p-2 font-black">تاریخ ثبت</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
+                            </thead>
+                            <tbody>
+                              {printedRequests.map(r => (
+                                <tr key={r.id} className="hover:bg-slate-50/50">
+                                  <td className="border border-slate-300 p-2 font-mono">#{r.id}</td>
+                                  <td className="border border-slate-300 p-2">{r.fullName || r.customerName}</td>
+                                  <td className="border border-slate-300 p-2">{SERVICE_LABELS[r.serviceType]}</td>
+                                  <td className="border border-slate-300 p-2">{PRIORITY_LABELS[r.priority]}</td>
+                                  <td className="border border-slate-300 p-2">{STATUS_LABELS[r.status]}</td>
+                                  <td className="border border-slate-300 p-2">{r.assignedToName || 'تخصیص نیافته'}</td>
+                                  <td className="border border-slate-300 p-2 font-mono">{new Date(r.createdDate).toLocaleDateString('fa-IR')}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })()}
 
                     {currentPrintType === 'technicians' && (
                       <div className="space-y-4">
@@ -1879,41 +2493,99 @@ export const AdminDashboard: React.FC = () => {
         </div>
 
         {/* Dynamic Data Rows Table Render based on selected request Print Type */}
-        {currentPrintType === 'requests' && (
-          <div className="space-y-4">
-            <h2 className="text-[12px] font-black text-slate-900 border-b border-slate-200 pb-1.5 mb-2">لیست درخواست‌های خدمات و سفارشات فنی مشتریان:</h2>
-            <table className="w-full text-[9px] text-right border-collapse border border-slate-400">
-              <thead>
-                <tr className="bg-slate-100">
-                  <th className="border border-slate-400 p-2">کد</th>
-                  <th className="border border-slate-400 p-2">نام متقاضی</th>
-                  <th className="border border-slate-400 p-2">شماره همراه</th>
-                  <th className="border border-slate-400 p-2">نوع خدمت فنی</th>
-                  <th className="border border-slate-400 p-2">اولویت</th>
-                  <th className="border border-slate-400 p-2">وضعیت</th>
-                  <th className="border border-slate-400 p-2">کارشناس تخصیص‌یافته</th>
-                  <th className="border border-slate-400 p-2">تاریخ آغاز</th>
-                  <th className="border border-slate-400 p-2">یادداشت‌های فنی</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(reportReqStatus === 'all' ? requests : requests.filter(r => r.status === reportReqStatus)).map((r, i) => (
-                  <tr key={r.id}>
-                    <td className="border border-slate-400 p-2 font-mono">{i + 1}</td>
-                    <td className="border border-slate-400 p-2">{r.fullName || r.customerName || 'مشتری بدون نام'}</td>
-                    <td className="border border-slate-400 p-2 font-mono">{r.phone || 'فاقد شماره'}</td>
-                    <td className="border border-slate-400 p-2">{SERVICE_LABELS[r.serviceType]}</td>
-                    <td className="border border-slate-400 p-2">{PRIORITY_LABELS[r.priority]}</td>
-                    <td className="border border-slate-400 p-2">{STATUS_LABELS[r.status]}</td>
-                    <td className="border border-slate-400 p-2">{r.assignedToName || 'تخصیص نیافته'}</td>
-                    <td className="border border-slate-400 p-2">{new Date(r.createdDate).toLocaleDateString('fa-IR')}</td>
-                    <td className="border border-slate-400 p-2 max-w-[150px] truncate">{r.adminNotes || 'بدون یادداشت'}</td>
+        {currentPrintType === 'requests' && (() => {
+          const printedRequests = selectedRequestIds.length > 0
+            ? requests.filter(r => selectedRequestIds.includes(r.id))
+            : requests.filter(r => {
+                const statusMatch = reportReqStatus === 'all' || r.status === reportReqStatus;
+                const startMatch = !reportStartDate || (r.createdDate || '').substring(0, 10) >= reportStartDate;
+                const endMatch = !reportEndDate || (r.createdDate || '').substring(0, 10) <= reportEndDate;
+                return statusMatch && startMatch && endMatch;
+              });
+
+          const totalCount = printedRequests.length;
+          const completedCount = printedRequests.filter(r => r.status === 'completed').length;
+          const pendingCount = printedRequests.filter(r => r.status === 'pending').length;
+          const inProgressCount = printedRequests.filter(r => r.status === 'in_progress').length;
+          const totalTimeLogged = printedRequests.reduce((sum, r) => sum + (r.loggedDurationMinutes || 0), 0);
+          const averageCompletionTime = totalCount > 0 ? (totalTimeLogged / totalCount).toFixed(1) : '0';
+
+          return (
+            <div className="space-y-6">
+              {/* Corporate Company Header for A4 Print */}
+              <div className="border border-slate-450 p-5 rounded-xl flex justify-between items-center text-right leading-relaxed bg-slate-50 mb-4">
+                <div className="space-y-1">
+                  <h3 className="text-xs font-black text-rose-700">شرکت پشتیبانی فنی و مهندسی ایزی‌درایور (سهامی خاص)</h3>
+                  <h2 className="text-sm font-black text-slate-900">سند گزارش رسمی سیستم - کارکرد سفارش‌های فنی</h2>
+                  <p className="text-[9px] text-slate-505">اداره کل ارزیابی و تضمین کیفیت خدمات ریموت AnyDesk</p>
+                </div>
+                <div className="text-left text-[9px] text-slate-650 space-y-0.5 font-bold" dir="rtl">
+                  <div><strong>کد پیگیری سند:</strong> EDX-{Math.floor(Math.random() * 89900) + 10000}</div>
+                  <div><strong>تاریخ چاپ رسمی:</strong> {new Date().toLocaleDateString('fa-IR')}</div>
+                  <div><strong>تولیدکننده:</strong> {currentUser?.fullName || 'ناظر ارشد مدیریت'}</div>
+                  <div><strong>پایگاه داده:</strong> {dbInfo?.connected ? 'MySQL Live Connect (OK)' : 'پشتیبان لایو محلی'}</div>
+                </div>
+              </div>
+
+              {/* Statistical Summary Grid for PDF */}
+              <div className="grid grid-cols-4 gap-3 border border-slate-350 bg-slate-50/50 p-4 rounded-xl text-right text-[10px] my-4">
+                <div className="space-y-1">
+                  <span className="text-slate-500 block">تعداد سفارشات واصله:</span>
+                  <strong className="text-slate-900 text-xs font-black">{totalCount} مورد سفارش فعال</strong>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-slate-500 block">سفارشات قطعی تکمیل‌شده:</span>
+                  <strong className="text-emerald-800 text-xs font-black">{completedCount} سفارش موفق</strong>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-slate-500 block">سفارشات در حال اقدام/معلق:</span>
+                  <strong className="text-amber-800 text-xs font-black">{pendingCount + inProgressCount} مورد باز</strong>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-slate-500 block">میانگین کارکرد ریموت:</span>
+                  <strong className="text-indigo-800 text-xs font-black">{averageCompletionTime} دقیقه بر خدمت</strong>
+                </div>
+              </div>
+
+              <h2 className="text-[11px] font-black text-slate-900 border-b border-slate-400 pb-1.5 mb-2 mt-4">
+                {selectedRequestIds.length > 0 
+                  ? `جداول تفصیلی درخواست‌های انتخابی جهت بایگانی رسمی (${selectedRequestIds.length} مورد سفارش):`
+                  : 'جداول تفصیلی کل درخواست‌های فنی فیلترشده سیستم:'}
+              </h2>
+
+              <table className="w-full text-[9px] text-right border-collapse border border-slate-400">
+                <thead>
+                  <tr className="bg-slate-100">
+                    <th className="border border-slate-400 p-2">کد</th>
+                    <th className="border border-slate-400 p-2">نام متقاضی</th>
+                    <th className="border border-slate-400 p-2">شماره همراه</th>
+                    <th className="border border-slate-400 p-2">نوع خدمت فنی</th>
+                    <th className="border border-slate-400 p-2">اولویت</th>
+                    <th className="border border-slate-400 p-2">وضعیت بررسی</th>
+                    <th className="border border-slate-400 p-2">کارشناس تخصیص‌یافته</th>
+                    <th className="border border-slate-400 p-2">تاریخ ثبت</th>
+                    <th className="border border-slate-400 p-2">یادداشت فنی ادمین</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody>
+                  {printedRequests.map((r, i) => (
+                    <tr key={r.id}>
+                      <td className="border border-slate-400 p-2 font-mono">#{r.id}</td>
+                      <td className="border border-slate-400 p-2">{r.fullName || r.customerName || 'مشتری بدون نام'}</td>
+                      <td className="border border-slate-400 p-2 font-mono">{r.phone || 'فاقد شماره'}</td>
+                      <td className="border border-slate-400 p-2">{SERVICE_LABELS[r.serviceType]}</td>
+                      <td className="border border-slate-400 p-2">{PRIORITY_LABELS[r.priority]}</td>
+                      <td className="border border-slate-400 p-2">{STATUS_LABELS[r.status]}</td>
+                      <td className="border border-slate-400 p-2">{r.assignedToName || 'تخصیص نیافته'}</td>
+                      <td className="border border-slate-400 p-2">{new Date(r.createdDate).toLocaleDateString('fa-IR')}</td>
+                      <td className="border border-slate-400 p-2 max-w-[200px] truncate">{r.adminNotes || 'بدون یادداشت'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
 
         {currentPrintType === 'technicians' && (
           <div className="space-y-4">
@@ -2031,6 +2703,80 @@ export const AdminDashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Floating Action Bar for Selected Requests Batch Operations/Reporting */}
+      <AnimatePresence>
+        {selectedRequestIds.length > 0 && (
+          <motion.div
+            initial={{ y: 80, opacity: 0, scale: 0.95 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 80, opacity: 0, scale: 0.95 }}
+            transition={{ type: "spring", damping: 25, stiffness: 220 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] w-[95%] max-w-2xl bg-slate-900 border border-slate-700/80 p-4 rounded-2xl shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4 text-white"
+          >
+            <div className="flex items-center gap-3 text-right">
+              <span className="flex h-3.5 w-3.5 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-rose-500"></span>
+              </span>
+              <div>
+                <span className="font-extrabold text-xs block text-rose-350">عملیات گروهی ({selectedRequestIds.length} درخواست انتخابی)</span>
+                <span className="text-[10px] text-slate-400 block mt-0.5">امکان ویرایش دسته‌جمعی وضعیت کار با مشتری یا چاپ فوری گزارش رسمی شکیل</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto text-[10px] font-black">
+              {/* Batch Status Dropdown */}
+              <div className="flex items-center bg-slate-850 rounded-lg px-2 border border-slate-700 h-9">
+                <span className="text-slate-400 pl-1 shrink-0 text-[9px] font-bold">تغییر وضعیت به:</span>
+                <select
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      handleBulkStatusUpdate(e.target.value as any);
+                      e.target.value = '';
+                    }
+                  }}
+                  className="bg-transparent text-white outline-none border-none py-1.5 px-1 font-bold text-[10px] cursor-pointer"
+                  defaultValue=""
+                >
+                  <option value="" disabled className="bg-slate-900">انتخاب کنید...</option>
+                  <option value="pending" className="bg-slate-900">در انتظار</option>
+                  <option value="in_progress" className="bg-slate-900">در دست اقدام</option>
+                  <option value="completed" className="bg-slate-900">تکمیل شده</option>
+                  <option value="cancelled" className="bg-slate-900">لغو شده</option>
+                </select>
+              </div>
+
+              {/* Print Report */}
+              <button
+                onClick={() => triggerPrintLayout('requests')}
+                className="flex-1 sm:flex-none h-9 px-3 bg-gradient-to-r from-rose-600 to-pink-650 hover:from-rose-700 hover:to-pink-700 text-white rounded-lg flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-sm"
+              >
+                <Printer className="h-3.5 w-3.5 text-amber-300 animate-pulse animate-duration-1000" />
+                <span>گزارش PDF ویژه</span>
+              </button>
+
+              {/* Batch Deletion */}
+              <button
+                onClick={handleBulkDelete}
+                className="flex-1 sm:flex-none h-9 px-3 bg-red-950/40 hover:bg-slate-800 text-rose-400 border border-slate-700 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>حذف گروهی</span>
+              </button>
+
+              {/* Dismiss */}
+              <button
+                onClick={() => setSelectedRequestIds([])}
+                className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer"
+                title="لغو انتخاب"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Full Screen Image overlay Modal */}
       <AnimatePresence>
