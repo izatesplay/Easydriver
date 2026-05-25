@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Request, Review, Ticket, Technician, SERVICE_LABELS, STATUS_LABELS, STATUS_COLORS, PRIORITY_LABELS, PRIORITY_COLORS, SPECIALTY_LABELS, TechnicianSpecialty, RequestStatus, RequestPriority, TICKET_CATEGORY_LABELS, TICKET_STATUS_LABELS, TICKET_STATUS_COLORS } from '../types';
-import { ShieldAlert, Key, Grid, Clipboard, Users, Star, MessageSquare, Plus, Edit2, Trash2, CheckCircle2, UserPlus, Info, Save, Clock, X, ChevronDown, ChevronUp, Reply, Sparkles, Database, Server, Globe, FileCode as FileCodeIcon, Trophy, Medal, Printer, FileSpreadsheet as FileDown, UserCheck, Camera, Monitor, Timer, BarChart3 } from 'lucide-react';
+import { ShieldAlert, Key, Grid, Clipboard, Users, Star, MessageSquare, Plus, Edit2, Trash2, CheckCircle2, UserPlus, Info, Save, Clock, X, ChevronDown, ChevronUp, Reply, Sparkles, Database, Server, Globe, FileCode as FileCodeIcon, Trophy, Medal, Printer, FileSpreadsheet as FileDown, UserCheck, Camera, Monitor, Timer, BarChart3, RefreshCw, Play, Activity } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { calculateTechnicianStats } from '../utils/pointsCalculator';
 import { useRenderTracker } from '../utils/indexedDB';
@@ -57,6 +57,17 @@ export const AdminDashboard: React.FC = () => {
     activeQueries?: number;
   } | null>(null);
 
+  const [probingDb, setProbingDb] = useState(false);
+  const [probeResult, setProbeResult] = useState<{
+    healthy: boolean;
+    connected: boolean;
+    mode: string;
+    error: string;
+    host: string;
+    database: string;
+    probeLog: string;
+  } | null>(null);
+
   React.useEffect(() => {
     const fetchStatus = () => {
       fetch("/api/db-status")
@@ -66,14 +77,10 @@ export const AdminDashboard: React.FC = () => {
     };
     fetchStatus();
 
-    let timer: any = null;
-    if (adminTab === 'db') {
-      timer = setInterval(fetchStatus, 5000);
-    }
-    return () => {
-      if (timer) clearInterval(timer);
-    };
-  }, [adminTab]);
+    // Constant 7-second background polling for the header floating indicator
+    const timer = setInterval(fetchStatus, 7000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Technician states (for CRUD)
   const [showAddTechForm, setShowAddTechForm] = useState(false);
@@ -503,30 +510,30 @@ export const AdminDashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* Database Connectivity Status Indicator */}
-          <div className={`p-3 rounded-2xl border text-right flex items-center gap-3 shadow-xxs max-w-full ${
+          {/* Dynamic Floating Database Connectivity Status Indicator */}
+          <div className={`p-3.5 rounded-2xl border text-right flex items-center gap-3 transition-all duration-300 shadow-md ${
             dbInfo?.connected
-              ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
-              : 'bg-amber-50/70 border-amber-200 text-amber-900 animate-pulse'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-900 shadow-emerald-100/40'
+              : 'bg-rose-50 border-rose-200 text-rose-900 shadow-rose-100/45'
           }`}>
-            <span className="relative flex h-2 w-2 shrink-0">
+            <span className="relative flex h-3 w-3 shrink-0">
               <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                dbInfo?.connected ? 'bg-emerald-400' : 'bg-amber-400'
+                dbInfo?.connected ? 'bg-emerald-400' : 'bg-rose-400 animate-pulse'
               }`}></span>
-              <span className={`relative inline-flex rounded-full h-2 w-2 ${
-                dbInfo?.connected ? 'bg-emerald-500' : 'bg-amber-500'
+              <span className={`relative inline-flex rounded-full h-3 w-3 ${
+                dbInfo?.connected ? 'bg-emerald-500' : 'bg-rose-500'
               }`}></span>
             </span>
 
             <div className="text-[10px]">
-              <div className="font-extrabold flex items-center gap-1.5">
-                <span>وضعیت پایگاه داده:</span>
-                <span className={`font-black uppercase ${dbInfo?.connected ? 'text-emerald-700' : 'text-amber-700'}`}>
-                  {dbInfo?.connected ? 'متصل (MySQL)' : 'پشتیبان محلی زنده'}
+              <div className="font-extrabold flex items-center gap-1.5 justify-start">
+                <span className="text-slate-500">وضعیت پایگاه داده:</span>
+                <span className={`font-black uppercase flex items-center gap-1 ${dbInfo?.connected ? 'text-emerald-700' : 'text-rose-650'}`}>
+                  {dbInfo?.connected ? 'برخط (MySQL🟢)' : 'محلی (Local JSON Backup🔴)'}
                 </span>
               </div>
-              <div className="text-[9px] text-slate-500 mt-0.5 font-mono leading-none" dir="ltr">
-                Host: <strong className="text-slate-800">{dbInfo?.host || 'localhost'}</strong> | DB: <strong className="text-slate-800">{dbInfo?.database || 'easydri1_mmd'}</strong>
+              <div className="text-[9px] text-slate-550 mt-0.5 font-mono leading-none" dir="ltr">
+                host: <strong className="text-slate-800">{dbInfo?.host || 'localhost'}</strong> | db: <strong className="text-slate-800">{dbInfo?.database || 'easydri1_mmd'}</strong>
               </div>
             </div>
           </div>
@@ -1745,6 +1752,127 @@ export const AdminDashboard: React.FC = () => {
                     <span><strong>پشتیبان محلی فعال است:</strong> {dbInfo.error} پروژه در حال حاضر بدون مشکل تمام اطلاعات و تغییرات را روی فایل پشتیبان محلی (local_db.json) به صورت زنده ذخیره می‌کند و آماده انتقال به هاست شماست.</span>
                   </div>
                 )}
+
+                {/* Real-time DB Connection Pool Health Inspector Section */}
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 md:p-5 text-right space-y-4 shadow-xxs">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div className="space-y-1">
+                      <h4 className="font-extrabold text-xs text-indigo-950 flex items-center gap-2">
+                        <Activity className="h-4 w-4 text-indigo-650 animate-pulse" />
+                        <span>سیستم بازرسی زنده و تست سلامت سوکت (MySQL Port Audit Console)</span>
+                      </h4>
+                      <p className="text-[10.5px] text-slate-500 font-medium">
+                        برای تست زنده ارتباط هم‌اکنون می‌توانید کوئری سلامت‌سنجی مستقیم به سرور پایگاه داده راه دور ارسال کنید.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProbingDb(true);
+                        fetch("/api/db-health")
+                          .then(res => res.json())
+                          .then(data => {
+                            setProbeResult({
+                              ...data,
+                              timestamp: new Date().toLocaleTimeString('fa-IR'),
+                            });
+                            // Also update dbStatus in parents if successful
+                            if (data.connected && data.healthy) {
+                              setDbInfo(prev => prev ? { ...prev, connected: true } : null);
+                            }
+                          })
+                          .catch(err => {
+                            setProbeResult({
+                              healthy: false,
+                              connected: false,
+                              mode: "فایل محلی پشتیبان (Local JSON Backup)",
+                              error: err.message || "پینگ پاسخ‌دهی ناموفق بود.",
+                              host: "localhost",
+                              database: "easydri1_mmd",
+                              probeLog: `اتصال غیرممکن است: ${err.message}`,
+                              timestamp: new Date().toLocaleTimeString('fa-IR')
+                            } as any);
+                          })
+                          .finally(() => {
+                            setProbingDb(false);
+                          });
+                      }}
+                      disabled={probingDb}
+                      className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 text-white shrink-0 ${
+                        probingDb
+                          ? "bg-slate-400 cursor-not-allowed"
+                          : "bg-indigo-650 hover:bg-indigo-700 active:scale-95 shadow-sm shadow-indigo-200 cursor-pointer"
+                      }`}
+                    >
+                      {probingDb ? (
+                        <>
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          <span>در حال اجرای تست زنده...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-3 w-3 fill-current" />
+                          <span>شروع آنالیز و سلامت‌سنجی پورت</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {probeResult && (
+                    <div className={`p-4 rounded-xl border text-xs leading-relaxed space-y-3 transition-all duration-300 ${
+                      probeResult.healthy
+                        ? 'bg-emerald-50 border-emerald-100/70 text-emerald-900'
+                        : 'bg-rose-50 border-rose-100/70 text-rose-950'
+                    }`}>
+                      <div className="flex flex-wrap justify-between items-center gap-2 border-b pb-2 font-bold opacity-90">
+                        <span className="flex items-center gap-1.5">
+                          {probeResult.healthy ? '🟢 تست موفق:' : '🔴 تست با خطا مواجه شد:'}
+                          <span>{probeResult.healthy ? 'ارتباط با MySQL پایدار و فعال است!' : 'عدم برقراری ارتباط با پورت MySQL'}</span>
+                        </span>
+                        <span className="text-[10px] font-mono bg-white/55 px-2 py-0.5 rounded">
+                          ساعت تست: {probeResult.timestamp}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1 text-[11px] font-semibold">
+                        <div className="space-y-1.5">
+                          <p>
+                            <strong>میزبان پایگاه داده:</strong> <code className="bg-white/60 px-1.5 py-0.5 rounded font-mono text-[10px]">{probeResult.host}</code>
+                          </p>
+                          <p>
+                            <strong>نام دیتابیس هماهنگ:</strong> <code className="bg-white/60 px-1.5 py-0.5 rounded font-mono text-[10px]">{probeResult.database}</code>
+                          </p>
+                          <p>
+                            <strong>حالت عملیاتی لایه داده:</strong> <span className="underline decoration-indigo-200">{probeResult.mode}</span>
+                          </p>
+                        </div>
+                        <div className="space-y-1.5 md:border-r border-slate-200/50 md:pr-4">
+                          <p>
+                            <strong>گزارش مستقیم لاگ سوکت:</strong>
+                            <span className="block text-[10px] mt-1 bg-white/70 p-2 rounded border border-slate-100 leading-normal font-mono text-slate-800">
+                              {probeResult.probeLog || "توضیحی در دسترس نیست."}
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+
+                      {!probeResult.healthy && (
+                        <div className="pt-2 border-t border-rose-100 space-y-2 mt-1">
+                          <p className="text-[10px] text-rose-800 font-extrabold flex items-center gap-1">
+                            <Info className="h-3.5 w-3.5 shrink-0" />
+                            <span>توصیه فنی جهت رفع مشکل دامنه easydriver.shop و دیتابیس:</span>
+                          </p>
+                          <div className="text-[9.5px] text-rose-700 space-y-1 leading-normal list-decimal pr-4">
+                            <p>۱. اگر دیتابیس روی هاست همین دامنه است، <strong>DB_HOST</strong> را برابر با <code className="bg-rose-100/80 px-1 py-0.5 rounded font-mono">localhost</code> قرار دهید.</p>
+                            <p>۲. یوز دیتابیس و نام دیتابیس را در سی پنل چک کنید که دقیقاً <strong>easydri1_mmd</strong> باشند (بدون فاصله یا کاراکتر اشتباه).</p>
+                            <p>۳. رمز عبور دیتابیس شما <strong>09386561626mM@</strong> تنظیم گردیده که لازم است آن را حتماً در تب MySQL Users به کاربر متصل کنید و گزینه <strong>ALL PRIVILEGES</strong> را تیک بزنید.</p>
+                            <p>۴. در صورتی که هاست شما دیتابیس را به عنوان ریموت می‌گیرد، آی‌پی سرور این اپلیکیشن را در بخش <strong>Remote MySQL</strong> پنل هاست خود مجاز (Whitelist) کنید.</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
                   <div className="md:col-span-2 space-y-4">

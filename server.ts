@@ -1,13 +1,43 @@
-import express from "express";
-import path from "path";
-import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import fs from "fs";
+import path from "path";
+
+// Define possible .env paths to ensure we capture the file no matter how it was created
+const envPaths = [
+  path.join(process.cwd(), ".env"),
+  "/.env",
+  "./.env"
+];
+
+let loadedEnv = false;
+for (const envPath of envPaths) {
+  try {
+    if (fs.existsSync(envPath)) {
+      console.log(`📝 Found .env file at '${envPath}'. Parsing and overriding environment variables...`);
+      const envContent = fs.readFileSync(envPath, "utf-8");
+      const envConfig = dotenv.parse(envContent);
+      for (const key in envConfig) {
+        process.env[key] = envConfig[key];
+        console.log(`   └─ Overrode process.env.${key} = ${key === 'DB_PASSWORD' ? '********' : envConfig[key]}`);
+      }
+      loadedEnv = true;
+      break;
+    }
+  } catch (err: any) {
+    console.warn(`⚠️ Failed to parse env at ${envPath}:`, err.message);
+  }
+}
+
+if (!loadedEnv) {
+  console.warn("⚠️ No .env file could be matched in expected paths. Falling back to standard dotenv config.");
+  dotenv.config();
+}
+
+import express from "express";
+import { createServer as createViteServer } from "vite";
 import mysql from "mysql2/promise";
 import http from "http";
 import { WebSocketServer, WebSocket } from "ws";
-
-dotenv.config();
 
 const app = express();
 const PORT = 3000;
@@ -34,7 +64,7 @@ let dbStatus = {
 };
 
 // Lazy initialize MySQL pool if environment variables are preset
-async function getMySQLPool(): Promise<mysql.Pool | null> {
+async function getMySQLPool(bypassCooldown: boolean = false): Promise<mysql.Pool | null> {
   dbQueryLogCount++;
   if (mysqlPool) return mysqlPool;
   if (connectionPromise) return connectionPromise;
@@ -47,55 +77,131 @@ async function getMySQLPool(): Promise<mysql.Pool | null> {
 
   // Rate-limit connection retries on failure to keep the app blazing fast and silent
   const now = Date.now();
-  if (now - lastAttemptTime < ATTEMPT_COOLDOWN_MS) {
+  if (!bypassCooldown && (now - lastAttemptTime < ATTEMPT_COOLDOWN_MS)) {
     return null;
   }
-  lastAttemptTime = now;
+  if (!bypassCooldown) {
+    lastAttemptTime = now;
+  }
 
   connectionPromise = (async () => {
-    try {
-      const tempPool = mysql.createPool({
-        host,
-        user,
-        password,
-        database,
-        port,
-        waitForConnections: true,
-        connectionLimit: 10,
-        queueLimit: 0,
-      });
+    let tempPool: mysql.Pool | null = null;
+    let attempts = 3;
+    let currentDelay = 1000; // 1 second
+    let lastErr: any = null;
 
-      // Test connection
-      const connection = await tempPool.getConnection();
-      console.log("🟢 Successfully connected to MySQL Database!");
-      connection.release();
+    console.log(`📡 Starting MySQL connection attempt with exponential backoff on user: ${user}, host: ${host}, database: ${database}`);
 
-      dbStatus.connected = true;
-      dbStatus.mode = "دیتابیس فعال MySQL (phpMyAdmin)";
-      dbStatus.host = host;
-      dbStatus.database = database;
-      dbStatus.error = "";
-      
-      mysqlPool = tempPool;
-      return tempPool;
-    } catch (err: any) {
-      let friendlyError = err.message;
-      if (err.code === 'EAI_AGAIN' || err.code === 'ENOTFOUND') {
-        friendlyError = `آدرس سرور دیتابیس '${host}' یافت نشد یا غیرقابل دسترسی است. لطفاً تنظیمات DB_HOST را در متغیرهای محیطی یا فایل .env بررسی نمایید. (${err.message})`;
+    for (let i = 0; i < attempts; i++) {
+      try {
+        tempPool = mysql.createPool({
+          host,
+          user,
+          password,
+          database,
+          port,
+          waitForConnections: true,
+          connectionLimit: 10,
+          queueLimit: 0,
+        });
+
+        // Test connection
+        const connection = await tempPool.getConnection();
+        connection.release();
+
+        console.log(`🟢 Successfully connected to MySQL Database on attempt ${i + 1}!`);
+        dbStatus.connected = true;
+        dbStatus.mode = "دیتابیس فعال MySQL (phpMyAdmin)";
+        dbStatus.host = host;
+        dbStatus.database = database;
+        dbStatus.error = "";
+        
+        mysqlPool = tempPool;
+        return tempPool;
+      } catch (err: any) {
+        lastErr = err;
+        // Clean up pool resources before retry
+        if (tempPool) {
+          try {
+            await tempPool.end();
+          } catch (_) {}
+          tempPool = null;
+        }
+
+        console.warn(`⚠️ MySQL Connection attempt ${i + 1}/${attempts} failed to '${host}:${port}'. Retrying in ${currentDelay}ms... Error: ${err.message}`);
+        
+        if (i < attempts - 1) {
+          await new Promise<void>((resolve) => setTimeout(resolve, currentDelay));
+          currentDelay *= 2; // exponential backoff
+        }
       }
-      console.error("🔴 MySQL connection test failed (will use Local JSON Backup):", friendlyError);
-      dbStatus.connected = false;
-      dbStatus.mode = "فایل محلی پشتیبان (Local JSON Backup)";
-      dbStatus.error = friendlyError;
-      
-      mysqlPool = null;
-      // Clear connectionPromise on failure so client can retry after the cooldown expires
-      connectionPromise = null;
-      return null;
     }
+
+    // Handlers for granular database connection issues
+    const errorCode = lastErr?.code || lastErr?.errno;
+    let friendlyError = lastErr?.message || "Unknown Database Connection Error";
+    
+    if (lastErr?.code === 'EAI_AGAIN' || lastErr?.code === 'ENOTFOUND') {
+      friendlyError = `خطای مکان‌یابی آدرس سرور (DNS/Host Resolution Error): دامنه یا آی‌پی '${host}' روی سرور قابل حل نیست. لطفاً بررسی کنید که آیا آدرس صحیح وارد شده و یا اتصال شبکه برقرار است. (کد خطا: ${errorCode})`;
+    } else if (lastErr?.code === 'ECONNREFUSED' || lastErr?.code === 'CONNECT_TIMEOUT') {
+      friendlyError = `خطای رد اتصال یا اتمام زمان انتظار (Connection Refused/Timeout): سرور دیتابیس در آدرس '${host}:${port}' آمادگی دریافت اتصال را ندارد. لطفاً مطمئن شوید سرویس MySQL روی سرور میزبان روشن است و فایروال مانع دسترسی پورت ۳۳۰۶ نمی‌شود. (کد خطا: ${errorCode})`;
+    } else if (lastErr?.code === 'ER_ACCESS_DENIED_ERROR' || lastErr?.code === '1045' || errorCode === 1045) {
+      friendlyError = `خطای دسترسی و اطلاعات عبور کاربری (Access Denied / Authentication Failed): نام کاربری '${user}' یا رمز عبور وارد شده نامعتبر است یا دسترسی‌های کافی برای اتصال از آدرس گیت این هاست را ندارد. (کد خطا: 1045) - لطفاً پسورد و یوز نیم دیتابیس را چک کنید.`;
+    } else if (lastErr?.code === 'ER_BAD_DB_ERROR' || lastErr?.code === '1049' || errorCode === 1049) {
+      friendlyError = `خطای عدم وجود دیتابیس انتخابی (Database Not Found): پایگاه داده‌ای با نام '${database}' در سیستم دیتابیس پیدا نشد. لطفاً ابتدا از وجود این دیتابیس در کنترل پنل هاست اطمینان حاصل کنید. (کد خطا: 1049)`;
+    } else if (lastErr?.code === 'PROTOCOL_CONNECTION_LOST') {
+      friendlyError = `ارتباط با پایگاه داده قطع شد (Protocol Connection Lost). (کد خطا: PROTOCOL_CONNECTION_LOST)`;
+    } else if (lastErr?.code === 'HANDSHAKE_ERROR' || lastErr?.message?.toLowerCase()?.includes('handshake')) {
+      friendlyError = `خطای دست‌دهی امنیت/نسخه پروتکل (Handshake Connection Fail): خطایی در فرایند توافق اولیه handshake با سرور دیتابیس رخ داده است. این می‌تواند به دلیل عدم سازگاری روش هش رمز عبور (مانند caching_sha2_password در مقابل mysql_native_password) باشد. (${lastErr.message})`;
+    } else {
+      friendlyError = `خطای ناشناخته در اتصال به پایگاه داده از سمت هاست: ${lastErr?.message || "نامشخص"} (کد فنی: ${errorCode || "بدون کد"})`;
+    }
+
+    console.error("🔴 MySQL connection test failed (will use Local JSON Backup):", friendlyError);
+    dbStatus.connected = false;
+    dbStatus.mode = "فایل محلی پشتیبان (Local JSON Backup)";
+    dbStatus.error = friendlyError;
+    
+    mysqlPool = null;
+    // Clear connectionPromise on failure so client can retry after the cooldown/retries expire
+    connectionPromise = null;
+    return null;
   })();
 
   return connectionPromise;
+}
+
+// Background scheduler for automatic connection restoration
+let backgroundRetryTimer: NodeJS.Timeout | null = null;
+
+function scheduleBackgroundRetry() {
+  if (backgroundRetryTimer) return; // avoid duplicate intervals
+
+  console.log("⏰ Scheduling background MySQL pool reconnection attempts every 60 seconds...");
+  backgroundRetryTimer = setInterval(async () => {
+    if (dbStatus.connected && mysqlPool) {
+      console.log("🟢 Database is already active and healthy. Clearing reconnection timer.");
+      if (backgroundRetryTimer) {
+        clearInterval(backgroundRetryTimer);
+        backgroundRetryTimer = null;
+      }
+      return;
+    }
+
+    console.log("🔄 Background DB Reconnection Retry: Testing socket viability to MySQL port...");
+    try {
+      const pool = await getMySQLPool(true); // Bypass normal lazy-init cooldown
+      if (pool) {
+        console.log("🟢 Success! Database connection established in background task. Live DB active.");
+        if (backgroundRetryTimer) {
+          clearInterval(backgroundRetryTimer);
+          backgroundRetryTimer = null;
+        }
+      }
+    } catch (err: any) {
+      console.error("🔴 Background connection attempt failed. Still fallback to local db... Will try again in 60s.");
+    }
+  }, 60000);
 }
 
 // -------------------------------------------------------------
@@ -553,6 +659,40 @@ app.get("/api/db-status", async (req, res) => {
     activeConnections: activeConn,
     idleConnections: idleConn,
     activeQueries: pool ? activeConn : 0
+  });
+});
+
+// Check database connection pool health directly with active query execution
+app.get("/api/db-health", async (req, res) => {
+  let isProbeHealthy = false;
+  let probeLog = "";
+  
+  try {
+    const pool = await getMySQLPool(true); // Bypass normal cooldown for direct checks
+    if (pool) {
+      const start = Date.now();
+      const connection = await pool.getConnection();
+      await connection.query("SELECT 1");
+      connection.release();
+      const latencyMs = Date.now() - start;
+      isProbeHealthy = true;
+      probeLog = `اتصال MySQL برقرار و زنده است. تاخیر پاسخ‌دهی: ${latencyMs} میلی‌ثانیه`;
+    } else {
+      probeLog = dbStatus.error || "اتصال به پایگاه داده MySQL برقرار نیست؛ سیستم روی فایل محلی پشتیبان سوئیچ کرده است.";
+    }
+  } catch (err: any) {
+    isProbeHealthy = false;
+    probeLog = `خطا در اجرای کوئری سلامت‌سنجی: ${err.message}`;
+  }
+
+  res.json({
+    healthy: isProbeHealthy,
+    connected: dbStatus.connected && isProbeHealthy,
+    mode: isProbeHealthy ? "دیتابیس فعال MySQL (phpMyAdmin)" : "فایل محلی پشتیبان (Local JSON Backup)",
+    error: isProbeHealthy ? "" : probeLog,
+    host: dbStatus.host,
+    database: dbStatus.database,
+    probeLog
   });
 });
 
@@ -1471,3 +1611,20 @@ async function initializeVite() {
 }
 
 initializeVite();
+
+// Trigger initial connection test 1 second after server boot
+setTimeout(async () => {
+  console.log("🚀 Testing initial MySQL connection on start...");
+  try {
+    const pool = await getMySQLPool(true); // Bypass normal lazy load rate-limit
+    if (!pool) {
+      console.warn("🚫 Initial database connection failed. Schedulud background retry loop.");
+      scheduleBackgroundRetry();
+    } else {
+      console.log("✅ Database initialized successfully on server start.");
+    }
+  } catch (err) {
+    console.error("🚫 Connection error on start:", err);
+    scheduleBackgroundRetry();
+  }
+}, 1000);
