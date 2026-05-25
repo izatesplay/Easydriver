@@ -533,7 +533,7 @@ export const AdminDashboard: React.FC = () => {
                 </span>
               </div>
               <div className="text-[9px] text-slate-550 mt-0.5 font-mono leading-none" dir="ltr">
-                host: <strong className="text-slate-800">{dbInfo?.host || 'localhost'}</strong> | db: <strong className="text-slate-800">{dbInfo?.database || 'easydri1_mmd'}</strong>
+                host: <strong className="text-slate-800">{dbInfo?.host || 'تعریف نشده'}</strong> | db: <strong className="text-slate-800">{dbInfo?.database || 'تعریف نشده'}</strong>
               </div>
             </div>
           </div>
@@ -1706,11 +1706,11 @@ export const AdminDashboard: React.FC = () => {
                     <div className="col-span-2 lg:col-span-3 bg-slate-950/40 p-3 rounded-xl border border-slate-850 text-slate-400 text-[9px] flex flex-wrap justify-between items-center gap-3">
                       <div className="flex items-center gap-2">
                         <strong>میزبان سرویس:</strong>
-                        <span className="font-mono text-slate-300">{dbInfo?.host || 'localhost'}</span>
+                        <span className="font-mono text-slate-300">{dbInfo?.host || 'تعریف نشده'}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <strong>نام دیتابیس سیستمی:</strong>
-                        <span className="font-mono text-slate-300">{dbInfo?.database || 'easydri1_mmd'}</span>
+                        <span className="font-mono text-slate-300">{dbInfo?.database || 'تعریف نشده'}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <strong>استخر اتصالات:</strong>
