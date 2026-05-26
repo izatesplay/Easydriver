@@ -2,36 +2,70 @@ import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
 
-// Define possible .env paths to ensure we capture the file no matter how it was created
+// Extremely robust .env lookups supporting child/parent, process.cwd(), and absolute paths for cPanel / DirectAdmin / Passenger
 const envPaths = [
   path.join(process.cwd(), ".env"),
+  path.join(__dirname, ".env"),
+  path.join(__dirname, "..", ".env"),
+  path.join(__dirname, "../..", ".env"),
+  path.join(process.cwd(), "..", ".env"),
+  path.join(process.cwd(), "../..", ".env"),
+  ".env",
+  "../.env",
+  "../../.env",
   "/.env",
   "./.env"
 ];
 
 let loadedEnv = false;
+let verifiedPath = "";
+
+console.log("🔍 Scanning for .env files to load system credentials...");
 for (const envPath of envPaths) {
   try {
-    if (fs.existsSync(envPath)) {
-      console.log(`📝 Found .env file at '${envPath}'. Parsing and overriding environment variables...`);
-      const envContent = fs.readFileSync(envPath, "utf-8");
+    const resolvedPath = path.resolve(envPath);
+    if (fs.existsSync(resolvedPath)) {
+      console.log(`📝 Yes! Found .env file at defined path: '${envPath}' (Resolved: '${resolvedPath}')`);
+      const envContent = fs.readFileSync(resolvedPath, "utf-8");
       const envConfig = dotenv.parse(envContent);
+      
       for (const key in envConfig) {
         process.env[key] = envConfig[key];
-        console.log(`   └─ Overrode process.env.${key} = ${key === 'DB_PASSWORD' ? '********' : envConfig[key]}`);
+        const displayValue = key === "DB_PASSWORD" ? "********" : envConfig[key];
+        console.log(`   └─ process.env.${key} = "${displayValue}"`);
       }
       loadedEnv = true;
-      break;
+      verifiedPath = resolvedPath;
+      break; 
     }
   } catch (err: any) {
-    console.warn(`⚠️ Failed to parse env at ${envPath}:`, err.message);
+    console.warn(`⏳ Issue trying to examine env at ${envPath}:`, err.message);
   }
 }
 
 if (!loadedEnv) {
-  console.warn("⚠️ No .env file could be matched in expected paths. Falling back to standard dotenv config.");
-  dotenv.config();
+  console.warn("⚠️ No explicit .env file found in scan sequence. Triggering standard dotenv.config() fallback...");
+  const standardConfig = dotenv.config();
+  if (standardConfig.parsed) {
+    console.log("🟢 Standard dotenv.config() loaded successfully!");
+    for (const key in standardConfig.parsed) {
+      const displayValue = key === "DB_PASSWORD" ? "********" : standardConfig.parsed[key];
+      console.log(`   └─ [standard] process.env.${key} = "${displayValue}"`);
+    }
+    loadedEnv = true;
+  } else {
+    console.error("🔴 Environment warning: Dotenv failed to parse any system .env config!");
+  }
 }
+
+// Ensure database credentials don't have secondary code-fallback options - must be read strictly from the loaded env setup:
+console.log("\n📡 Active environment variables for database:");
+console.log(` - DB_HOST: "${process.env.DB_HOST || "NOT DEFINED"}"`);
+console.log(` - DB_USER: "${process.env.DB_USER || "NOT DEFINED"}"`);
+console.log(` - DB_PASSWORD: "${process.env.DB_PASSWORD ? "******** (DEFINED)" : "NOT DEFINED"}"`);
+console.log(` - DB_NAME: "${process.env.DB_NAME || "NOT DEFINED"}"`);
+console.log(` - DB_PORT: "${process.env.DB_PORT || "3306 (DEFAULT)"}"`);
+console.log("=========================================\n");
 
 import express from "express";
 import { createServer as createViteServer } from "vite";
