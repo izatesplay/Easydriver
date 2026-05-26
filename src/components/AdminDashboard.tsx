@@ -1787,8 +1787,8 @@ export const AdminDashboard: React.FC = () => {
                               connected: false,
                               mode: "فایل محلی پشتیبان (Local JSON Backup)",
                               error: err.message || "پینگ پاسخ‌دهی ناموفق بود.",
-                              host: "localhost",
-                              database: "easydri1_mmd",
+                              host: dbInfo?.host || "تعریف نشده",
+                              database: dbInfo?.database || "تعریف نشده",
                               probeLog: `اتصال غیرممکن است: ${err.message}`,
                               timestamp: new Date().toLocaleTimeString('fa-IR')
                             } as any);
