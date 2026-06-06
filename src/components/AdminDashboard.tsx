@@ -66,6 +66,7 @@ export const AdminDashboard: React.FC = () => {
     host: string;
     database: string;
     probeLog: string;
+    timestamp?: string;
   } | null>(null);
 
   React.useEffect(() => {
@@ -139,7 +140,7 @@ export const AdminDashboard: React.FC = () => {
           ...r,
           status: newStatus,
           isApproved: true,
-          lastUpdatedDate: new Date().toISOString()
+          updatedDate: new Date().toISOString()
         });
       }
     });
@@ -351,7 +352,7 @@ export const AdminDashboard: React.FC = () => {
       }
       rows = targetRequests.map(r => [
         r.id,
-        r.fullName || r.customerName || 'بدون نام',
+        r.fullName || 'بدون نام',
         r.phone || '',
         SERVICE_LABELS[r.serviceType] || r.serviceType,
         PRIORITY_LABELS[r.priority] || r.priority,
@@ -388,7 +389,7 @@ export const AdminDashboard: React.FC = () => {
       const targetTickets = reportTicketStatus === 'all' ? tickets : tickets.filter(t => t.status === reportTicketStatus);
       rows = targetTickets.map(t => [
         t.id,
-        t.fullName || t.createdBy || 'مشتری اِیزی درایور',
+        t.userName || t.createdBy || 'مشتری اِیزی درایور',
         t.subject,
         TICKET_CATEGORY_LABELS[t.category] || t.category,
         PRIORITY_LABELS[t.priority] || t.priority,
@@ -2529,7 +2530,7 @@ export const AdminDashboard: React.FC = () => {
                               {printedRequests.map(r => (
                                 <tr key={r.id} className="hover:bg-slate-50/50">
                                   <td className="border border-slate-300 p-2 font-mono">#{r.id}</td>
-                                  <td className="border border-slate-300 p-2">{r.fullName || r.customerName}</td>
+                                  <td className="border border-slate-300 p-2">{r.fullName}</td>
                                   <td className="border border-slate-300 p-2">{SERVICE_LABELS[r.serviceType]}</td>
                                   <td className="border border-slate-300 p-2">{PRIORITY_LABELS[r.priority]}</td>
                                   <td className="border border-slate-300 p-2">{STATUS_LABELS[r.status]}</td>
@@ -2591,7 +2592,7 @@ export const AdminDashboard: React.FC = () => {
                             {tickets.map(t => (
                               <tr key={t.id}>
                                 <td className="border border-slate-300 p-2">{t.subject}</td>
-                                <td className="border border-slate-300 p-2">{t.fullName || t.createdBy}</td>
+                                <td className="border border-slate-300 p-2">{t.userName || t.createdBy}</td>
                                 <td className="border border-slate-300 p-2">{TICKET_CATEGORY_LABELS[t.category]}</td>
                                 <td className="border border-slate-300 p-2">{PRIORITY_LABELS[t.priority]}</td>
                                 <td className="border border-slate-300 p-2">{TICKET_STATUS_LABELS[t.status]}</td>
@@ -2765,7 +2766,7 @@ export const AdminDashboard: React.FC = () => {
                   {printedRequests.map((r, i) => (
                     <tr key={r.id}>
                       <td className="border border-slate-400 p-2 font-mono">#{r.id}</td>
-                      <td className="border border-slate-400 p-2">{r.fullName || r.customerName || 'مشتری بدون نام'}</td>
+                      <td className="border border-slate-400 p-2">{r.fullName || 'مشتری بدون نام'}</td>
                       <td className="border border-slate-400 p-2 font-mono">{r.phone || 'فاقد شماره'}</td>
                       <td className="border border-slate-400 p-2">{SERVICE_LABELS[r.serviceType]}</td>
                       <td className="border border-slate-400 p-2">{PRIORITY_LABELS[r.priority]}</td>
@@ -2835,7 +2836,7 @@ export const AdminDashboard: React.FC = () => {
                 {(reportTicketStatus === 'all' ? tickets : tickets.filter(t => t.status === reportTicketStatus)).map((t, i) => (
                   <tr key={t.id}>
                     <td className="border border-slate-400 p-2 font-mono">{i + 1}</td>
-                    <td className="border border-slate-400 p-2">{t.fullName || t.createdBy}</td>
+                    <td className="border border-slate-400 p-2">{t.userName || t.createdBy}</td>
                     <td className="border border-slate-400 p-2">{t.subject}</td>
                     <td className="border border-slate-400 p-2">{TICKET_CATEGORY_LABELS[t.category]}</td>
                     <td className="border border-slate-400 p-2">{PRIORITY_LABELS[t.priority]}</td>

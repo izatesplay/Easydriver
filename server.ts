@@ -1,6 +1,11 @@
 import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // Extremely robust .env lookups supporting child/parent, process.cwd(), and absolute paths for cPanel / DirectAdmin / Passenger
 const envPaths = [
@@ -68,7 +73,6 @@ console.log(` - DB_PORT: "${process.env.DB_PORT || "3306 (DEFAULT)"}"`);
 console.log("=========================================\n");
 
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import mysql from "mysql2/promise";
 import http from "http";
 import { WebSocketServer, WebSocket } from "ws";
@@ -1635,6 +1639,7 @@ wss.on("connection", (ws: any) => {
 // Vite Server Configuration
 async function initializeVite() {
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",

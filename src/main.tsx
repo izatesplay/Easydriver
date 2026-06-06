@@ -1,4 +1,4 @@
-import React, { Component, StrictMode } from 'react';
+import * as React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
@@ -84,23 +84,21 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-class SafeErrorBoundary extends Component<any, any> {
-  state: any = { hasError: false, error: null };
-  props: any;
-  constructor(props: any) {
+class SafeErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: Error | null }> {
+  constructor(props: { children: React.ReactNode }) {
     super(props);
-    this.props = props;
+    this.state = { hasError: false, error: null };
   }
 
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+  static getDerivedStateFromError(error: Error) {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+  override componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error("React ErrorBoundary caught an error: ", error, errorInfo);
   }
 
-  render() {
+  override render() {
     if (this.state.hasError) {
       return (
         <div className="flex flex-col items-center justify-center min-h-screen bg-[#090d16] text-[#f1f5f9] p-8 font-sans" dir="rtl">
@@ -131,9 +129,9 @@ class SafeErrorBoundary extends Component<any, any> {
 }
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>
+  <React.StrictMode>
     <SafeErrorBoundary>
       <App />
     </SafeErrorBoundary>
-  </StrictMode>
+  </React.StrictMode>
 );

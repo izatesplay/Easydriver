@@ -16,7 +16,7 @@ interface AppContextProps {
   updateTicket: (ticket: Ticket) => void;
   addTicketMessage: (ticketId: string, message: string, senderRole?: UserRole) => void;
   reviews: Review[];
-  addReview: (review: Omit<Review, 'id' | 'createdDate' | 'updatedDate' | 'createdBy' | 'isApproved'>) => Review;
+  addReview: (review: Omit<Review, 'id' | 'createdDate' | 'updatedDate' | 'createdBy' | 'isApproved'> & { isApproved?: boolean }) => Review;
   updateReview: (review: Review) => void;
   technicians: Technician[];
   addTechnician: (tech: Omit<Technician, 'id' | 'createdDate' | 'updatedDate' | 'createdBy'> & { id?: string }) => void;
@@ -557,11 +557,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Reviews functions
-  const addReview = (reviewData: Omit<Review, 'id' | 'createdDate' | 'updatedDate' | 'createdBy' | 'isApproved'>) => {
+  const addReview = (reviewData: Omit<Review, 'id' | 'createdDate' | 'updatedDate' | 'createdBy' | 'isApproved'> & { isApproved?: boolean }) => {
     const newReview: Review = {
+      isApproved: false, // Default pending review approval
       ...reviewData,
       id: `rev-${Date.now()}`,
-      isApproved: false, // Default pending review approval
       createdDate: new Date().toISOString(),
       updatedDate: new Date().toISOString(),
       createdBy: currentUser?.id || 'anonymous',
