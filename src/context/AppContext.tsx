@@ -18,6 +18,7 @@ interface AppContextProps {
   reviews: Review[];
   addReview: (review: Omit<Review, 'id' | 'createdDate' | 'updatedDate' | 'createdBy' | 'isApproved'> & { isApproved?: boolean }) => Review;
   updateReview: (review: Review) => void;
+  deleteReview: (id: string) => void;
   technicians: Technician[];
   addTechnician: (tech: Omit<Technician, 'id' | 'createdDate' | 'updatedDate' | 'createdBy'> & { id?: string }) => void;
   updateTechnician: (tech: Technician) => void;
@@ -69,12 +70,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [toasts, setToasts] = useState<any[]>([]);
   const wsRef = useRef<any>(null);
+  
+  // Ref to track if fresh server data has already loaded, avoiding cache overwrite race condition
+  const isFreshLoadedRef = useRef({ requests: false, tickets: false, reviews: false });
 
   // Load initial cache from IndexedDB for standard data (speed & offline-capability)
   useEffect(() => {
     getStoreData<Request>('requests')
       .then(cached => {
-        if (cached && cached.length > 0) {
+        if (cached && cached.length > 0 && !isFreshLoadedRef.current.requests) {
           setRequests(cached);
         }
       })
@@ -82,7 +86,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     getStoreData<Ticket>('tickets')
       .then(cached => {
-        if (cached && cached.length > 0) {
+        if (cached && cached.length > 0 && !isFreshLoadedRef.current.tickets) {
           setTickets(cached);
         }
       })
@@ -90,7 +94,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     getStoreData<Review>('reviews')
       .then(cached => {
-        if (cached && cached.length > 0) {
+        if (cached && cached.length > 0 && !isFreshLoadedRef.current.reviews) {
           setReviews(cached);
         }
       })
@@ -123,6 +127,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .then(r => r.json())
       .then(data => {
         if (Array.isArray(data)) {
+          isFreshLoadedRef.current.requests = true;
           setRequests(data);
           saveStoreData('requests', data);
         }
@@ -134,6 +139,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .then(r => r.json())
       .then(data => {
         if (Array.isArray(data)) {
+          isFreshLoadedRef.current.tickets = true;
           setTickets(data);
           saveStoreData('tickets', data);
         }
@@ -145,6 +151,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .then(r => r.json())
       .then(data => {
         if (Array.isArray(data)) {
+          isFreshLoadedRef.current.reviews = true;
           setReviews(data);
           saveStoreData('reviews', data);
         }
@@ -598,6 +605,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     .catch(err => console.error("Put review sync err:", err));
   };
 
+  const deleteReview = (id: string) => {
+    // Optimistic Update
+    setReviews(prev => prev.filter(r => r.id !== id));
+
+    // DB DELETE
+    fetch(`/api/reviews/${id}`, {
+      method: "DELETE"
+    })
+    .then(() => loadFreshData())
+    .catch(err => console.error("Delete review sync err:", err));
+  };
+
   // Technicians functions
   const addTechnician = (techData: Omit<Technician, 'id' | 'createdDate' | 'updatedDate' | 'createdBy'> & { id?: string }) => {
     const techId = techData.id || `tech-${Date.now()}`;
@@ -666,6 +685,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       reviews,
       addReview,
       updateReview,
+      deleteReview,
       technicians,
       addTechnician,
       updateTechnician,

@@ -19,6 +19,7 @@ export const AdminDashboard: React.FC = () => {
     addTicketMessage,
     reviews,
     updateReview,
+    deleteReview,
     technicians,
     addTechnician,
     updateTechnician,
@@ -453,10 +454,7 @@ export const AdminDashboard: React.FC = () => {
 
   // Delete customer review
   const handleDeleteReview = (id: string) => {
-    const freshList = reviews.filter(r => r.id !== id);
-    localStorage.setItem('ed_reviews', JSON.stringify(freshList));
-    // Soft sync is handled by reload, or context action if available
-    window.location.reload();
+    deleteReview(id);
   };
 
   // Replying to a customer ticket

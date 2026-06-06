@@ -1354,6 +1354,24 @@ app.put("/api/reviews/:id", async (req, res) => {
   res.json({ success: true });
 });
 
+app.delete("/api/reviews/:id", async (req, res) => {
+  const { id } = req.params;
+  const pool = await getMySQLPool();
+  if (pool) {
+    try {
+      await pool.query("DELETE FROM `reviews` WHERE `id` = ?", [id]);
+      return res.json({ success: true });
+    } catch (err) {
+      console.error("MySQL delete review failed:", err);
+    }
+  }
+
+  const local = readLocalJSON();
+  local.reviews = local.reviews.filter(r => r.id !== id);
+  writeLocalJSON(local);
+  res.json({ success: true });
+});
+
 // 4. TECHNICIANS APIs
 app.get("/api/technicians", async (req, res) => {
   const pool = await getMySQLPool();

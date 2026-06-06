@@ -171,7 +171,13 @@ export const TechnicianDashboard: React.FC = () => {
   // Filter tasks assigned to this technician
   // Both: check if assignedToId matches currentUser.id
   // To keep it comprehensive for the demo, if no task is specifically assigned, let also show tasks that are assigned to 'tech-1' (as that's our default mock technician Novid)
-  const myTasks = currentUser ? requests.filter(r => r.assignedToId === currentUser.id || (!r.assignedToId && currentUser.id === 'tech-1')) : [];
+  const myTasks = currentUser 
+    ? requests.filter(r => {
+        const assignedId = r.assignedToId?.toString().trim();
+        const currentId = currentUser.id?.toString().trim();
+        return assignedId === currentId || (!r.assignedToId && currentId === 'tech-1');
+      }) 
+    : [];
 
   const pendingTasks = myTasks.filter(t => t.status === 'assigned' || t.status === 'approved').length;
   const activeTasks = myTasks.filter(t => t.status === 'in_progress').length;
