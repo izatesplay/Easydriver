@@ -182,6 +182,7 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, setActiveTab }) => {
     if (signupRole === 'technician') {
       // Register in technicians collection as inactive
       addTechnician({
+        id: newRegisteredId,
         fullName: fullName.trim(),
         phone: phone.trim(),
         email: email.trim().toLowerCase(),

@@ -12,6 +12,7 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { Auth } from './components/Auth';
 import { TechnicianDashboard } from './components/TechnicianDashboard';
 import { NotificationToasts } from './components/NotificationToasts';
+import { Preloader } from './components/Preloader';
 import { motion, AnimatePresence } from 'motion/react';
 import { useRenderTracker } from './utils/indexedDB';
 
@@ -19,6 +20,7 @@ function AppContent() {
   useRenderTracker("توسعه پروژه (App)");
   const [activeTab, setActiveTab] = useState<string>('home');
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  const [isAppLoading, setIsAppLoading] = useState<boolean>(true);
 
   const getActiveView = () => {
     switch (activeTab) {
@@ -57,34 +59,50 @@ function AppContent() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen font-sans bg-slate-50 antialiased" dir="rtl">
-      
-      {/* 1. Header Navigation elements */}
-      <Header activeTab={activeTab} setActiveTab={setActiveTab} />
-
-      {/* 2. Transitioning Core Contents */}
-      <main className="grow flex flex-col">
-        <AnimatePresence mode="wait">
+    <>
+      <AnimatePresence>
+        {isAppLoading && (
           <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.18 }}
-            className="grow flex flex-col"
+            key="preloader"
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0, scale: 0.98, filter: 'blur(5px)' }}
+            transition={{ duration: 0.45, ease: "easeInOut" }}
+            className="fixed inset-0 z-50 pointer-events-auto"
           >
-            {getActiveView()}
+            <Preloader onComplete={() => setIsAppLoading(false)} />
           </motion.div>
-        </AnimatePresence>
-      </main>
+        )}
+      </AnimatePresence>
 
-      {/* 3. Footer Segment */}
-      <Footer setActiveTab={setActiveTab} />
+      <div className="flex flex-col min-h-screen font-sans bg-slate-50 antialiased" dir="rtl">
+        
+        {/* 1. Header Navigation elements */}
+        <Header activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      {/* 5. Floating real-time slide-in toasts notification stack */}
-      <NotificationToasts />
+        {/* 2. Transitioning Core Contents */}
+        <main className="grow flex flex-col">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.18 }}
+              className="grow flex flex-col"
+            >
+              {getActiveView()}
+            </motion.div>
+          </AnimatePresence>
+        </main>
 
-    </div>
+        {/* 3. Footer Segment */}
+        <Footer setActiveTab={setActiveTab} />
+
+        {/* 5. Floating real-time slide-in toasts notification stack */}
+        <NotificationToasts />
+
+      </div>
+    </>
   );
 }
 

@@ -19,7 +19,7 @@ interface AppContextProps {
   addReview: (review: Omit<Review, 'id' | 'createdDate' | 'updatedDate' | 'createdBy' | 'isApproved'>) => Review;
   updateReview: (review: Review) => void;
   technicians: Technician[];
-  addTechnician: (tech: Omit<Technician, 'id' | 'createdDate' | 'updatedDate' | 'createdBy'>) => void;
+  addTechnician: (tech: Omit<Technician, 'id' | 'createdDate' | 'updatedDate' | 'createdBy'> & { id?: string }) => void;
   updateTechnician: (tech: Technician) => void;
   deleteTechnician: (id: string) => void;
   notifications: Notification[];
@@ -599,10 +599,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Technicians functions
-  const addTechnician = (techData: Omit<Technician, 'id' | 'createdDate' | 'updatedDate' | 'createdBy'>) => {
+  const addTechnician = (techData: Omit<Technician, 'id' | 'createdDate' | 'updatedDate' | 'createdBy'> & { id?: string }) => {
+    const techId = techData.id || `tech-${Date.now()}`;
     const newTech: Technician = {
       ...techData,
-      id: `tech-${Date.now()}`,
+      id: techId,
       createdDate: new Date().toISOString(),
       updatedDate: new Date().toISOString(),
       createdBy: currentUser?.id || 'admin-1',

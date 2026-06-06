@@ -91,6 +91,7 @@ export const AdminDashboard: React.FC = () => {
   const [techSpecialty, setTechSpecialty] = useState<TechnicianSpecialty>('all');
   const [techIsActive, setTechIsActive] = useState(true);
   const [techCertificationLevel, setTechCertificationLevel] = useState<'Junior' | 'Senior' | 'Expert'>('Junior');
+  const [techPassword, setTechPassword] = useState('');
 
   // Expanded editor states for requests, tickets
   const [selectedRequestIds, setSelectedRequestIds] = useState<string[]>([]);
@@ -218,38 +219,81 @@ export const AdminDashboard: React.FC = () => {
     e.preventDefault();
     if (!techName.trim() || !techPhone.trim()) return;
 
+    const registered = JSON.parse(localStorage.getItem('ed_registered_users') || '[]');
+
     if (editingTechId) {
       // Edit mode
       const existing = technicians.find(t => t.id === editingTechId);
       if (existing) {
         updateTechnician({
           ...existing,
-          fullName: techName,
-          phone: techPhone,
-          email: techEmail || undefined,
+          fullName: techName.trim(),
+          phone: techPhone.trim(),
+          email: techEmail.trim() || undefined,
           specialty: techSpecialty,
           isActive: techIsActive,
           certificationLevel: techCertificationLevel,
         });
+
+        // Sync with registered users
+        const matchedIdx = registered.findIndex((u: any) => u.id === editingTechId);
+        if (matchedIdx >= 0) {
+          registered[matchedIdx].fullName = techName.trim();
+          registered[matchedIdx].phone = techPhone.trim();
+          registered[matchedIdx].email = techEmail.trim().toLowerCase() || `${editingTechId}@easydriver.ir`;
+          registered[matchedIdx].isActive = techIsActive;
+          if (techPassword.trim() !== '') {
+            registered[matchedIdx].password = techPassword.trim();
+          }
+        } else {
+          // Create entry in localStorage registered list if it doesn't exist
+          registered.push({
+            id: editingTechId,
+            fullName: techName.trim(),
+            email: techEmail.trim().toLowerCase() || `${editingTechId}@easydriver.ir`,
+            phone: techPhone.trim(),
+            role: 'technician',
+            password: techPassword.trim() || '123',
+            isActive: techIsActive,
+            avatarUrl: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(techName.trim())}`,
+          });
+        }
+        localStorage.setItem('ed_registered_users', JSON.stringify(registered));
       }
       setEditingTechId(null);
     } else {
       // Add mode
+      const generatedTechId = `tech-${Date.now()}`;
       addTechnician({
-        fullName: techName,
-        phone: techPhone,
-        email: techEmail || undefined,
+        id: generatedTechId,
+        fullName: techName.trim(),
+        phone: techPhone.trim(),
+        email: techEmail.trim() || undefined,
         specialty: techSpecialty,
         isActive: techIsActive,
         completedTasks: 0,
         certificationLevel: techCertificationLevel,
       });
+
+      // Create new account in localStorage registered list
+      registered.push({
+        id: generatedTechId,
+        fullName: techName.trim(),
+        email: techEmail.trim().toLowerCase() || `${generatedTechId}@easydriver.ir`,
+        phone: techPhone.trim(),
+        role: 'technician',
+        password: techPassword.trim() || '123',
+        isActive: techIsActive,
+        avatarUrl: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(techName.trim())}`,
+      });
+      localStorage.setItem('ed_registered_users', JSON.stringify(registered));
     }
 
     // Reset fields
     setTechName('');
     setTechPhone('');
     setTechEmail('');
+    setTechPassword('');
     setTechSpecialty('all');
     setTechIsActive(true);
     setTechCertificationLevel('Junior');
@@ -265,6 +309,18 @@ export const AdminDashboard: React.FC = () => {
     setTechSpecialty(tech.specialty);
     setTechIsActive(tech.isActive);
     setTechCertificationLevel(tech.certificationLevel || 'Junior');
+
+    // Prefill password if available in local storage
+    const registered = JSON.parse(localStorage.getItem('ed_registered_users') || '[]');
+    const matched = registered.find((u: any) => u.id === tech.id);
+    if (matched && matched.password) {
+      setTechPassword(matched.password);
+    } else {
+      // Check if it matches one of initial technicians
+      if (tech.id === 'tech-1') setTechPassword('123');
+      else setTechPassword('123'); // Default fallback
+    }
+
     setShowAddTechForm(true);
   };
 
@@ -1024,58 +1080,59 @@ export const AdminDashboard: React.FC = () => {
                                     </div>
                                   </div>
                                 </div>
-
-                                <div className="space-y-1">
-                                  <label className="text-[10px] font-bold text-slate-400 block">زمانبندی اتصال (ترجیحی):</label>
-                                  <input
-                                    type="datetime-local"
-                                    id={`scheduled-date-${req.id}`}
-                                    defaultValue={req.scheduledDate || ''}
-                                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-400"
-                                  />
-                                </div>
                               </div>
 
-                              {/* 3. Notes block */}
-                              <div className="space-y-3">
-                                <h4 className="font-bold text-slate-800 border-b border-slate-100 pb-1.5">یادداشت کارشناسان و مدیریت</h4>
-                                <textarea
-                                  value={adminNotesInput}
-                                  onChange={(e) => setAdminNotesInput(e.target.value)}
-                                  placeholder="محل یادداشت آی‌دی انی‌دسک، کارهای انجام شده و تذکرات لایسنس..."
-                                  rows={3}
-                                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl outline-none"
-                                />
-                              </div>
-
-                            </div>
-
-                            {/* Customer Desktop documentation & Time Logs row */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-3 border-t border-slate-150">
-                              {/* Desktop screenshots list */}
-                              <div className="bg-white border border-slate-200 p-4 rounded-xl space-y-2 text-right">
-                                <h5 className="font-extrabold text-[11px] text-slate-800 flex items-center gap-1.5 pb-2 border-b border-slate-100">
-                                  <Camera className="h-4 w-4 text-purple-600" />
-                                  <span>مستندات محیط دسکتاپ مشتری</span>
-                                </h5>
-                                {!req.desktopScreenshots || req.desktopScreenshots.length === 0 ? (
-                                  <p className="text-[10px] text-slate-400 py-4 text-center">عکسی توسط تکنسین در حین کار ثبت نشده است.</p>
-                                ) : (
-                                  <div className="grid grid-cols-3 gap-2">
-                                    {req.desktopScreenshots.map((scr, sIdx) => (
-                                      <div key={sIdx} className="group relative border border-slate-200 rounded-lg overflow-hidden h-14 bg-slate-50">
-                                        <img
-                                          src={scr}
-                                          alt="Desktop screenshot"
-                                          className="w-full h-full object-cover cursor-pointer hover:scale-110 transition-transform duration-300"
-                                          onClick={() => setSelectedFullScreenImage(scr)}
-                                        />
-                                        <span className="absolute bottom-0 inset-x-0 bg-slate-900/60 text-[8px] text-white text-center font-mono py-0.5">#{sIdx + 1}</span>
-                                      </div>
-                                    ))}
+                                {/* 3. Notes block & Scheduled connection */}
+                                <div className="space-y-3">
+                                  <h4 className="font-bold text-slate-800 border-b border-slate-100 pb-1.5">یادداشت کارشناسان و مدیریت</h4>
+                                  <div className="space-y-2">
+                                    <textarea
+                                      value={adminNotesInput}
+                                      onChange={(e) => setAdminNotesInput(e.target.value)}
+                                      placeholder="محل یادداشت آی‌دی انی‌دسک، کارهای انجام شده و تذکرات لایسنس..."
+                                      rows={3}
+                                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl outline-none"
+                                    />
                                   </div>
-                                )}
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-slate-400 block">زمانبندی اتصال (ترجیحی):</label>
+                                    <input
+                                      type="datetime-local"
+                                      id={`scheduled-date-${req.id}`}
+                                      defaultValue={req.scheduledDate || ''}
+                                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-400"
+                                    />
+                                  </div>
+                                </div>
+
                               </div>
+
+                              {/* Customer Desktop documentation & Time Logs row */}
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-3 border-t border-slate-150">
+                                {/* Desktop screenshots list */}
+                                <div className="bg-white border border-slate-200 p-4 rounded-xl space-y-2 text-right">
+                                  <h5 className="font-extrabold text-[11px] text-slate-800 flex items-center gap-1.5 pb-2 border-b border-slate-100">
+                                    <Camera className="h-4 w-4 text-purple-600" />
+                                    <span>مستندات محیط دسکتاپ مشتری</span>
+                                  </h5>
+                                  {!req.desktopScreenshots || req.desktopScreenshots.length === 0 ? (
+                                    <p className="text-[10px] text-slate-400 py-4 text-center">عکسی توسط تکنسین در حین کار ثبت نشده است.</p>
+                                  ) : (
+                                    <div className="grid grid-cols-3 gap-2">
+                                      {req.desktopScreenshots.map((scr, sIdx) => (
+                                        <div key={sIdx} className="group relative border border-slate-200 rounded-lg overflow-hidden h-14 bg-slate-50">
+                                          <img
+                                            src={scr}
+                                            alt="Desktop screenshot"
+                                            className="w-full h-full object-cover cursor-pointer hover:scale-110 transition-transform duration-300"
+                                            onClick={() => setSelectedFullScreenImage(scr)}
+                                          />
+                                          <span className="absolute bottom-0 inset-x-0 bg-slate-900/60 text-[8px] text-white text-center font-mono py-0.5">#{sIdx + 1}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
 
                               {/* Time spent logging details */}
                               <div className="bg-white border border-slate-200 p-4 rounded-xl space-y-2 text-right">
@@ -1121,66 +1178,61 @@ export const AdminDashboard: React.FC = () => {
                                     assignedToId: selectTechId || undefined,
                                     assignedToName: technicians.find(t => t.id === selectTechId)?.fullName || undefined,
                                     scheduledDate: selectSchedule || undefined,
-                                    adminNotes: adminNotesInput || undefined,
-                                    isApproved: selectStatus !== 'pending',
-                                    approvedAt: !req.isApproved && selectStatus !== 'pending' ? new Date().toISOString() : req.approvedAt,
+                                    updatedDate: new Date().toISOString()
                                   };
                                   updateRequest(updatedReq);
-                                  setExpandedRequestId(null);
+                                  alert('تغییرات با موفقیت ذخیره شد.');
                                 }}
-                                className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold flex items-center gap-1.5 cursor-pointer"
+                                className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white leading-none rounded-lg font-bold text-xs cursor-pointer"
                               >
-                                <Save className="h-4 w-4" />
-                                <span>ثبت کل تغییرات</span>
+                                ثبت بروزرسانی
                               </button>
                             </div>
 
                           </div>
                         )}
-
                       </div>
                     );
                   })}
                 </div>
               )}
-
             </div>
           )}
 
-          {/* TAB 3: TECHNICIANS MANAGER (CRUD) */}
+          {/* TAB 3: TECHNICIANS CRUD */}
           {adminTab === 'technicians' && (
-            <div className="space-y-6">
-              
-              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                <h3 className="font-extrabold text-sm sm:text-base text-slate-850">لیست همکاران و تکنسین‌های مجرب</h3>
+            <div className="space-y-4 text-right">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-2 border-b border-slate-200 font-sans">
+                <h3 className="font-extrabold text-sm sm:text-base text-slate-850">مدیریت همکاران و تکنسین‌های ریموت</h3>
                 <button
                   onClick={() => {
                     setEditingTechId(null);
                     setTechName('');
                     setTechPhone('');
                     setTechEmail('');
+                    setTechPassword('');
                     setTechSpecialty('all');
                     setTechIsActive(true);
+                    setTechCertificationLevel('Junior');
                     setShowAddTechForm(!showAddTechForm);
                   }}
-                  className="px-3 py-1.5 bg-rose-50/50 hover:bg-rose-50 text-rose-700 border border-rose-100/50 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl flex items-center gap-2 cursor-pointer transition-colors shadow-sm"
                 >
-                  <UserPlus className="h-4 w-4" />
-                  <span>{showAddTechForm ? 'لغو فرم' : 'افزودن همکار جدید'}</span>
+                  <Plus className="h-4 w-4" />
+                  <span>{showAddTechForm ? 'بستن فرم ثبت' : 'اضافه کردن تکنسین جدید'}</span>
                 </button>
               </div>
 
-              {/* Add/Edit Form Sheet (conditional) */}
               {showAddTechForm && (
-                <div className="bg-white rounded-2xl border border-slate-200 p-5 text-right">
-                  <form onSubmit={handleSaveTechnician} className="space-y-4">
-                    <h4 className="font-extrabold text-slate-850 text-xs border-b border-slate-100 pb-2">
-                      {editingTechId ? 'ویرایش اطلاعات پرسنل' : 'درج مشخصات تکنسین جدید'}
-                    </h4>
+                <div className="bg-slate-50 border border-slate-200 p-5 rounded-2xl space-y-4">
+                  <h4 className="font-extrabold text-xs text-indigo-950">
+                    {editingTechId ? 'فرم ویرایش اطلاعات و کلمه عبور همکار' : 'فرم ثبت نام همکار فنی جدید'}
+                  </h4>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
+                  <form onSubmit={handleSaveTechnician} className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-6 gap-4">
                       
-                      {/* Full Name */}
+                      {/* Name */}
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-500 block">نام و نام خانوادگی</label>
                         <input
@@ -1188,8 +1240,8 @@ export const AdminDashboard: React.FC = () => {
                            required
                            value={techName}
                            onChange={(e) => setTechName(e.target.value)}
-                           placeholder="مثال: مهندس رادمنش"
-                           className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none"
+                           placeholder="مثال: مهندس عادلی"
+                           className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs outline-none"
                         />
                       </div>
 
@@ -1201,8 +1253,8 @@ export const AdminDashboard: React.FC = () => {
                            required
                            value={techPhone}
                            onChange={(e) => setTechPhone(e.target.value)}
-                           placeholder="مثال: 09123456789"
-                           className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-left text-xs outline-none font-mono"
+                           placeholder="مثال: 09121234567"
+                           className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-left text-xs outline-none font-mono"
                         />
                       </div>
 
@@ -1214,17 +1266,17 @@ export const AdminDashboard: React.FC = () => {
                            value={techEmail}
                            onChange={(e) => setTechEmail(e.target.value)}
                            placeholder="example@mail.com"
-                           className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-left outline-none font-mono"
+                           className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs text-left outline-none font-mono"
                         />
                       </div>
 
-                      {/* Specialty selection */}
+                      {/* Specialty */}
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-500 block">تخصص اصلی</label>
                         <select
                            value={techSpecialty}
                            onChange={(e) => setTechSpecialty(e.target.value as TechnicianSpecialty)}
-                           className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none"
+                           className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-xs outline-none"
                         >
                           {Object.entries(SPECIALTY_LABELS).map(([key, label]) => (
                             <option key={key} value={key}>{label}</option>
@@ -1232,23 +1284,36 @@ export const AdminDashboard: React.FC = () => {
                         </select>
                       </div>
 
-                      {/* Certification Level Dropdown */}
+                      {/* Certification Level */}
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500 block">سطح گواهی گرید (Certification)</label>
+                        <label className="text-[10px] font-bold text-slate-500 block">سطح گواهی گرید</label>
                         <select
                            value={techCertificationLevel}
                            onChange={(e) => setTechCertificationLevel(e.target.value as 'Junior' | 'Senior' | 'Expert')}
-                           className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none font-bold text-indigo-700"
+                           className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-xs outline-none font-bold text-indigo-700"
                         >
                           <option value="Junior">Junior (جونیور)</option>
                           <option value="Senior">Senior (سینیور)</option>
-                          <option value="Expert">Expert (اکسپرت و حرفه‌ای)</option>
+                          <option value="Expert">Expert (اکسپرت و حرفه ای)</option>
                         </select>
+                      </div>
+
+                      {/* Password */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-indigo-700 block">رمز عبور ورود به سامانه</label>
+                        <input
+                           type="text"
+                           required
+                           value={techPassword}
+                           onChange={(e) => setTechPassword(e.target.value)}
+                           placeholder="مثال: 09121234567"
+                           className="w-full px-3 py-2 bg-white border border-indigo-200 focus:border-indigo-500 rounded-lg text-xs outline-none font-bold text-indigo-900 font-mono"
+                        />
                       </div>
 
                     </div>
 
-                    <div className="flex items-center justify-between border-t border-slate-100 pt-3 flex-wrap gap-2">
+                    <div className="flex items-center justify-between border-t border-slate-150 pt-3 flex-wrap gap-2">
                       <label className="flex items-center gap-1.5 text-[11px] text-slate-500 cursor-pointer">
                         <input
                           type="checkbox"
@@ -1256,20 +1321,21 @@ export const AdminDashboard: React.FC = () => {
                           onChange={(e) => setTechIsActive(e.target.checked)}
                           className="h-4 w-4 accent-rose-600 rounded select-none cursor-pointer"
                         />
-                        <span>این تکنسین آماده انجام کار ریموت است (وضعیت فعال)</span>
+                        <span>تکنسین فعال و آماده پذیرش پروژه ریموت است</span>
                       </label>
 
                       <button
                         type="submit"
                         className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
                       >
-                        {editingTechId ? 'بروزرسانی تغییرات' : 'افزودن همکار به دیتابیس'}
+                        {editingTechId ? 'بروزرسانی تغییرات همکار' : 'ثبت نام و ایجاد حساب'}
                       </button>
                     </div>
 
                   </form>
                 </div>
               )}
+
 
               {/* Grid cards display of Technicians lists */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

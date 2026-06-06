@@ -695,8 +695,14 @@ export const Hero: React.FC<HeroProps> = ({ setActiveTab }) => {
         >
           <h2 className="text-2.5xl sm:text-3xl font-black text-slate-100">نیاز به ارتباط مستقیم و فوری دارید؟</h2>
           <p className="text-xs sm:text-sm text-slate-400 max-w-xl mx-auto leading-relaxed font-normal">
-            مهندسین و پشتیبان‌های اورژانس درایور به صورت برخط و همیشگی آماده پاسخگویی به ابهامات شما هستند. درایور مناسب را پیدا نکرده‌اید؟ سیستم شما صفحه سیاه دارد؟ مکالمه زنده را با ما همین الان شروع کنید.
+            مهندسین و پشتیبان‌های اورژانس درایور به صورت برخط و همیشگی آماده پاسخگویی به ابهامات شما هستند. درایور مناسب را پیدا نکرده‌اید؟ سیستم شما صفحه سیاه دارد؟ مکالمه زنده را با پشتیبانی فنی ما آغاز کنید.
           </p>
+          
+          {/* شماره تماس مستقیم مدیریت و پشتیبانی واحد فنی */}
+          <div className="py-3 flex flex-col sm:flex-row items-center justify-center gap-2 text-indigo-300 font-black text-sm sm:text-base font-mono bg-slate-950/45 rounded-2xl border border-slate-800/80 p-4 max-w-lg mx-auto shadow-inner">
+            <span className="text-slate-350 font-sans text-xs sm:text-sm font-semibold">تلفن تماس مدیریت و بخش فنی (About Us):</span>
+            <span className="hover:text-white transition-colors">۰۹۹۲۱۷۵۸۵۰۵</span>
+          </div>
           
           <div className="flex flex-wrap justify-center gap-4 pt-3">
             <button

@@ -62,6 +62,11 @@ export const Footer: React.FC<FooterProps> = ({ setActiveTab }) => {
                 <span className="font-mono">۰۲۱-۸۸۸۸۴۴۴۴</span>
               </li>
               <li className="flex items-center gap-2 text-slate-400">
+                <Phone className="h-4 w-4 text-indigo-400 shrink-0" />
+                <span>مدیریت فنی: </span>
+                <span className="font-mono text-indigo-300">۰۹۹۲۱۷۵۸۵۰۵</span>
+              </li>
+              <li className="flex items-center gap-2 text-slate-400">
                 <Mail className="h-4 w-4 text-indigo-400 shrink-0" />
                 <span className="font-mono">support@easydriver.ir</span>
               </li>

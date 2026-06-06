@@ -129,6 +129,8 @@ function verify_or_create_tables($mysqli) {
             `phone` VARCHAR(20) NOT NULL,
             `role` ENUM('customer', 'technician', 'admin') NOT NULL DEFAULT 'customer',
             `avatar_url` TEXT NULL,
+            `password` VARCHAR(100) NULL DEFAULT '123',
+            `is_active` TINYINT(1) NOT NULL DEFAULT 1,
             `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
 
@@ -230,6 +232,10 @@ function verify_or_create_tables($mysqli) {
             send_response('error', "خطا در برقراری ساختار پایگاه داده و جدول {$table}: " . $mysqli->error);
         }
     }
+
+    // تضمین وجود ستون‌های رمز عبور و وضعیت فعال در جدول کاربران
+    @$mysqli->query("ALTER TABLE `users` ADD COLUMN `password` VARCHAR(100) NULL DEFAULT '123';");
+    @$mysqli->query("ALTER TABLE `users` ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1;");
 }
 
 // بررسی اکشن درخواستی
@@ -309,7 +315,7 @@ if ($action === 'sync_all') {
     
     try {
         $tables = [
-            'users' => ['id', 'full_name', 'email', 'phone', 'role', 'avatar_url'],
+            'users' => ['id', 'full_name', 'email', 'phone', 'role', 'avatar_url', 'password', 'is_active'],
             'technicians' => ['id', 'full_name', 'phone', 'email', 'specialty', 'is_active', 'completed_tasks', 'created_date', 'updated_date', 'created_by', 'certification_level'],
             'requests' => ['id', 'full_name', 'phone', 'service_type', 'description', 'status', 'priority', 'admin_notes', 'scheduled_date', 'assigned_to_id', 'assigned_to_name', 'is_approved', 'approved_at', 'assigned_at', 'created_date', 'updated_date', 'created_by', 'rating', 'rating_comment', 'rated_at'],
             'reviews' => ['id', 'customer_name', 'rating', 'comment', 'service_type', 'is_approved', 'created_date', 'updated_date', 'created_by', 'technician_id', 'technician_name'],
