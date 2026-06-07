@@ -142,6 +142,7 @@ function verify_or_create_tables($mysqli) {
             `specialty` ENUM('driver_install', 'software_install', 'anydesk_support', 'all') NOT NULL DEFAULT 'all',
             `is_active` TINYINT(1) NOT NULL DEFAULT 1,
             `completed_tasks` INT NOT NULL DEFAULT 0,
+            `points` INT NOT NULL DEFAULT 0,
             `created_date` VARCHAR(100) NOT NULL,
             `updated_date` VARCHAR(100) NOT NULL,
             `created_by` VARCHAR(50) NOT NULL,
