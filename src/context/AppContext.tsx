@@ -103,19 +103,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Watch state changes and synchronize automatically into browser IndexedDB
   useEffect(() => {
-    if (requests && requests.length > 0) {
+    if (requests) {
       saveStoreData('requests', requests).catch(err => console.error("Error writing requests cache:", err));
     }
   }, [requests]);
 
   useEffect(() => {
-    if (tickets && tickets.length > 0) {
+    if (tickets) {
       saveStoreData('tickets', tickets).catch(err => console.error("Error writing tickets cache:", err));
     }
   }, [tickets]);
 
   useEffect(() => {
-    if (reviews && reviews.length > 0) {
+    if (reviews) {
       saveStoreData('reviews', reviews).catch(err => console.error("Error writing reviews cache:", err));
     }
   }, [reviews]);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { Ticket, ChatMessage } from '../types';
-import { ShieldAlert, Key, Send, Inbox, MessageSquare, Laptop, Headset, CornerDownLeft, Sparkles, Smile, RefreshCw, Plus } from 'lucide-react';
+import { ShieldAlert, Key, Send, Inbox, MessageSquare, Laptop, Headset, CornerDownLeft, Sparkles, Smile, RefreshCw, Plus, Paperclip, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface SupportChatProps {
@@ -14,7 +14,51 @@ export const SupportChat: React.FC<SupportChatProps> = ({ selectedTicketId, setS
   const { currentUser, tickets, addTicket, addTicketMessage } = useApp();
   const [typedMessage, setTypedMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeTicket) return;
+
+    setIsUploading(true);
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64Data = reader.result as string;
+        try {
+          const res = await fetch("/api/upload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              fileName: file.name,
+              base64Data: base64Data
+            })
+          });
+          const data = await res.json();
+          if (data.success && data.url) {
+            addTicketMessage(
+              activeTicket.id, 
+              `ATTACHMENT_FILE:${file.name} url:${data.url}\nضمیمه فایل: ${file.name}`, 
+              'customer'
+            );
+          } else {
+            alert("خطا در بارگذاری فایل: " + (data.error || "خطای ناخواسته"));
+          }
+        } catch (err) {
+          console.error("Upload error:", err);
+          alert("خطا در برقراری ارتباط با پورتال بارگذاری سرور.");
+        } finally {
+          setIsUploading(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error("Reader error:", err);
+      setIsUploading(false);
+    }
+  };
 
   // Authenticated guard check
   if (!currentUser) {
@@ -99,6 +143,77 @@ export const SupportChat: React.FC<SupportChatProps> = ({ selectedTicketId, setS
       userEmail: currentUser.email,
     });
     setSelectedTicketId(freshTicket.id);
+  };
+
+  const renderMessageContent = (msgText: string, isMe: boolean) => {
+    const uploadRegex = /\/uploads\/[^\s)"]+/i;
+    const match = msgText.match(uploadRegex);
+    
+    if (match) {
+      const fileUrl = match[0];
+      let displayName = "فایل ضمیمه شده";
+      const nameMatch = msgText.match(/ATTACHMENT_FILE:([^\s]+)/);
+      if (nameMatch) {
+         displayName = nameMatch[1];
+      } else {
+         displayName = fileUrl.split('/').pop()?.split('_')[0] || "فایل";
+      }
+      
+      const isImage = /\.(jpg|jpeg|png|webp|gif)$/i.test(fileUrl);
+      
+      return (
+        <div className="space-y-2">
+          {msgText.includes('\n') && (
+            <p className="whitespace-pre-line border-b border-dashed border-slate-200/50 pb-2 mb-1 opacity-90">
+              {msgText.split('\n')[1]}
+            </p>
+          )}
+          {isImage ? (
+            <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-100 max-w-[240px] shadow-sm">
+              <img 
+                src={fileUrl} 
+                alt={displayName} 
+                className="max-h-48 object-contain w-full cursor-zoom-in hover:brightness-95 transition-all"
+                referrerPolicy="no-referrer"
+                onClick={() => window.open(fileUrl, '_blank')}
+              />
+              <div className={`p-2 text-[10px] ${isMe ? 'bg-slate-900/40 text-slate-100' : 'bg-slate-50 text-slate-500'} flex items-center justify-between gap-2`}>
+                <span className="truncate max-w-[140px] font-mono">{displayName}</span>
+                <a 
+                  href={fileUrl} 
+                  download={displayName}
+                  className="hover:underline font-extrabold text-blue-500 cursor-pointer text-[10px]"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  دانلود
+                </a>
+              </div>
+            </div>
+          ) : (
+            <div className={`flex items-center gap-2.5 p-3 rounded-xl border ${isMe ? 'bg-slate-900/35 border-slate-700/50 text-white' : 'bg-slate-50 border-slate-200 text-slate-800'}`}>
+              <div className="p-2 bg-blue-50 text-blue-600 rounded-lg shrink-0">
+                <Inbox className="h-4 w-4" />
+              </div>
+              <div className="text-right overflow-hidden">
+                <span className="block text-[11px] font-bold truncate max-w-[160px]">{displayName}</span>
+                <a 
+                  href={fileUrl} 
+                  download={displayName}
+                  className="text-[10px] text-blue-500 hover:underline block mt-0.5"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  دریافت مستقیم فایل
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+    
+    return <p className="whitespace-pre-line">{msgText}</p>;
   };
 
   return (
@@ -211,7 +326,7 @@ export const SupportChat: React.FC<SupportChatProps> = ({ selectedTicketId, setS
                               : 'bg-white border border-slate-200 text-slate-800 rounded-bl-none shadow-xxs'
                           }`}
                         >
-                          {msg.message}
+                          {renderMessageContent(msg.message, isMe)}
                         </div>
 
                         {/* Timestamp */}
@@ -246,18 +361,33 @@ export const SupportChat: React.FC<SupportChatProps> = ({ selectedTicketId, setS
 
               {/* Chat Input Area */}
               <form onSubmit={handleSendMessage} className="p-3 border-t border-slate-200 shrink-0 bg-white flex items-center gap-2">
+                <label className="p-3 bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 rounded-2xl cursor-pointer transition-all flex items-center justify-center shrink-0 shadow-sm" title="ارسال فایل ضمیمه">
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={handleFileChange}
+                    disabled={isUploading}
+                    accept="image/*,.pdf,.txt,.zip,.rar"
+                  />
+                  {isUploading ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                  ) : (
+                    <Paperclip className="h-4 w-4" />
+                  )}
+                </label>
+
                 <input
                   type="text"
                   value={typedMessage}
                   onChange={(e) => setTypedMessage(e.target.value)}
                   placeholder="پیام خود را به مهندس پشتیبان بنویسید..."
-                  className="grow px-4 py-3 bg-slate-50 hover:bg-slate-1002 border border-slate-200 rounded-2xl text-xs outline-none focus:bg-white focus:border-blue-600 transition-all font-normal"
+                  className="grow px-4 py-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-2xl text-xs outline-none focus:bg-white focus:border-blue-600 transition-all font-normal"
                 />
                 
                 <button
                   type="submit"
                   disabled={!typedMessage.trim()}
-                  className="p-3 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-100 text-white disabled:text-slate-450 rounded-2xl shrink-0 transition-all cursor-pointer"
+                  className="p-3 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-100 text-white disabled:text-slate-400 rounded-2xl shrink-0 transition-all cursor-pointer"
                 >
                   <Send className="h-4 w-4 rotate-180" />
                 </button>

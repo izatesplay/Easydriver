@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Request, Review, Ticket, Technician, SERVICE_LABELS, STATUS_LABELS, STATUS_COLORS, PRIORITY_LABELS, PRIORITY_COLORS, SPECIALTY_LABELS, TechnicianSpecialty, RequestStatus, RequestPriority, TICKET_CATEGORY_LABELS, TICKET_STATUS_LABELS, TICKET_STATUS_COLORS } from '../types';
-import { ShieldAlert, Key, Grid, Clipboard, Users, Star, MessageSquare, Plus, Edit2, Trash2, CheckCircle2, UserPlus, Info, Save, Clock, X, ChevronDown, ChevronUp, Reply, Sparkles, Database, Server, Globe, FileCode as FileCodeIcon, Trophy, Medal, Printer, FileSpreadsheet as FileDown, UserCheck, Camera, Monitor, Timer, BarChart3, RefreshCw, Play, Activity } from 'lucide-react';
+import { ShieldAlert, Key, Grid, Clipboard, Users, Star, MessageSquare, Plus, Edit2, Trash2, CheckCircle2, UserPlus, Info, Save, Clock, X, ChevronDown, ChevronUp, Reply, Sparkles, Database, Server, Globe, FileCode as FileCodeIcon, Trophy, Medal, Printer, FileSpreadsheet as FileDown, UserCheck, Camera, Monitor, Timer, BarChart3, RefreshCw, Play, Activity, Paperclip, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { calculateTechnicianStats } from '../utils/pointsCalculator';
 import { useRenderTracker } from '../utils/indexedDB';
@@ -107,6 +107,7 @@ export const AdminDashboard: React.FC = () => {
   // Admin reply inputs
   const [adminNotesInput, setAdminNotesInput] = useState('');
   const [ticketReplyInput, setTicketReplyInput] = useState('');
+  const [isAdminUploading, setIsAdminUploading] = useState<Record<string, boolean>>({});
 
   // Statistics summaries calculations
   const totalRequests = requests.length;
@@ -475,6 +476,49 @@ export const AdminDashboard: React.FC = () => {
     setExpandedTicketId(null);
   };
 
+  const handleAdminFileChange = async (e: React.ChangeEvent<HTMLInputElement>, ticketId: string) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsAdminUploading(prev => ({ ...prev, [ticketId]: true }));
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64Data = reader.result as string;
+        try {
+          const res = await fetch("/api/upload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              fileName: file.name,
+              base64Data: base64Data
+            })
+          });
+          const data = await res.json();
+          if (data.success && data.url) {
+            addTicketMessage(
+              ticketId, 
+              `ATTACHMENT_FILE:${file.name} url:${data.url}\nفایل ضمیمه پشتیبان: ${file.name}`, 
+              'admin'
+            );
+          } else {
+            alert("خطا در بارگذاری فایل: " + (data.error || "خطای ناخواسته"));
+          }
+        } catch (err) {
+          console.error("Admin upload error:", err);
+          alert("خطا در ارتباط با سرور چت و آپلود.");
+        } finally {
+          setIsAdminUploading(prev => ({ ...prev, [ticketId]: false }));
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error("Reader error:", err);
+      setIsAdminUploading(prev => ({ ...prev, [ticketId]: false }));
+    }
+  };
+
   // Intelligent recommendation scorer for technicians based on requested specialty, workload and ratings
   const getRecommendations = (req: Request) => {
     return technicians
@@ -548,6 +592,57 @@ export const AdminDashboard: React.FC = () => {
       </div>
     );
   }
+
+  const renderAdminTicketMessage = (msgText: string) => {
+    if (!msgText) return null;
+    const uploadRegex = /\/uploads\/[^\s)"]+/i;
+    const match = msgText.match(uploadRegex);
+    
+    if (match) {
+      const fileUrl = match[0];
+      let displayName = "فایل ضمیمه شده";
+      const nameMatch = msgText.match(/ATTACHMENT_FILE:([^\s]+)/);
+      if (nameMatch) {
+        displayName = nameMatch[1];
+      } else {
+        displayName = fileUrl.split('/').pop()?.split('_')[0] || "فایل";
+      }
+      
+      const isImage = /\.(jpg|jpeg|png|webp|gif)$/i.test(fileUrl);
+      
+      return (
+        <div className="mt-1.5 flex flex-col items-start gap-1 p-2 bg-slate-105 rounded-lg max-w-sm border text-right inline-block" dir="rtl">
+          {msgText.includes('\n') && (
+            <span className="text-[10px] text-slate-500 block mb-1 font-semibold">
+              {msgText.split('\n')[1] || "فایل ضمیمه شده"}
+            </span>
+          )}
+          {isImage ? (
+            <div className="rounded border bg-white overflow-hidden max-w-[160px] shadow-xs">
+              <img 
+                src={fileUrl} 
+                alt={displayName} 
+                className="max-h-24 object-contain w-full cursor-pointer hover:brightness-95 transition-all"
+                referrerPolicy="no-referrer"
+                onClick={() => window.open(fileUrl, '_blank')}
+              />
+              <div className="p-1.5 bg-slate-50 text-[8px] text-slate-400 flex justify-between items-center gap-2 font-mono">
+                <span className="truncate max-w-[90px]">{displayName}</span>
+                <a href={fileUrl} target="_blank" rel="noreferrer" className="text-blue-600 font-extrabold hover:underline">دانلود</a>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-[10px] text-slate-700 bg-white p-1 rounded border">
+              <span className="font-extrabold text-blue-600">📎 فایل:</span>
+              <a href={fileUrl} target="_blank" rel="noreferrer" className="hover:underline font-mono truncate max-w-[130px] font-bold">{displayName}</a>
+            </div>
+          )}
+        </div>
+      );
+    }
+    
+    return <span className="font-normal text-slate-600 mr-1">{msgText}</span>;
+  };
 
   return (
     <div className="font-sans min-h-screen bg-slate-50 py-12" dir="rtl">
@@ -1510,7 +1605,9 @@ export const AdminDashboard: React.FC = () => {
                             {/* Original customer message */}
                             <div className="bg-white p-3.5 border border-slate-100 rounded-xl space-y-1">
                               <span className="text-[10px] text-slate-400 block font-bold">متن پیام ارسالی مشتری:</span>
-                              <p className="text-slate-650 leading-relaxed font-normal">{t.message}</p>
+                              <div className="text-slate-650 leading-relaxed font-normal">
+                                {renderAdminTicketMessage(t.message)}
+                              </div>
                             </div>
 
                             {/* Historic replies display list */}
@@ -1520,11 +1617,13 @@ export const AdminDashboard: React.FC = () => {
                                 
                                 <div className="space-y-2.5 max-h-40 overflow-y-auto p-1 bg-white border border-slate-100 rounded-xl pr-3">
                                   {t.messages.map((m) => (
-                                    <div key={m.id} className="text-[11px] leading-relaxed">
-                                      <strong className={m.senderRole === 'admin' ? 'text-blue-700' : 'text-slate-700'}>
-                                        {m.senderName}:
+                                    <div key={m.id} className="text-[11px] leading-relaxed py-1 border-b border-dashed border-slate-100 last:border-0">
+                                      <strong className={m.senderRole === 'admin' ? 'text-blue-700 font-extrabold' : 'text-indigo-650 font-bold'}>
+                                        {m.senderName} ({m.senderRole === 'admin' ? 'مدیر' : 'کاربر'}):
                                       </strong>
-                                      <span className="font-normal text-slate-600 mr-1">{m.message}</span>
+                                      <div className="mr-1 mt-0.5">
+                                        {renderAdminTicketMessage(m.message)}
+                                      </div>
                                     </div>
                                   ))}
                                 </div>
@@ -1533,7 +1632,29 @@ export const AdminDashboard: React.FC = () => {
 
                             {/* Admin Replier Input Form */}
                             <div className="space-y-2 pt-2 border-t border-slate-100">
-                              <label className="text-[10px] font-bold text-slate-400 block">نوشتن پاسخ جدید برای ارسال پیام آنلاین:</label>
+                              <div className="flex items-center justify-between">
+                                <label className="text-[10px] font-bold text-slate-400 block">نوشتن پاسخ جدید برای ارسال پیام آنلاین:</label>
+                                <label className="text-[10px] text-indigo-600 flex items-center gap-1 cursor-pointer hover:underline font-bold">
+                                  <input
+                                    type="file"
+                                    className="hidden"
+                                    onChange={(e) => handleAdminFileChange(e, t.id)}
+                                    disabled={isAdminUploading[t.id]}
+                                    accept="image/*,.pdf,.txt,.zip,.rar"
+                                  />
+                                  {isAdminUploading[t.id] ? (
+                                    <>
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-600" />
+                                      <span>درحال بارگذاری فایل...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Paperclip className="h-3.5 w-3.5" />
+                                      <span>پیوست و ارسال سریع فایل</span>
+                                    </>
+                                  )}
+                                </label>
+                              </div>
                               <textarea
                                 value={ticketReplyInput}
                                 onChange={(e) => setTicketReplyInput(e.target.value)}

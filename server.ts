@@ -80,7 +80,7 @@ import { WebSocketServer, WebSocket } from "ws";
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: "15mb" }));
 
 // -------------------------------------------------------------
 // Database Connection Layer (MySQL / phpMyAdmin) with Fallback
@@ -1360,7 +1360,6 @@ app.delete("/api/reviews/:id", async (req, res) => {
   if (pool) {
     try {
       await pool.query("DELETE FROM `reviews` WHERE `id` = ?", [id]);
-      return res.json({ success: true });
     } catch (err) {
       console.error("MySQL delete review failed:", err);
     }
@@ -1623,6 +1622,46 @@ app.post("/api/analyze-system", async (req, res) => {
     res.status(500).json({ error: "Internal Server Error in diagnostic scanning" });
   }
 });
+
+// Create uploads directory on startup
+const UPLOADS_DIR = path.join(process.cwd(), "public", "uploads");
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+
+// File upload API (receives base64 representation of a client-side file and stores it dynamically)
+app.post("/api/upload", (req, res) => {
+  const { fileName, base64Data } = req.body;
+  
+  if (!fileName || !base64Data) {
+    return res.status(400).json({ error: "Both fileName and base64Data are required as parameters." });
+  }
+
+  try {
+    const fileExt = path.extname(fileName) || "";
+    const baseName = path.basename(fileName, fileExt).replace(/[^a-zA-Z0-9]/g, "_");
+    const uniqueFileName = `${baseName}_${Date.now()}${fileExt}`;
+    
+    // Support data URLs / raw base64 strings safely
+    const cleanBase64 = base64Data.includes(";base64,") 
+      ? base64Data.split(";base64,")[1] 
+      : base64Data;
+      
+    const buffer = Buffer.from(cleanBase64, "base64");
+    const filePath = path.join(UPLOADS_DIR, uniqueFileName);
+    fs.writeFileSync(filePath, buffer);
+    
+    const fileUrl = `/uploads/${uniqueFileName}`;
+    console.log(`📎 Stored file upload: ${fileName} -> ${fileUrl}`);
+    res.json({ success: true, url: fileUrl, originalName: fileName });
+  } catch (err: any) {
+    console.error("File write error:", err);
+    res.status(500).json({ error: "Failed to store uploaded file: " + err.message });
+  }
+});
+
+// Configure serving of absolute uploaded files statically
+app.use("/uploads", express.static(UPLOADS_DIR));
 
 const server = http.createServer(app);
 
