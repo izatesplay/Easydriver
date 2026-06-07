@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { ServiceType, RequestPriority, SERVICE_LABELS, PRIORITY_LABELS } from '../types';
-import { Sparkles, CheckCircle2, CheckCircle, FileText, Smartphone, User, ArrowLeft, Send, ShieldAlert, Key, XCircle, AlertCircle } from 'lucide-react';
+import { Sparkles, CheckCircle2, CheckCircle, FileText, Smartphone, User, ArrowLeft, Send, ShieldAlert, Key, XCircle, AlertCircle, Search, Cpu, Check, Loader2 } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface NewRequestProps {
@@ -18,6 +18,37 @@ export const NewRequest: React.FC<NewRequestProps> = ({ setActiveTab }) => {
   const [priority, setPriority] = useState<RequestPriority>('medium');
   const [description, setDescription] = useState('');
   
+  // Compatible driver search states
+  const [deviceModelSearch, setDeviceModelSearch] = useState('');
+  const [driverSuggestions, setDriverSuggestions] = useState<any[]>([]);
+  const [isSearchingDrivers, setIsSearchingDrivers] = useState(false);
+  const [selectedDriver, setSelectedDriver] = useState<any | null>(null);
+
+  // Dynamic Driver Recommendation API call on typing
+  React.useEffect(() => {
+    if (!deviceModelSearch.trim()) {
+      setDriverSuggestions([]);
+      return;
+    }
+
+    setIsSearchingDrivers(true);
+    const delayDebounceFn = setTimeout(() => {
+      fetch(`/api/compatible-drivers?model=${encodeURIComponent(deviceModelSearch)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data)) {
+            setDriverSuggestions(data);
+          }
+        })
+        .catch(err => console.error("Compatible drivers search error:", err))
+        .finally(() => {
+          setIsSearchingDrivers(false);
+        });
+    }, 400);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [deviceModelSearch]);
+
   // Real-time tracking of touched inputs for custom feedback
   const [touched, setTouched] = useState<Record<string, boolean>>({
     fullName: false,
@@ -382,6 +413,101 @@ export const NewRequest: React.FC<NewRequestProps> = ({ setActiveTab }) => {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* COMPATIBLE DRIVER AUTO-RECOMMENDATION SEARCH FIELD */}
+              <div className="space-y-2 p-4 bg-slate-50 border border-slate-200 rounded-2xl relative shadow-xxs">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+                    <Search className="h-4 w-4 text-blue-600 animate-pulse" />
+                    <span>جستجوی مدل دستگاه و پارت‌نامبر سخت‌افزاری (پیشنهاد هوشمند درایور)</span>
+                  </label>
+                  <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-bold">اتصال زنده به کاتالوگ</span>
+                </div>
+                
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={deviceModelSearch}
+                    onChange={(e) => setDeviceModelSearch(e.target.value)}
+                    placeholder="مثال: NVIDIA RTX 3060 یا Realtek Audio یا HP LaserJet..."
+                    className="w-full px-4 py-3 pl-10 bg-white border border-slate-200 text-xs rounded-xl outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all font-medium"
+                  />
+                  <div className="absolute left-3 top-3.5 flex items-center">
+                    {isSearchingDrivers ? (
+                      <Loader2 className="h-3.5 w-3.5 text-blue-600 animate-spin" />
+                    ) : (
+                      <Search className="h-3.5 w-3.5 text-slate-400" />
+                    )}
+                  </div>
+                </div>
+
+                {/* Search result suggestions */}
+                {driverSuggestions.length > 0 && (
+                  <div className="absolute left-0 right-0 z-50 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-56 overflow-y-auto divide-y divide-slate-100 p-1.5">
+                    <p className="p-2 text-[10px] text-slate-400 font-bold block bg-slate-50 rounded-lg mb-1 leading-none">نتایج یافت شده سازگار با مدل سخت‌افزار شما:</p>
+                    {driverSuggestions.map((drv) => (
+                      <button
+                        key={drv.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedDriver(drv);
+                          setDeviceModelSearch('');
+                          setDriverSuggestions([]);
+                          
+                          // Prepend or override description beautifully!
+                          const prependText = `🔧 درخواست نصب هوشمند درایور ایزی‌درایور:\n` +
+                            `• سخت‌افزار هدف: ${drv.hardwareModel}\n` +
+                            `• درایور پیشنهادی: ${drv.name} (نسخه: ${drv.version})\n` +
+                            `• حجم درایور: ${drv.size} | وضعیت سازگاری: ${drv.compatibility}\n` +
+                            `• دسته‌بندی سیستم: ${drv.category}\n` +
+                            `-----------------------------------------------------\n` +
+                            `توضیحات ایراد سخت‌افزاری / درخواست الحاقی من: `;
+                          
+                          setDescription(prependText + (description.includes("درخواست نصب هوشمند درایور") ? "" : description));
+                        }}
+                        className="w-full text-right p-2.5 hover:bg-slate-50 rounded-lg flex flex-col gap-1 transition-all"
+                      >
+                        <div className="flex items-center justify-between gap-2 w-full">
+                          <strong className="text-xs text-slate-800 font-extrabold flex items-center gap-1.5">
+                            <Cpu className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                            {drv.name}
+                          </strong>
+                          <span className="text-[9px] bg-emerald-50 text-emerald-700 font-black px-2 py-0.5 rounded-full">{drv.compatibility}</span>
+                        </div>
+                        <div className="text-[10px] text-slate-500 flex justify-between items-center w-full font-medium sm:pr-5">
+                          <span>سخت‌افزار: <span className="text-slate-700 font-bold">{drv.hardwareModel}</span></span>
+                          <span className="font-mono text-slate-400 text-[9px]">{drv.size} | نسخه: {drv.version}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Selected driver preview badge */}
+                {selectedDriver && (
+                  <div className="mt-2.5 bg-emerald-50 border border-emerald-100 p-3 rounded-xl flex items-center justify-between gap-3 text-emerald-950 text-xxs sm:text-xs">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 bg-emerald-500 text-white rounded-lg">
+                        <Check className="h-3.5 w-3.5" />
+                      </div>
+                      <div className="text-right">
+                        <span className="font-bold block text-[11px] text-emerald-900">درایور هوشمند ({selectedDriver.name}) با موفقیت انتخاب و هماهنگ شد.</span>
+                        <span className="text-[10px] text-emerald-700 font-medium">مشخصات سخت‌افزاری و نسخه کپی در توضیحات درخواست ثبت شد.</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedDriver(null);
+                        setDescription('');
+                      }}
+                      className="text-[10px] text-rose-600 font-bold hover:underline shrink-0"
+                    >
+                      لغو انتخاب
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Detailed description textarea */}

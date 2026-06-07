@@ -11,6 +11,7 @@ export interface User {
   phone: string;
   role: UserRole;
   avatarUrl?: string;
+  password?: string;
 }
 
 export type ServiceType = 'driver_install' | 'software_install' | 'anydesk_support' | 'other';
@@ -90,6 +91,7 @@ export interface Review {
   comment: string;
   serviceType?: string;
   isApproved: boolean;
+  isRejected?: boolean;
   createdDate: string;
   updatedDate: string;
   createdBy: string; // user id

@@ -134,13 +134,32 @@ export const MyRequests: React.FC<MyRequestsProps> = ({ onNavigateToAuth }) => {
   const completedCount = myRequests.filter(r => r.status === 'completed').length;
   const cancelledCount = myRequests.filter(r => r.status === 'cancelled').length;
 
-  const chartData = [
+  const overallChartData = [
     { name: 'در انتظار بررسی', value: pendingCount, color: '#f59e0b' },
     { name: 'تایید شده', value: approvedCount, color: '#3b82f6' },
     { name: 'در حال انجام', value: inProgressCount, color: '#a855f7' },
     { name: 'تکمیل شده', value: completedCount, color: '#10b981' },
     { name: 'لغو شده', value: cancelledCount, color: '#f43f5e' },
   ].filter(item => item.value > 0);
+
+  // Calculate stats specifically for installed/requested drivers
+  const myDriverRequests = myRequests.filter(r => r.serviceType === 'driver_install');
+  const dPending = myDriverRequests.filter(r => r.status === 'pending').length;
+  const dApproved = myDriverRequests.filter(r => r.status === 'approved' || r.status === 'assigned').length;
+  const dInProgress = myDriverRequests.filter(r => r.status === 'in_progress').length;
+  const dCompleted = myDriverRequests.filter(r => r.status === 'completed').length;
+  const dCancelled = myDriverRequests.filter(r => r.status === 'cancelled').length;
+
+  const driverChartData = [
+    { name: 'در انتظار بررسی درایور', value: dPending, color: '#f59e0b' },
+    { name: 'سازگار/تخصیص‌یافته', value: dApproved, color: '#3b82f6' },
+    { name: 'در حال نصب هوشمند', value: dInProgress, color: '#a855f7' },
+    { name: 'نصب شده نهایی', value: dCompleted, color: '#10b981' },
+    { name: 'لغو شده', value: dCancelled, color: '#f43f5e' },
+  ].filter(item => item.value > 0);
+
+  const [statsCategory, setStatsCategory] = useState<'all' | 'drivers'>('all');
+  const chartData = statsCategory === 'all' ? overallChartData : driverChartData;
 
   // Sort according to user preference (newest first / oldest first)
   const sortedRequests = [...filteredRequests].sort((a, b) => {
@@ -226,8 +245,43 @@ export const MyRequests: React.FC<MyRequestsProps> = ({ onNavigateToAuth }) => {
           {/* Right: Pie Chart Distribution Visual card */}
           <div className="md:col-span-5 bg-white rounded-3xl border border-slate-200 p-5 shadow-xs flex flex-col justify-between">
             <div>
-              <span className="text-[10px] text-indigo-600 font-bold block mb-1">توزیع وضعیت درخواست‌ها</span>
-              <h3 className="text-xs font-black text-slate-800 mb-3 block">آمار کلی خدمات شما</h3>
+              <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2.5">
+                <div>
+                  <span className="text-[10px] text-indigo-650 font-bold block">تاریخچه خدمات و سخت‌افزار</span>
+                  <h3 className="text-xs font-black text-slate-800">داشبورد وضعیت هوشمند</h3>
+                </div>
+                {/* Visual Category Switcher */}
+                <div className="flex bg-slate-100 p-0.5 rounded-lg border gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatsCategory('all');
+                      setSelectedServiceType('all');
+                    }}
+                    className={`px-2 py-1 rounded-md text-[9px] font-bold transition-all ${
+                      statsCategory === 'all'
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    کل خدمات
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatsCategory('drivers');
+                      setSelectedServiceType('driver_install');
+                    }}
+                    className={`px-2 py-1 rounded-md text-[9px] font-bold transition-all ${
+                      statsCategory === 'drivers'
+                        ? 'bg-white text-blue-600 shadow-xs'
+                        : 'text-slate-500 hover:text-blue-600'
+                    }`}
+                  >
+                    درایورها ⚡
+                  </button>
+                </div>
+              </div>
               
               {chartData.length > 0 ? (
                 <div className="h-[145px] relative">
@@ -261,8 +315,8 @@ export const MyRequests: React.FC<MyRequestsProps> = ({ onNavigateToAuth }) => {
                   
                   {/* Center percentage/sum label */}
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none mt-[-5px]">
-                    <span className="text-[10px] text-slate-400 font-bold">مجموع کل</span>
-                    <span className="text-sm font-black text-slate-800 font-mono">{myRequests.length}</span>
+                    <span className="text-[9px] text-slate-400 font-bold">{statsCategory === 'all' ? 'مجموع کل' : 'کل درایورها'}</span>
+                    <span className="text-sm font-black text-slate-800 font-mono">{statsCategory === 'all' ? myRequests.length : myDriverRequests.length}</span>
                   </div>
                 </div>
               ) : (

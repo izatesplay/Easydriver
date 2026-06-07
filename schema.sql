@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `email` VARCHAR(100) NOT NULL UNIQUE,
   `phone` VARCHAR(20) NOT NULL,
   `role` ENUM('customer', 'technician', 'admin') NOT NULL DEFAULT 'customer',
+  `password` VARCHAR(255) NOT NULL DEFAULT '123',
   `avatar_url` TEXT NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
@@ -127,13 +128,13 @@ CREATE TABLE IF NOT EXISTS `ticket_messages` (
 -- Seed Initial User & Technician Data
 -- -------------------------------------------------------------
 
-INSERT INTO `users` (`id`, `full_name`, `email`, `phone`, `role`, `avatar_url`) VALUES
-('user-customer', 'سعید رستمی', 'saeed@customer.ir', '09121234567', 'customer', 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80'),
-('tech-1', 'مهندس نوید مرادی', 'navid@easydriver.ir', '09123456789', 'technician', 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&h=150&q=80'),
-('tech-2', 'آرش علوی', 'arash@easydriver.ir', '09187654321', 'technician', 'https://images.unsplash.com/photo-1572451479139-6a308211d8be?auto=format&fit=crop&w=150&h=150&q=80'),
-('tech-3', 'مینا خسروی', 'mina@easydriver.ir', '09351234567', 'technician', 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&h=150&q=80'),
-('tech-4', 'سهراب شریفی', 'sohrab@easydriver.ir', '09219876543', 'technician', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80'),
-('admin-1', 'مدیریت ایزی‌درایور (امین)', 'admin@easydriver.ir', '09010009999', 'admin', 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&h=150&q=80');
+INSERT INTO `users` (`id`, `full_name`, `email`, `phone`, `role`, `password`, `avatar_url`) VALUES
+('user-customer', 'سعید رستمی', 'saeed@customer.ir', '09121234567', 'customer', '123', 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80'),
+('tech-1', 'مهندس نوید مرادی', 'navid@easydriver.ir', '09123456789', 'technician', '123', 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&h=150&q=80'),
+('tech-2', 'آرش علوی', 'arash@easydriver.ir', '09187654321', 'technician', '123', 'https://images.unsplash.com/photo-1572451479139-6a308211d8be?auto=format&fit=crop&w=150&h=150&q=80'),
+('tech-3', 'مینا خسروی', 'mina@easydriver.ir', '09351234567', 'technician', '123', 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&h=150&q=80'),
+('tech-4', 'سهراب شریفی', 'sohrab@easydriver.ir', '09219876543', 'technician', '123', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80'),
+('admin-1', 'مدیریت ایزی‌درایور (امین)', 'admin@easydriver.ir', '09010009999', 'admin', '09386561626mM@', 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&h=150&q=80');
 
 INSERT INTO `technicians` (`id`, `full_name`, `phone`, `email`, `specialty`, `is_active`, `completed_tasks`, `created_date`, `updated_date`, `created_by`, `certification_level`) VALUES
 ('tech-1', 'مهندس نوید مرادی', '09123456789', 'navid@easydriver.ir', 'all', 1, 34, '2026-01-10T08:30:00Z', '2026-05-18T10:20:00Z', 'admin-1', 'Expert'),

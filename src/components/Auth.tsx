@@ -40,7 +40,7 @@ interface AuthProps {
 }
 
 export const Auth: React.FC<AuthProps> = ({ onSuccess, setActiveTab }) => {
-  const { login, addTechnician, technicians } = useApp();
+  const { login, addTechnician, technicians, loadFreshData } = useApp();
   const [activeMode, setActiveMode] = useState<'login' | 'signup'>('login');
   
   // Signup State
@@ -178,6 +178,26 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, setActiveTab }) => {
     // Save to registered users DB
     const updatedList = [...registered, newRegisteredUser];
     localStorage.setItem('ed_registered_users', JSON.stringify(updatedList));
+
+    // Also persist in the backend database (MySQL or Local JSON backup)
+    fetch("/api/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: newRegisteredId,
+        fullName: fullName.trim(),
+        email: email.trim().toLowerCase(),
+        phone: phone.trim(),
+        role: signupRole,
+        password: password,
+        avatarUrl: newRegisteredUser.avatarUrl,
+        isActive: signupRole === 'technician' ? false : true,
+      })
+    })
+    .then(() => {
+      if (loadFreshData) loadFreshData();
+    })
+    .catch(err => console.error("Error writing user to backend DB:", err));
 
     if (signupRole === 'technician') {
       // Register in technicians collection as inactive

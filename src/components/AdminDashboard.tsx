@@ -23,7 +23,8 @@ export const AdminDashboard: React.FC = () => {
     technicians,
     addTechnician,
     updateTechnician,
-    deleteTechnician
+    deleteTechnician,
+    loadFreshData
   } = useApp();
 
   // Active admin tab selection
@@ -118,7 +119,7 @@ export const AdminDashboard: React.FC = () => {
   const totalTickets = tickets.length;
   const openTicketsCount = tickets.filter(t => t.status === 'open').length;
 
-  const pendingReviewsCount = reviews.filter(r => !r.isApproved).length;
+  const pendingReviewsCount = reviews.filter(r => !r.isApproved && !r.isRejected).length;
 
   const toggleRequestSelection = (id: string) => {
     setSelectedRequestIds(prev =>
@@ -240,6 +241,7 @@ export const AdminDashboard: React.FC = () => {
 
         // Sync with registered users
         const matchedIdx = registered.findIndex((u: any) => u.id === editingTechId);
+        let updatedUserObj: any = null;
         if (matchedIdx >= 0) {
           registered[matchedIdx].fullName = techName.trim();
           registered[matchedIdx].phone = techPhone.trim();
@@ -248,9 +250,10 @@ export const AdminDashboard: React.FC = () => {
           if (techPassword.trim() !== '') {
             registered[matchedIdx].password = techPassword.trim();
           }
+          updatedUserObj = registered[matchedIdx];
         } else {
           // Create entry in localStorage registered list if it doesn't exist
-          registered.push({
+          updatedUserObj = {
             id: editingTechId,
             fullName: techName.trim(),
             email: techEmail.trim().toLowerCase() || `${editingTechId}@easydriver.ir`,
@@ -259,9 +262,19 @@ export const AdminDashboard: React.FC = () => {
             password: techPassword.trim() || '123',
             isActive: techIsActive,
             avatarUrl: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(techName.trim())}`,
-          });
+          };
+          registered.push(updatedUserObj);
         }
         localStorage.setItem('ed_registered_users', JSON.stringify(registered));
+
+        // Sync user update with backend
+        fetch(`/api/users/${editingTechId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updatedUserObj)
+        })
+        .then(() => { if (loadFreshData) loadFreshData(); })
+        .catch(err => console.error("Error updating user on backend DB:", err));
       }
       setEditingTechId(null);
     } else {
@@ -279,7 +292,7 @@ export const AdminDashboard: React.FC = () => {
       });
 
       // Create new account in localStorage registered list
-      registered.push({
+      const newUserObj = {
         id: generatedTechId,
         fullName: techName.trim(),
         email: techEmail.trim().toLowerCase() || `${generatedTechId}@easydriver.ir`,
@@ -288,8 +301,18 @@ export const AdminDashboard: React.FC = () => {
         password: techPassword.trim() || '123',
         isActive: techIsActive,
         avatarUrl: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(techName.trim())}`,
-      });
+      };
+      registered.push(newUserObj);
       localStorage.setItem('ed_registered_users', JSON.stringify(registered));
+
+      // Sync user insert with backend
+      fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newUserObj)
+      })
+      .then(() => { if (loadFreshData) loadFreshData(); })
+      .catch(err => console.error("Error creating user on backend DB:", err));
     }
 
     // Reset fields
@@ -404,8 +427,8 @@ export const AdminDashboard: React.FC = () => {
       headers = ['شناسه بازخورد', 'نام ثبت‌کننده', 'امتیاز مربوطه (از ۵)', 'خدمات مربوطه', 'متن دیدگاه مشتری', 'وضعیت تایید و انتشار', 'تاریخ ایجاد دیدگاه'];
       
       const targetReviews = reportReviewApproved === 'all' 
-        ? reviews 
-        : reviews.filter(r => reportReviewApproved === 'approved' ? r.isApproved : !r.isApproved);
+        ? reviews.filter(r => !r.isRejected) 
+        : reviews.filter(r => reportReviewApproved === 'approved' ? r.isApproved : (!r.isApproved && !r.isRejected));
       
       rows = targetReviews.map(r => [
         r.id,
@@ -455,7 +478,16 @@ export const AdminDashboard: React.FC = () => {
 
   // Delete customer review
   const handleDeleteReview = (id: string) => {
-    deleteReview(id);
+    const rev = reviews.find(r => r.id === id);
+    if (rev) {
+      updateReview({
+        ...rev,
+        isApproved: false,
+        isRejected: true,
+      });
+    } else {
+      deleteReview(id);
+    }
   };
 
   // Replying to a customer ticket
@@ -1521,6 +1553,15 @@ export const AdminDashboard: React.FC = () => {
                             if (idx >= 0) {
                               registered[idx].isActive = true;
                               localStorage.setItem('ed_registered_users', JSON.stringify(registered));
+                              
+                              // PUT updated user back to backend DB so it persists
+                              fetch(`/api/users/${registered[idx].id}`, {
+                                method: "PUT",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify(registered[idx])
+                              })
+                              .then(() => { if (loadFreshData) loadFreshData(); })
+                              .catch(err => console.error("Error updating user on backend DB during activation:", err));
                             }
                           }}
                           className="p-1 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition-colors flex items-center gap-1 cursor-pointer shadow-sm animate-pulse"
@@ -1702,11 +1743,11 @@ export const AdminDashboard: React.FC = () => {
             <div className="space-y-4">
               <h3 className="font-extrabold text-sm sm:text-base text-slate-850 pb-2 border-b border-slate-200">بررسی و تایید نظرات کاربران</h3>
 
-              {reviews.filter(r => !r.isApproved).length === 0 ? (
+              {reviews.filter(r => !r.isApproved && !r.isRejected).length === 0 ? (
                 <div className="bg-white p-8 rounded-2xl border text-center text-xs text-slate-400">هیچ دیدگاه تازه معلقی در انتظار تایید وجود ندارد!</div>
               ) : (
                 <div className="space-y-3">
-                  {reviews.filter(r => !r.isApproved).map((rev) => (
+                  {reviews.filter(r => !r.isApproved && !r.isRejected).map((rev) => (
                     <div key={rev.id} className="p-5 bg-white rounded-2xl border border-slate-200 shadow-xxs text-right space-y-3">
                       
                       <div className="flex items-center justify-between">
@@ -2985,7 +3026,9 @@ export const AdminDashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {(reportReviewApproved === 'all' ? reviews : reviews.filter(r => reportReviewApproved === 'approved' ? r.isApproved : !r.isApproved)).map((re, i) => (
+                {(reportReviewApproved === 'all' 
+                  ? reviews.filter(r => !r.isRejected) 
+                  : reviews.filter(r => reportReviewApproved === 'approved' ? r.isApproved : (!r.isApproved && !r.isRejected))).map((re, i) => (
                   <tr key={re.id}>
                     <td className="border border-slate-400 p-2 font-mono">{i + 1}</td>
                     <td className="border border-slate-400 p-2">{re.customerName}</td>

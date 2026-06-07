@@ -516,6 +516,68 @@ const INITIAL_DATASET = {
       createdDate: '2026-05-20T11:30:00Z',
       read: false
     }
+  ],
+  users: [
+    {
+      id: 'user-customer',
+      fullName: 'سعید رستمی',
+      email: 'saeed@customer.ir',
+      phone: '09121234567',
+      role: 'customer',
+      password: '123',
+      isActive: true,
+      avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80'
+    },
+    {
+      id: 'tech-1',
+      fullName: 'مهندس نوید مرادی',
+      email: 'navid@easydriver.ir',
+      phone: '09123456789',
+      role: 'technician',
+      password: '123',
+      isActive: true,
+      avatarUrl: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&h=150&q=80'
+    },
+    {
+      id: 'tech-2',
+      fullName: 'آرش علوی',
+      email: 'arash@easydriver.ir',
+      phone: '09187654321',
+      role: 'technician',
+      password: '123',
+      isActive: true,
+      avatarUrl: 'https://images.unsplash.com/photo-1572451479139-6a308211d8be?auto=format&fit=crop&w=150&h=150&q=80'
+    },
+    {
+      id: 'tech-3',
+      fullName: 'مینا خسروی',
+      email: 'mina@easydriver.ir',
+      phone: '09351234567',
+      role: 'technician',
+      password: '123',
+      isActive: true,
+      avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&h=150&q=80'
+    },
+    {
+      id: 'tech-4',
+      fullName: 'سهراب شریفی',
+      email: 'sohrab@easydriver.ir',
+      phone: '09219876543',
+      role: 'technician',
+      password: '123',
+      isActive: false,
+      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80'
+    },
+    {
+      id: 'admin-1',
+      fullName: 'مدیر کل ایزی‌درایور (امین)',
+      email: 'izatesplay@gmail.com',
+      phone: '09386561626',
+      role: 'admin',
+      password: '09386561626mM@',
+      isActive: true,
+      avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&h=150&q=80'
+    }
   ]
 };
 
@@ -547,9 +609,14 @@ function readLocalJSON(): any {
     if (!data.notifications) {
       data.notifications = [];
     }
+    if (!data.users) {
+      data.users = INITIAL_DATASET.users;
+      // Write it back to persist users in the local db file
+      fs.writeFileSync(BACKUP_FILE_PATH, JSON.stringify(data, null, 2), "utf-8");
+    }
     return data;
   } catch (e) {
-    return { ...INITIAL_DATASET, notifications: [] };
+    return { ...INITIAL_DATASET, notifications: [], users: INITIAL_DATASET.users };
   }
 }
 
@@ -778,6 +845,124 @@ app.post("/api/notifications/read-all", (req, res) => {
   const { userId, role } = req.body;
   const success = markAllNotificationsAsReadInDb(userId, role);
   res.json({ success });
+});
+
+// -------------------------------------------------------------
+// APIs: Dynamic REST Routes for USERS (Credentials and Activation)
+// -------------------------------------------------------------
+
+app.get("/api/users", async (req, res) => {
+  const pool = await getMySQLPool();
+  if (pool) {
+    try {
+      // Ensure database migrations run for users passwords and status
+      try {
+        await pool.query("ALTER TABLE `users` ADD COLUMN `password` VARCHAR(100) NOT NULL DEFAULT '123'");
+      } catch (e) {}
+      try {
+        await pool.query("ALTER TABLE `users` ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1");
+      } catch (e) {}
+
+      const [rows] = await pool.query("SELECT * FROM `users` ORDER BY `created_at` DESC");
+      const formatted = (rows as any[]).map(r => ({
+        id: r.id,
+        fullName: r.full_name,
+        email: r.email,
+        phone: r.phone,
+        role: r.role,
+        avatarUrl: r.avatar_url,
+        password: r.password,
+        isActive: r.is_active === 1 || r.is_active === true
+      }));
+      return res.json(formatted);
+    } catch (err) {
+      console.error("MySQL read users query failed:", err);
+    }
+  }
+
+  const local = readLocalJSON();
+  res.json(local.users || []);
+});
+
+app.post("/api/users", async (req, res) => {
+  const { id, fullName, email, phone, role, password, avatarUrl, isActive } = req.body;
+  const pool = await getMySQLPool();
+  if (pool) {
+    try {
+      try {
+        await pool.query("ALTER TABLE `users` ADD COLUMN `password` VARCHAR(100) NOT NULL DEFAULT '123'");
+      } catch (e) {}
+      try {
+        await pool.query("ALTER TABLE `users` ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1");
+      } catch (e) {}
+
+      await pool.query(
+        "INSERT INTO `users` (`id`, `full_name`, `email`, `phone`, `role`, `password`, `avatar_url`, `is_active`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [id, fullName, email, phone, role, password || '123', avatarUrl || null, isActive !== false ? 1 : 0]
+      );
+      return res.json({ success: true, id });
+    } catch (err) {
+      console.error("MySQL post user query failed:", err);
+    }
+  }
+
+  const local = readLocalJSON();
+  if (!local.users) local.users = [];
+  local.users.push(req.body);
+  writeLocalJSON(local);
+  res.json({ success: true, id });
+});
+
+app.put("/api/users/:id", async (req, res) => {
+  const { id } = req.params;
+  const { fullName, email, phone, role, password, avatarUrl, isActive } = req.body;
+  const pool = await getMySQLPool();
+  if (pool) {
+    try {
+      try {
+        await pool.query("ALTER TABLE `users` ADD COLUMN `password` VARCHAR(100) NOT NULL DEFAULT '123'");
+      } catch (e) {}
+      try {
+        await pool.query("ALTER TABLE `users` ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1");
+      } catch (e) {}
+
+      await pool.query(
+        "UPDATE `users` SET `full_name`=?, `email`=?, `phone`=?, `role`=?, `password`=?, `avatar_url`=?, `is_active`=? WHERE `id`=?",
+        [fullName, email, phone, role, password || '123', avatarUrl || null, isActive !== false ? 1 : 0, id]
+      );
+      return res.json({ success: true });
+    } catch (err) {
+      console.error("MySQL update user query failed:", err);
+    }
+  }
+
+  const local = readLocalJSON();
+  if (!local.users) local.users = [];
+  const idx = local.users.findIndex((u: any) => u.id === id);
+  if (idx >= 0) {
+    local.users[idx] = { ...local.users[idx], ...req.body };
+    writeLocalJSON(local);
+  }
+  res.json({ success: true });
+});
+
+app.delete("/api/users/:id", async (req, res) => {
+  const { id } = req.params;
+  const pool = await getMySQLPool();
+  if (pool) {
+    try {
+      await pool.query("DELETE FROM `users` WHERE `id`=?", [id]);
+      return res.json({ success: true });
+    } catch (err) {
+      console.error("MySQL delete user query failed:", err);
+    }
+  }
+
+  const local = readLocalJSON();
+  if (!local.users) local.users = [];
+  local.users = local.users.filter((u: any) => u.id !== id);
+  writeLocalJSON(local);
+  res.json({ success: true });
 });
 
 // -------------------------------------------------------------
@@ -1281,7 +1466,8 @@ app.get("/api/reviews", async (req, res) => {
         rating: r.rating,
         comment: r.comment,
         serviceType: r.service_type,
-        isApproved: !!r.is_approved,
+        isApproved: r.is_approved === 1,
+        isRejected: r.is_approved === -1,
         createdDate: r.created_date,
         updatedDate: r.updated_date,
         createdBy: r.created_by,
@@ -1331,15 +1517,20 @@ app.post("/api/reviews", async (req, res) => {
 
 app.put("/api/reviews/:id", async (req, res) => {
   const { id } = req.params;
-  const { isApproved, rating, comment, updatedDate } = req.body;
+  const { isApproved, isRejected, rating, comment, updatedDate } = req.body;
   const pool = await getMySQLPool();
   if (pool) {
     try {
+      let isApprovedDbValue = 0;
+      if (isApproved === true || isApproved === 1) {
+        isApprovedDbValue = 1;
+      } else if (isRejected === true || isRejected === 1) {
+        isApprovedDbValue = -1;
+      }
       await pool.query(
         "UPDATE `reviews` SET `is_approved`=?, `rating`=?, `comment`=?, `updated_date`=? WHERE `id`=?",
-        [isApproved ? 1 : 0, rating, comment, updatedDate, id]
+        [isApprovedDbValue, rating, comment, updatedDate, id]
       );
-      return res.json({ success: true });
     } catch (err) {
       console.error("MySQL update reviews query failed:", err);
     }
@@ -1621,6 +1812,36 @@ app.post("/api/analyze-system", async (req, res) => {
     console.error("Diagnostic Simulation API Error:", error);
     res.status(500).json({ error: "Internal Server Error in diagnostic scanning" });
   }
+});
+
+// Demo drivers database for real-time suggestions
+const DEMO_DRIVERS = [
+  { id: "drv-1", name: "NVIDIA GeForce Game Ready Driver", version: "551.23", releaseDate: "2024-03-12", compatibility: "۹۹٪ (سازگار با ویندوز ۱۰/۱۱)", size: "640 MB", category: "کارت گرافیک (GPU)", hardwareModel: "NVIDIA GeForce RTX 3060 / 3070 / 3080 / 4060 / 4070" },
+  { id: "drv-2", name: "NVIDIA GeForce Driver Legacy", version: "472.12", releaseDate: "2022-09-21", compatibility: "۹۵٪ (ثبات بالا در ویندوز ۷/۱۰)", size: "480 MB", category: "کارت گرافیک (GPU)", hardwareModel: "NVIDIA GeForce GTX 1060 / 1070 / 1050 / 960" },
+  { id: "drv-3", name: "AMD Radeon Adrenalin Edition", version: "24.2.1", releaseDate: "2024-02-28", compatibility: "۹۸٪ (بهینه‌سازی شده برای گیمینگ)", size: "612 MB", category: "کارت گرافیک (GPU)", hardwareModel: "AMD Radeon RX 580 / 5700 / 6605 / 6700 XT / 7800 XT" },
+  { id: "drv-4", name: "Intel Graphics Windows DCH Driver", version: "31.0.101.5333", releaseDate: "2024-03-01", compatibility: "۱۰۰٪ (تایید شده مایکروسافت WHQL)", size: "450 MB", category: "گرافیک آنبرد (Intel HD/UHD)", hardwareModel: "Intel Iris Xe / UHD Graphics 620 / Core i3 i5 i7 i9 Gen 10/11/12/13/14" },
+  { id: "drv-5", name: "Realtek High Definition Audio Driver", version: "6.0.9621.1", releaseDate: "2023-11-15", compatibility: "۱۰۰٪ (برطرف‌کننده نویز و صدای بم)", size: "145 MB", category: "کارت صدا (Audio)", hardwareModel: "Realtek ALC887 / ALC892 / ALC1220 / High Definition Audio Adaptor" },
+  { id: "drv-6", name: "Intel Wireless Bluetooth Driver", version: "23.30.0", releaseDate: "2024-02-14", compatibility: "۹۹٪ (حل مشکل قطعی هدفون بلوتوث)", size: "52 MB", category: "شبکه و بلوتوث (Wi-Fi/Bluetooth)", hardwareModel: "Intel Wireless-AC 9560 / AX200 / AX201 / AX210" },
+  { id: "drv-7", name: "Synaptics Precision Touchpad Driver", version: "19.5.35.85", releaseDate: "2023-05-10", compatibility: "۹۷٪ (افزودن ژست‌های حرکتی چند انگشتی)", size: "35 MB", category: "تاچ پد لپ‌تاپ", hardwareModel: "HP Pavilion / Lenovo ThinkPad / Asus ZenBook Touchpads" },
+  { id: "drv-8", name: "HP LaserJet Pro Certified Print Driver", version: "15.0.22", releaseDate: "2023-08-01", compatibility: "۱۰۰٪ (پشتیبانی از پرینت مستقیم شبکه)", size: "115 MB", category: "چاپگر و اسکنر (Printer)", hardwareModel: "HP LaserJet Pro M12 / M15 / M102 / M130fn" },
+  { id: "drv-9", name: "Canon PIXMA Multifunction Printer Driver", version: "1.04", releaseDate: "2023-12-10", compatibility: "۹۶٪ (شامل اسکنر پیشرفته رنگی)", size: "85 MB", category: "چاپگر و اسکنر (Printer)", hardwareModel: "Canon PIXMA G3010 / G2010 / TS3140 / MG2540" },
+  { id: "drv-10", name: "Logitech G HUB Advanced Device Driver", version: "2024.1", releaseDate: "2024-01-30", compatibility: "۹۹٪ (برنامه‌ریزی دکمه‌ها و نور RGB)", size: "128 MB", category: "کیبورد و موس گیمینگ", hardwareModel: "Logitech G502 / G213 / G402 / G903 Mouse/Keyboard" }
+];
+
+// Compatible drivers search API
+app.get("/api/compatible-drivers", (req, res) => {
+  const modelQuery = ((req.query.model as string) || "").trim().toLowerCase();
+  if (!modelQuery) {
+    return res.json([]);
+  }
+
+  const matches = DEMO_DRIVERS.filter(drv => 
+    drv.name.toLowerCase().includes(modelQuery) ||
+    drv.hardwareModel.toLowerCase().includes(modelQuery) ||
+    drv.category.toLowerCase().includes(modelQuery)
+  );
+
+  res.json(matches);
 });
 
 // Create uploads directory on startup

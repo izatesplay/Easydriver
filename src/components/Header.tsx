@@ -14,25 +14,71 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
   useRenderTracker("هدر اصلی (Header)");
   const { currentUser, logout, requests, tickets } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [darkMode, setDarkMode] = useState<boolean>(() => {
+  
+  const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('theme');
-      if (saved) return saved === 'dark';
-      return false;
+      return (localStorage.getItem('theme') as 'light' | 'dark' | 'system') || 'system';
     }
-    return false;
+    return 'system';
   });
 
+  const [resolvedDark, setResolvedDark] = useState<boolean>(false);
+
+  // Compute actual dark theme state and bind listeners
   useEffect(() => {
-    const root = window.document.documentElement;
-    if (darkMode) {
-      root.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
+    if (typeof window === 'undefined') return;
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    
+    const updateTheme = () => {
+      const root = window.document.documentElement;
+      let shouldBeDark = false;
+
+      if (themeMode === 'system') {
+        shouldBeDark = mediaQuery.matches;
+      } else {
+        shouldBeDark = themeMode === 'dark';
+      }
+
+      setResolvedDark(shouldBeDark);
+
+      if (shouldBeDark) {
+        root.classList.add('dark');
+      } else {
+        root.classList.remove('dark');
+      }
+      localStorage.setItem('theme', themeMode);
+    };
+
+    updateTheme();
+
+    // Listen for system changes
+    const handler = () => {
+      if (themeMode === 'system') {
+        updateTheme();
+      }
+    };
+
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', handler);
     } else {
-      root.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
+      mediaQuery.addListener(handler);
     }
-  }, [darkMode]);
+
+    return () => {
+      if (mediaQuery.removeEventListener) {
+        mediaQuery.removeEventListener('change', handler);
+      } else {
+        mediaQuery.removeListener(handler);
+      }
+    };
+  }, [themeMode]);
+
+  const cycleTheme = () => {
+    if (themeMode === 'light') setThemeMode('dark');
+    else if (themeMode === 'dark') setThemeMode('system');
+    else setThemeMode('light');
+  };
 
   const pendingCount = requests.filter(r => r.status === 'pending').length;
   const openTicketCount = tickets.filter(t => t.status === 'open').length;
@@ -123,15 +169,26 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
           <div className="flex items-center gap-3">
             {/* Dark Mode Toggle Button */}
             <button
-              onClick={() => setDarkMode(!darkMode)}
-              className="p-2 text-slate-500 hover:text-blue-600 hover:bg-slate-150 rounded-xl transition-all duration-300 cursor-pointer"
-              title={darkMode ? "فعال‌سازی حالت روشن" : "فعال‌سازی حالت تاریک"}
+              onClick={cycleTheme}
+              className="p-2 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded-xl transition-all duration-300 cursor-pointer flex items-center gap-1"
+              title={
+                themeMode === 'light'
+                  ? "تغییر به تم تاریک"
+                  : themeMode === 'dark'
+                  ? "تغییر به تم هماهنگ با سیستم"
+                  : "تغییر به تم روشن"
+              }
               id="theme-toggle"
             >
-              {darkMode ? (
+              {themeMode === 'light' ? (
+                <Moon className="h-4.5 w-4.5 text-slate-600" />
+              ) : themeMode === 'dark' ? (
                 <Sun className="h-4.5 w-4.5 text-amber-500" />
               ) : (
-                <Moon className="h-4.5 w-4.5 text-slate-600" />
+                <div className="flex items-center gap-1">
+                  <Laptop className="h-4.5 w-4.5 text-blue-500" />
+                  <span className="text-[9px] font-black px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-md">سیستم</span>
+                </div>
               )}
             </button>
 

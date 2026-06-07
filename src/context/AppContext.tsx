@@ -165,6 +165,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (Array.isArray(data)) setTechnicians(data);
       })
       .catch(err => console.error("Error loading technicians:", err));
+
+    // 5. Fetch and Sync Users
+    fetch("/api/users")
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          localStorage.setItem('ed_registered_users', JSON.stringify(data));
+        }
+      })
+      .catch(err => console.error("Error loading and syncing users:", err));
   };
 
   useEffect(() => {
@@ -661,11 +671,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Optimistic Update
     setTechnicians(prev => prev.filter(t => t.id !== id));
 
-    // DB DELETE
-    fetch(`/api/technicians/${id}`, {
+    const registered = JSON.parse(localStorage.getItem('ed_registered_users') || '[]');
+    const nextReg = registered.filter((u: any) => u.id !== id);
+    localStorage.setItem('ed_registered_users', JSON.stringify(nextReg));
+
+    // DB DELETE from users (which cascades to technicians in MySQL)
+    fetch(`/api/users/${id}`, {
       method: "DELETE"
     })
-    .then(() => loadFreshData())
+    .then(() => {
+      // Also delete from technicians specifically for fallback/coverage
+      fetch(`/api/technicians/${id}`, {
+        method: "DELETE"
+      })
+      .then(() => loadFreshData());
+    })
     .catch(err => console.error("Delete technician sync err:", err));
   };
 
