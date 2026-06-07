@@ -76,6 +76,7 @@ import express from "express";
 import mysql from "mysql2/promise";
 import http from "http";
 import { WebSocketServer, WebSocket } from "ws";
+import bcrypt from "bcryptjs";
 
 const app = express();
 const PORT = 3000;
@@ -848,6 +849,179 @@ app.post("/api/notifications/read-all", (req, res) => {
 });
 
 // -------------------------------------------------------------
+// APIs: Authentication & Password Securing with BCrypt and Migration
+// -------------------------------------------------------------
+
+function isBcryptHash(str: string): boolean {
+  if (!str) return false;
+  return /^\$2[ayb]\$.{56}$/.test(str);
+}
+
+// Secure login endpoint utilizing direct backend bcrypt verification
+app.post("/api/auth/login", async (req, res) => {
+  const { emailOrPhone, password, role } = req.body;
+
+  if (!emailOrPhone || typeof emailOrPhone !== "string" || !password || typeof password !== "string" || !role) {
+    return res.status(400).json({
+      success: false,
+      error: "اطلاعات ارسالی برای ورود ناقص یا نامعتبر می‌باشد."
+    });
+  }
+
+  const identifier = emailOrPhone.trim().toLowerCase();
+  const inputRole = role;
+
+  let matchedUser: any = null;
+
+  // 1. Double source check: search MySQL first if database is connected
+  const pool = await getMySQLPool();
+  if (pool) {
+    try {
+      // Ensure migrations exist
+      try {
+        await pool.query("ALTER TABLE `users` ADD COLUMN `password` VARCHAR(255) NOT NULL DEFAULT '123'");
+      } catch (e) {}
+      try {
+        await pool.query("ALTER TABLE `users` ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1");
+      } catch (e) {}
+
+      const [rows] = await pool.query(
+        "SELECT * FROM `users` WHERE (`email` = ? OR `phone` = ?) AND `role` = ?",
+        [identifier, identifier, inputRole]
+      );
+      if ((rows as any[]).length > 0) {
+        const u = (rows as any[])[0];
+        matchedUser = {
+          id: u.id,
+          fullName: u.full_name,
+          email: u.email,
+          phone: u.phone,
+          role: u.role,
+          avatarUrl: u.avatar_url,
+          password: u.password,
+          isActive: u.is_active === 1 || u.is_active === true
+        };
+      }
+    } catch (err) {
+      console.error("MySQL query matches for auth failed:", err);
+    }
+  }
+
+  // 2. Local JSON file backup lookup
+  if (!matchedUser) {
+    const local = readLocalJSON();
+    const u = (local.users || []).find(
+      (user: any) =>
+        user.role === inputRole &&
+        (user.email.trim().toLowerCase() === identifier ||
+         user.phone.trim() === identifier)
+    );
+    if (u) {
+      matchedUser = { ...u };
+    }
+  }
+
+  // Check matched user
+  if (!matchedUser) {
+    return res.status(401).json({
+      success: false,
+      error: "کاربری با این مشخصات و نقش در سامانه یافت نشد. صحت نقش و اطلاعات ارسالی را مجدداً بررسی نمایید."
+    });
+  }
+
+  // Check inactive technician
+  if (matchedUser.role === "technician" && matchedUser.isActive === false) {
+    return res.status(403).json({
+      success: false,
+      error: "حساب کاربری تکنسینی شما هنوز توسط مدیریت ریموت تایید و فعال نگردیده است. مقتضی است منتظر تایید اولیه بمانید."
+    });
+  }
+
+  const userPassword = matchedUser.password || "";
+  const isHashed = isBcryptHash(userPassword);
+
+  if (!isHashed) {
+    // Legacy / unset profile check
+    const expectedPlain = userPassword || "123";
+    if (password !== expectedPlain) {
+      return res.status(401).json({
+        success: false,
+        error: "رمز عبور وارد شده اشتباه است. لطفاً مجدداً بررسی فرمایید."
+      });
+    }
+
+    // Passwords match but user hasn't secures their profile yet
+    return res.json({
+      success: true,
+      needsPasswordSetup: true,
+      userId: matchedUser.id,
+      message: "حساب کاربری شما با موفقیت احراز گردید اما فاقد رمز عبور امن است. لطفاً همین حالا رمز عبور جدید خود را تعیین نمایید تا با ساختار امنیتی BCrypt ذخیره گردد."
+    });
+  }
+
+  // Complete BCrypt comparison
+  const isValid = bcrypt.compareSync(password, userPassword);
+  if (!isValid) {
+    return res.status(401).json({
+      success: false,
+      error: "رمز عبور وارد شده اشتباه است. لطفاً مجدداً بررسی فرمایید."
+    });
+  }
+
+  return res.json({
+    success: true,
+    user: {
+      id: matchedUser.id,
+      fullName: matchedUser.fullName,
+      email: matchedUser.email,
+      phone: matchedUser.phone,
+      role: matchedUser.role,
+      avatarUrl: matchedUser.avatarUrl,
+      isActive: matchedUser.isActive
+    }
+  });
+});
+
+// Securing/Upgrading password endpoint
+app.post("/api/auth/set-password", async (req, res) => {
+  const { userId, password } = req.body;
+
+  if (!userId || !password || typeof password !== "string" || password.trim().length < 6) {
+    return res.status(400).json({
+      success: false,
+      error: "رمز عبور ارسالی نامعتبر است. رمز عبور باید شامل حداقل ۶ کاراکتر یا بیشتر باشد."
+    });
+  }
+
+  const hashedPassword = bcrypt.hashSync(password.trim(), 10);
+
+  // 1. MySQL Database Update
+  const pool = await getMySQLPool();
+  if (pool) {
+    try {
+      await pool.query("UPDATE `users` SET `password` = ? WHERE `id` = ?", [hashedPassword, userId]);
+    } catch (err) {
+      console.error("MySQL set password update failed:", err);
+    }
+  }
+
+  // 2. Local JSON DB Sync
+  const local = readLocalJSON();
+  if (local.users) {
+    const user = local.users.find((u: any) => u.id === userId);
+    if (user) {
+      user.password = hashedPassword;
+      writeLocalJSON(local);
+    }
+  }
+
+  return res.json({
+    success: true,
+    message: "رمز عبور جدید شما با موفقیت به پروتکل امنیتی ارتقاء یافت و ذخیره شد. شما هم اکنون مجاز به ورود هستید."
+  });
+});
+
+// -------------------------------------------------------------
 // APIs: Dynamic REST Routes for USERS (Credentials and Activation)
 // -------------------------------------------------------------
 
@@ -886,11 +1060,17 @@ app.get("/api/users", async (req, res) => {
 
 app.post("/api/users", async (req, res) => {
   const { id, fullName, email, phone, role, password, avatarUrl, isActive } = req.body;
+  
+  let finalPassword = password || '123';
+  if (!isBcryptHash(finalPassword)) {
+    finalPassword = bcrypt.hashSync(finalPassword, 10);
+  }
+
   const pool = await getMySQLPool();
   if (pool) {
     try {
       try {
-        await pool.query("ALTER TABLE `users` ADD COLUMN `password` VARCHAR(100) NOT NULL DEFAULT '123'");
+        await pool.query("ALTER TABLE `users` ADD COLUMN `password` VARCHAR(255) NOT NULL DEFAULT '123'");
       } catch (e) {}
       try {
         await pool.query("ALTER TABLE `users` ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1");
@@ -912,7 +1092,7 @@ app.post("/api/users", async (req, res) => {
       await pool.query(
         "INSERT INTO `users` (`id`, `full_name`, `email`, `phone`, `role`, `password`, `avatar_url`, `is_active`) VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
         "ON DUPLICATE KEY UPDATE `full_name` = VALUES(`full_name`), `email` = VALUES(`email`), `phone` = VALUES(`phone`), `role` = VALUES(`role`), `password` = VALUES(`password`), `avatar_url` = VALUES(`avatar_url`), `is_active` = VALUES(`is_active`)",
-        [id, fullName, email, phone, role, password || '123', avatarUrl || null, isActive !== false ? 1 : 0]
+        [id, fullName, email, phone, role, finalPassword, avatarUrl || null, isActive !== false ? 1 : 0]
       );
       return res.json({ success: true, id });
     } catch (err: any) {
@@ -943,10 +1123,21 @@ app.post("/api/users", async (req, res) => {
 
   // Update or insert in local backup
   const existingIdx = local.users.findIndex((u: any) => u.id === id);
+  const userPayload = {
+    id,
+    fullName,
+    email,
+    phone,
+    role,
+    password: finalPassword,
+    avatarUrl,
+    isActive: isActive !== false
+  };
+
   if (existingIdx >= 0) {
-    local.users[existingIdx] = { ...local.users[existingIdx], ...req.body };
+    local.users[existingIdx] = { ...local.users[existingIdx], ...userPayload };
   } else {
-    local.users.push(req.body);
+    local.users.push(userPayload);
   }
   writeLocalJSON(local);
   res.json({ success: true, id });
@@ -959,11 +1150,24 @@ app.put("/api/users/:id", async (req, res) => {
   if (pool) {
     try {
       try {
-        await pool.query("ALTER TABLE `users` ADD COLUMN `password` VARCHAR(100) NOT NULL DEFAULT '123'");
+        await pool.query("ALTER TABLE `users` ADD COLUMN `password` VARCHAR(255) NOT NULL DEFAULT '123'");
       } catch (e) {}
       try {
         await pool.query("ALTER TABLE `users` ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1");
       } catch (e) {}
+
+      // Get existing password first if none or unhashed provided
+      const [existingUsers] = await pool.query("SELECT * FROM `users` WHERE `id` = ?", [id]);
+      const currentDbUser = (existingUsers as any[])[0];
+      let finalPassword = currentDbUser ? currentDbUser.password : '123';
+      
+      if (password && password.trim() !== '') {
+        if (isBcryptHash(password)) {
+          finalPassword = password;
+        } else {
+          finalPassword = bcrypt.hashSync(password.trim(), 10);
+        }
+      }
 
       // Prevent duplicate constraints
       const [existing] = await pool.query(
@@ -979,7 +1183,7 @@ app.put("/api/users/:id", async (req, res) => {
 
       await pool.query(
         "UPDATE `users` SET `full_name`=?, `email`=?, `phone`=?, `role`=?, `password`=?, `avatar_url`=?, `is_active`=? WHERE `id`=?",
-        [fullName, email, phone, role, password || '123', avatarUrl || null, isActive !== false ? 1 : 0, id]
+        [fullName, email, phone, role, finalPassword, avatarUrl || null, isActive !== false ? 1 : 0, id]
       );
       return res.json({ success: true });
     } catch (err: any) {
@@ -1006,7 +1210,25 @@ app.put("/api/users/:id", async (req, res) => {
       });
     }
 
-    local.users[idx] = { ...local.users[idx], ...req.body };
+    let finalPassword = local.users[idx].password || '123';
+    if (password && password.trim() !== '') {
+      if (isBcryptHash(password)) {
+        finalPassword = password;
+      } else {
+        finalPassword = bcrypt.hashSync(password.trim(), 10);
+      }
+    }
+
+    local.users[idx] = { 
+      ...local.users[idx], 
+      fullName, 
+      email, 
+      phone, 
+      role, 
+      password: finalPassword, 
+      avatarUrl, 
+      isActive: isActive !== false 
+    };
     writeLocalJSON(local);
   }
   res.json({ success: true });

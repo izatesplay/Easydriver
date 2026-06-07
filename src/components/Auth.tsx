@@ -55,6 +55,12 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, setActiveTab }) => {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginRole, setLoginRole] = useState<UserRole>('customer');
 
+  // Migration Password Setup State (for users without secure passwords)
+  const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
+  const [setupUserId, setSetupUserId] = useState('');
+  const [newSetupPassword, setNewSetupPassword] = useState('');
+  const [confirmSetupPassword, setConfirmSetupPassword] = useState('');
+
   // Success Notification state
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
@@ -74,7 +80,7 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, setActiveTab }) => {
     return INITIAL_REGISTERED_USERS;
   };
 
-  // Handles actual login submission
+  // Handles actual login submission through the secure BCrypt backend API
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -87,52 +93,110 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, setActiveTab }) => {
       return;
     }
 
-    const selectedRole = loginRole;
-    const registered = getRegisteredUsers();
-
-    // Find if user is registered for the specified role
-    const matchedUser = registered.find(
-      (u) =>
-        u.role === selectedRole &&
-        (u.email.trim().toLowerCase() === loginIdentifier.trim().toLowerCase() ||
-         u.phone.trim() === loginIdentifier.trim())
-    );
-
-    if (!matchedUser) {
-      setErrorMsg('تطابق ناموفق: حساب کاربری با این ایمیل یا موبایل در نقش انتخاب شده یافت نشد.');
-      return;
-    }
-
-    if (matchedUser.password !== loginPassword) {
-      setErrorMsg('رمز عبور وارد شده اشتباه است. لطفاً مجدداً بررسی فرمایید.');
-      return;
-    }
-
-    // Verify Technician active status
-    if (selectedRole === 'technician') {
-      const activeTech = (technicians || []).find((t) => t.id === matchedUser.id || t.email?.toLowerCase() === matchedUser.email?.toLowerCase());
-      if (!activeTech || !activeTech.isActive) {
-        setErrorMsg('حساب کاربری تکنسینی شما هنوز توسط مدیریت ریموت تایید و فعال نگردیده است. مقتضی است منتظر تایید اولیه بمانید.');
+    fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        emailOrPhone: loginIdentifier.trim(),
+        password: loginPassword,
+        role: loginRole
+      })
+    })
+    .then(async (res) => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'اطلاعات ورود اشتباه است یا خطایی از سمت سرور رخ داد.');
+      }
+      return data;
+    })
+    .then((data) => {
+      if (data.needsPasswordSetup) {
+        setNeedsPasswordSetup(true);
+        setSetupUserId(data.userId);
+        setErrorMsg(data.message || 'حساب شما فاقد رمز عبور امن است. لطفاً رمز عبور جدیدی تعیین نمایید.');
         return;
       }
+
+      const matchedUser = data.user;
+      setSuccessMsg(`خوش آمدید، جناب ${matchedUser.fullName}! ورود موفقیت‌آمیز بود.`);
+      setShowSuccess(true);
+
+      // Save user to active frontend auth context
+      setTimeout(() => {
+        login(matchedUser.email, matchedUser.fullName, loginRole, {
+          id: matchedUser.id,
+          phone: matchedUser.phone,
+          avatarUrl: matchedUser.avatarUrl,
+        });
+        if (onSuccess) onSuccess();
+        if (setActiveTab) {
+          if (loginRole === 'admin') setActiveTab('admin-dashboard');
+          else if (loginRole === 'technician') setActiveTab('tech-dashboard');
+          else setActiveTab('home');
+        }
+      }, 1200);
+
+      if (loadFreshData) loadFreshData();
+    })
+    .catch((err: any) => {
+      console.error("Login sync exception:", err);
+      setErrorMsg(err.message || 'خطایی در تایید مشخصات کاربری رخ داد.');
+    });
+  };
+
+  // Handles submitting the new secure password setup to standard BCrypt hashing endpoint
+  const handlePasswordSetupSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+
+    if (newSetupPassword.trim().length < 6) {
+      setErrorMsg('رمز عبور جدید امنیتی باید حداقل شامل ۶ کاراکتر یا بیشتر باشد.');
+      return;
     }
 
-    setSuccessMsg(`خوش آمدید، جناب ${matchedUser.fullName}! ورود موفقیت‌آمیز بود.`);
+    if (newSetupPassword !== confirmSetupPassword) {
+      setErrorMsg('تکرار رمز عبور جدید همخوانی ندارد. مجدداً بررسی نمایید.');
+      return;
+    }
+
+    fetch("/api/auth/set-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: setupUserId,
+        password: newSetupPassword.trim()
+      })
+    })
+    .then(async (res) => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'خطایی در سرور دیتابیس بابت ذخیره‌سازی رمز عبور امنیتی رخ داد.');
+      }
+      return data;
+    });
+
+    // Read existing users locally to synchronize password as well
+    const registered = getRegisteredUsers();
+    const updated = registered.map((u) => {
+      if (u.id === setupUserId) {
+        return { ...u, password: newSetupPassword.trim() };
+      }
+      return u;
+    });
+    localStorage.setItem('ed_registered_users', JSON.stringify(updated));
+
+    setSuccessMsg('ارتقای امنیتی رمز عبور شما با موفقیت با الگوریتم BCrypt انجام شد! اکنون جهت ورود نهایی رمز جدید را وارد فرمایید.');
     setShowSuccess(true);
 
+    // Clean up setup process state
+    setNeedsPasswordSetup(false);
+    setLoginPassword(newSetupPassword.trim());
+    setNewSetupPassword('');
+    setConfirmSetupPassword('');
+
     setTimeout(() => {
-      login(matchedUser.email, matchedUser.fullName, selectedRole, {
-        id: matchedUser.id,
-        phone: matchedUser.phone,
-        avatarUrl: matchedUser.avatarUrl,
-      });
-      if (onSuccess) onSuccess();
-      if (setActiveTab) {
-        if (selectedRole === 'admin') setActiveTab('admin-dashboard');
-        else if (selectedRole === 'technician') setActiveTab('tech-dashboard');
-        else setActiveTab('home');
-      }
-    }, 1200);
+      setShowSuccess(false);
+    }, 2800);
   };
 
   // Handles actual signup submission
@@ -317,7 +381,11 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, setActiveTab }) => {
           {/* Tabs header */}
           <div className="grid grid-cols-2 p-1.5 bg-slate-100 rounded-2xl mb-8">
             <button
-              onClick={() => setActiveMode('login')}
+              onClick={() => {
+                setActiveMode('login');
+                setErrorMsg('');
+                setNeedsPasswordSetup(false);
+              }}
               className={`py-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 activeMode === 'login'
                   ? 'bg-white text-slate-900 shadow'
@@ -327,7 +395,11 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, setActiveTab }) => {
               ورود سریع کاربران
             </button>
             <button
-              onClick={() => setActiveMode('signup')}
+              onClick={() => {
+                setActiveMode('signup');
+                setErrorMsg('');
+                setNeedsPasswordSetup(false);
+              }}
               className={`py-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 activeMode === 'signup'
                   ? 'bg-white text-slate-900 shadow'
@@ -341,10 +413,177 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, setActiveTab }) => {
           {/* Form switch views */}
           <div>
             {activeMode === 'login' ? (
-              <form onSubmit={handleLoginSubmit} className="space-y-5">
+              needsPasswordSetup ? (
+                <form onSubmit={handlePasswordSetupSubmit} className="space-y-5">
+                  <div className="space-y-1">
+                    <span className="text-[10px] bg-amber-50 text-amber-600 px-2.5 py-1 rounded-full font-black border border-amber-200 inline-block mb-1">
+                      🔒 ارتقای اجباری امنیت حساب کاربری
+                    </span>
+                    <h3 className="text-lg font-black text-slate-950">تعیین رمز عبور جدید</h3>
+                    <p className="text-xs text-slate-400">حساب کاربری شما با موفقیت تایید شد؛ اما فاقد رمز عبور امن می‌باشد. لطفاً رمز عبور انتخابی خود را در کادرهای زیر تایید فرمایید.</p>
+                  </div>
+
+                  {errorMsg && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="p-3 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl text-xs font-bold leading-relaxed text-right"
+                    >
+                      {errorMsg}
+                    </motion.div>
+                  )}
+
+                  <div className="space-y-4">
+                    {/* New Password */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-500">رمز عبور جدید امن (حداقل ۶ کاراکتر)</label>
+                      <div className="relative flex items-center">
+                        <div className="absolute right-3.5 text-slate-400">
+                          <Lock className="h-4 w-4" />
+                        </div>
+                        <input
+                          type="password"
+                          required
+                          value={newSetupPassword}
+                          onChange={(e) => setNewSetupPassword(e.target.value)}
+                          placeholder="••••••••"
+                          className="w-full pr-11 pl-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-600 transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Confirm Password */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-500">تکرار رمز عبور جدید</label>
+                      <div className="relative flex items-center">
+                        <div className="absolute right-3.5 text-slate-400">
+                          <Lock className="h-4 w-4" />
+                        </div>
+                        <input
+                          type="password"
+                          required
+                          value={confirmSetupPassword}
+                          onChange={(e) => setConfirmSetupPassword(e.target.value)}
+                          placeholder="••••••••"
+                          className="w-full pr-11 pl-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-600 transition-all"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg hover:shadow-xl shadow-blue-500/15 cursor-pointer"
+                  >
+                    ارتقاء امنیت و ذخیره نهایی رمز عبور
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNeedsPasswordSetup(false);
+                      setErrorMsg('');
+                    }}
+                    className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer text-center block"
+                  >
+                    انصراف و بازگشت به فرم ورود
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleLoginSubmit} className="space-y-5">
+                  <div className="space-y-1">
+                    <h3 className="text-lg font-black text-slate-950">به پرتال EasyDriver وارد شوید</h3>
+                    <p className="text-xs text-slate-400">اطلاعات کاربری شخصی خود را در کادرهای زیر بنویسید</p>
+                  </div>
+
+                  {errorMsg && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="p-3 bg-rose-50 border border-rose-150 text-rose-600 rounded-xl text-xs font-bold leading-relaxed text-right"
+                    >
+                      {errorMsg}
+                    </motion.div>
+                  )}
+
+                  <div className="space-y-4">
+                    {/* Email & Phone */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-500">شماره موبایل یا ایمیل حساب کاربری</label>
+                      <div className="relative flex items-center">
+                        <div className="absolute right-3.5 text-slate-400">
+                          <Mail className="h-4 w-4" />
+                        </div>
+                        <input
+                          type="text"
+                          required
+                          value={loginIdentifier}
+                          onChange={(e) => setLoginIdentifier(e.target.value)}
+                          placeholder="example@easydriver.ir یا شماره تلفن"
+                          className="w-full pr-11 pl-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-600 transition-all font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Password mock */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-500">رمز عبور اختصاصی (در صورت داشتن)</label>
+                      <div className="relative flex items-center">
+                        <div className="absolute right-3.5 text-slate-400">
+                          <Lock className="h-4 w-4" />
+                        </div>
+                        <input
+                          type="password"
+                          value={loginPassword}
+                          onChange={(e) => setLoginPassword(e.target.value)}
+                          placeholder="••••••••"
+                          className="w-full pr-11 pl-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-600 transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Test Switch Role */}
+                    <div className="space-y-1.5 pt-1">
+                      <label className="text-[11px] font-bold text-slate-500 block">انتخاب نقش کاربری ورودی:</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { id: 'customer', name: 'مشتری عادی', icon: Users, color: 'hover:border-blue-500' },
+                          { id: 'technician', name: 'تکنسین فنی', icon: Hammer, color: 'hover:border-purple-500' },
+                          { id: 'admin', name: 'مدیر کل (Admin)', icon: Shield, color: 'hover:border-rose-500' },
+                        ].map((rl) => (
+                          <button
+                            key={rl.id}
+                            type="button"
+                            onClick={() => setLoginRole(rl.id as UserRole)}
+                            className={`p-2.5 rounded-xl border text-[10px] font-bold transition-all flex flex-col items-center gap-1 cursor-pointer ${
+                              loginRole === rl.id
+                                ? 'bg-slate-900 border-slate-900 text-white'
+                                : 'bg-white border-slate-150 text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            <rl.icon className="h-3.5 w-3.5 shrink-0" />
+                            <span>{rl.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg hover:shadow-xl shadow-blue-500/15 cursor-pointer"
+                  >
+                    تایید و ورود آنلاین به حساب
+                  </button>
+
+                </form>
+              )
+            ) : (
+              <form onSubmit={handleSignupSubmit} className="space-y-4">
                 <div className="space-y-1">
-                  <h3 className="text-lg font-black text-slate-950">به پرتال EasyDriver وارد شوید</h3>
-                  <p className="text-xs text-slate-400">اطلاعات کاربری شخصی خود را در کادرهای زیر بنویسید</p>
+                  <h3 className="text-lg font-black text-slate-950">عضویت در سامانه همکاران و مشتریان جدید</h3>
+                  <p className="text-xs text-slate-400">کادرهای زیر را طبق اصول فیلدها تکمیل نمایید</p>
                 </div>
 
                 {errorMsg && (
@@ -356,85 +595,6 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, setActiveTab }) => {
                     {errorMsg}
                   </motion.div>
                 )}
-
-                <div className="space-y-4">
-                  {/* Email & Phone */}
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-slate-500">شماره موبایل یا ایمیل حساب کاربری</label>
-                    <div className="relative flex items-center">
-                      <div className="absolute right-3.5 text-slate-400">
-                        <Mail className="h-4 w-4" />
-                      </div>
-                      <input
-                        type="text"
-                        required
-                        value={loginIdentifier}
-                        onChange={(e) => setLoginIdentifier(e.target.value)}
-                        placeholder="example@easydriver.ir یا شماره تلفن"
-                        className="w-full pr-11 pl-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-600 transition-all font-mono"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Password mock */}
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-slate-500">رمز عبور اختصاصی (در صورت داشتن)</label>
-                    <div className="relative flex items-center">
-                      <div className="absolute right-3.5 text-slate-400">
-                        <Lock className="h-4 w-4" />
-                      </div>
-                      <input
-                        type="password"
-                        value={loginPassword}
-                        onChange={(e) => setLoginPassword(e.target.value)}
-                        placeholder="••••••••"
-                        className="w-full pr-11 pl-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-600 transition-all"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Test Switch Role */}
-                  <div className="space-y-1.5 pt-1">
-                    <label className="text-[11px] font-bold text-slate-500 block">انتخاب نقش کاربری ورودی:</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[
-                        { id: 'customer', name: 'مشتری عادی', icon: Users, color: 'hover:border-blue-500' },
-                        { id: 'technician', name: 'تکنسین فنی', icon: Hammer, color: 'hover:border-purple-500' },
-                        { id: 'admin', name: 'مدیر کل (Admin)', icon: Shield, color: 'hover:border-rose-500' },
-                      ].map((rl) => (
-                        <button
-                          key={rl.id}
-                          type="button"
-                          onClick={() => setLoginRole(rl.id as UserRole)}
-                          className={`p-2.5 rounded-xl border text-[10px] font-bold transition-all flex flex-col items-center gap-1 cursor-pointer ${
-                            loginRole === rl.id
-                              ? 'bg-slate-900 border-slate-900 text-white'
-                              : 'bg-white border-slate-150 text-slate-600 hover:bg-slate-50'
-                          }`}
-                        >
-                          <rl.icon className="h-3.5 w-3.5 shrink-0" />
-                          <span>{rl.name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg hover:shadow-xl shadow-blue-500/15 cursor-pointer"
-                >
-                  تایید و ورود آنلاین به حساب
-                </button>
-
-              </form>
-            ) : (
-              <form onSubmit={handleSignupSubmit} className="space-y-4">
-                <div className="space-y-1">
-                  <h3 className="text-lg font-black text-slate-950">عضویت در سامانه همکاران و مشتریان جدید</h3>
-                  <p className="text-xs text-slate-400">کادرهای زیر را طبق اصول فیلدها تکمیل نمایید</p>
-                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Full name */}
