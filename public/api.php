@@ -396,5 +396,401 @@ if ($action === 'sync_all') {
     }
 }
 
+// Check if route-based API request is matched
+$route = isset($_GET['route']) ? trim($_GET['route'], '/') : '';
+
+if ($route !== '') {
+    // Determine the route path and request method
+    $method = $_SERVER['REQUEST_METHOD'];
+    $route_parts = explode('/', $route);
+    $resource = $route_parts[0];
+    $id = isset($route_parts[1]) ? $route_parts[1] : null;
+    $sub_resource = isset($route_parts[2]) ? $route_parts[2] : null;
+
+    // Read the raw JSON input from React
+    $raw_input = file_get_contents('php://input');
+    $body = json_decode($raw_input, true);
+    if ($body === null) {
+        $body = [];
+    }
+
+    // Map resources to database tables
+    $allowed_resources = ['users', 'technicians', 'requests', 'reviews', 'tickets', 'notifications', 'auth', 'compatible-drivers'];
+    
+    if (in_array($resource, $allowed_resources)) {
+        verify_or_create_tables($mysqli);
+
+        // Subroute for AUTH
+        if ($resource === 'auth') {
+            $sub_action = isset($route_parts[1]) ? $route_parts[1] : '';
+            
+            // POST /api/auth/login
+            if ($sub_action === 'login' && $method === 'POST') {
+                $emailOrPhone = isset($body['emailOrPhone']) ? trim($body['emailOrPhone']) : '';
+                $password = isset($body['password']) ? trim($body['password']) : '';
+                $role = isset($body['role']) ? trim($body['role']) : 'customer';
+
+                if ($emailOrPhone === '' || $password === '') {
+                    http_response_code(400);
+                    echo json_encode(['success' => false, 'error' => 'اطلاعات ارسالی برای ورود ناقص یا نامعتبر می‌باشد.'], JSON_UNESCAPED_UNICODE);
+                    exit();
+                }
+
+                $identifier = strtolower($emailOrPhone);
+                $stmt = $mysqli->prepare("SELECT * FROM `users` WHERE (LOWER(`email`) = ? OR `phone` = ?) AND `role` = ?");
+                $stmt->bind_param('sss', $identifier, $identifier, $role);
+                $stmt->execute();
+                $res = $stmt->get_result();
+                $matchedUser = $res->fetch_assoc();
+
+                if (!$matchedUser) {
+                    http_response_code(401);
+                    echo json_encode(['success' => false, 'error' => 'کاربری با این مشخصات و نقش در سامانه یافت نشد. صحت نقش و اطلاعات ارسالی را مجدداً بررسی نمایید.'], JSON_UNESCAPED_UNICODE);
+                    exit();
+                }
+
+                if ($role === 'technician' && intval($matchedUser['is_active']) === 0) {
+                    http_response_code(403);
+                    echo json_encode(['success' => false, 'error' => 'حساب کاربری تکنسینی شما هنوز توسط مدیریت ریموت تایید و فعال نگردیده است. مقتضی است منتظر تایید اولیه بمانید.'], JSON_UNESCAPED_UNICODE);
+                    exit();
+                }
+
+                $userPassword = isset($matchedUser['password']) ? $matchedUser['password'] : '123';
+                // Check if password is a bcrypt hash
+                $isHashed = (substr($userPassword, 0, 4) === '$2y$' || substr($userPassword, 0, 4) === '$2a$');
+
+                if (!$isHashed) {
+                    $expectedPlain = ($userPassword !== '') ? $userPassword : '123';
+                    if ($password !== $expectedPlain) {
+                        http_response_code(401);
+                        echo json_encode(['success' => false, 'error' => 'رمز عبور وارد شده اشتباه است. لطفاً مجدداً بررسی فرمایید.'], JSON_UNESCAPED_UNICODE);
+                        exit();
+                    }
+
+                    // Pre-hashed profile update needed
+                    echo json_encode([
+                        'success' => true,
+                        'needsPasswordSetup' => true,
+                        'userId' => $matchedUser['id'],
+                        'message' => 'حساب کاربری شما با موفقیت احراز گردید اما فاقد رمز عبور امن است. لطفاً همین حالا رمز عبور جدید خود را تعیین نمایید تا با ساختار امنیتی BCrypt ذخیره گردد.'
+                    ], JSON_UNESCAPED_UNICODE);
+                    exit();
+                }
+
+                // Verify bcrypt password in PHP
+                if (!password_verify($password, $userPassword)) {
+                    http_response_code(401);
+                    echo json_encode(['success' => false, 'error' => 'رمز عبور وارد شده اشتباه است. لطفاً مجدداً بررسی فرمایید.'], JSON_UNESCAPED_UNICODE);
+                    exit();
+                }
+
+                echo json_encode([
+                    'success' => true,
+                    'user' => [
+                        'id' => $matchedUser['id'],
+                        'fullName' => $matchedUser['full_name'],
+                        'email' => $matchedUser['email'],
+                        'phone' => $matchedUser['phone'],
+                        'role' => $matchedUser['role'],
+                        'avatarUrl' => $matchedUser['avatar_url'],
+                        'isActive' => intval($matchedUser['is_active']) === 1
+                    ]
+                ], JSON_UNESCAPED_UNICODE);
+                exit();
+            }
+
+            // POST /api/auth/set-password
+            if ($sub_action === 'set-password' && $method === 'POST') {
+                $userId = isset($body['userId']) ? trim($body['userId']) : '';
+                $password = isset($body['password']) ? trim($body['password']) : '';
+
+                if ($userId === '' || strlen($password) < 6) {
+                    http_response_code(400);
+                    echo json_encode(['success' => false, 'error' => 'شناسه کاربر یا رمز عبور نامعتبر است (حداقل ۶ کاراکتر).'], JSON_UNESCAPED_UNICODE);
+                    exit();
+                }
+
+                $hashedPassword = password_hash($password, PASSWORD_BCRYPT);
+                $stmt = $mysqli->prepare("UPDATE `users` SET `password` = ? WHERE `id` = ?");
+                $stmt->bind_param('ss', $hashedPassword, $userId);
+                
+                if ($stmt->execute()) {
+                    echo json_encode([
+                        'success' => true,
+                        'message' => 'رمز عبور جدید شما با موفقیت به پروتکل امنیتی ارتقاء یافت و ذخیره شد. شما هم اکنون مجاز به ورود هستید.'
+                    ], JSON_UNESCAPED_UNICODE);
+                } else {
+                    http_response_code(500);
+                    echo json_encode(['success' => false, 'error' => 'خطا در ذخیره رمز عبور در دیتابیس.'], JSON_UNESCAPED_UNICODE);
+                }
+                exit();
+            }
+        }
+
+        // GET /api/compatible-drivers
+        if ($resource === 'compatible-drivers') {
+            $drivers = [
+                ['id' => '1', 'name' => 'CH340 Serial Driver', 'os' => 'Windows 10/11', 'version' => '3.8.2023', 'status' => 'official', 'size' => '1.2 MB'],
+                ['id' => '2', 'name' => 'FTDI USB-to-UART Bus', 'os' => 'Windows 10/11', 'version' => '2.12.36.4', 'status' => 'certified', 'size' => '2.4 MB'],
+                ['id' => '3', 'name' => 'Prolific PL2303 Driver', 'os' => 'Windows 10/11', 'version' => '4.0.8', 'status' => 'legacy', 'size' => '1.8 MB'],
+                ['id' => '4', 'name' => 'Silicon Labs CP210x Bridge', 'os' => 'Windows 10/11', 'version' => '11.3.0', 'status' => 'stable', 'size' => '3.1 MB']
+            ];
+            echo json_encode($drivers, JSON_UNESCAPED_UNICODE);
+            exit();
+        }
+
+        $table_name = $resource;
+        
+        // --- READ LIST WITH EXPANSIONS (GET /api/tickets) ---
+        if ($table_name === 'tickets' && $method === 'GET' && !$id) {
+            $tickets_res = $mysqli->query("SELECT * FROM `tickets` ORDER BY `created_date` DESC");
+            $messages_res = $mysqli->query("SELECT * FROM `ticket_messages` ORDER BY `timestamp` ASC");
+            
+            $msg_map = [];
+            if ($messages_res) {
+                while ($msg = $messages_res->fetch_assoc()) {
+                    $t_id = $msg['ticket_id'];
+                    if (!isset($msg_map[$t_id])) {
+                        $msg_map[$t_id] = [];
+                    }
+                    $msg_map[$t_id][] = [
+                        'id' => $msg['id'],
+                        'senderId' => $msg['sender_id'],
+                        'senderName' => $msg['sender_name'],
+                        'senderRole' => $msg['sender_role'],
+                        'message' => $msg['message'],
+                        'timestamp' => $msg['timestamp']
+                    ];
+                }
+            }
+
+            $list = [];
+            if ($tickets_res) {
+                while ($t = $tickets_res->fetch_assoc()) {
+                    $list[] = [
+                        'id' => $t['id'],
+                        'subject' => $t['subject'],
+                        'message' => $t['message'],
+                        'status' => $t['status'],
+                        'priority' => $t['priority'],
+                        'category' => $t['category'],
+                        'adminReply' => $t['admin_reply'],
+                        'userEmail' => $t['user_email'],
+                        'userName' => $t['user_name'],
+                        'createdDate' => $t['created_date'],
+                        'updatedDate' => $t['updated_date'],
+                        'createdBy' => $t['created_by'],
+                        'availabilityTime' => $t['availability_time'],
+                        'attachedFile' => $t['attached_file'],
+                        'attachedFileName' => $t['attached_file_name'],
+                        'messages' => isset($msg_map[$t['id']]) ? $msg_map[$t['id']] : []
+                    ];
+                }
+            }
+            echo json_encode($list, JSON_UNESCAPED_UNICODE);
+            exit();
+        }
+
+        // --- READ LIST (GET /api/resource) ---
+        if ($method === 'GET' && !$id) {
+            $res = $mysqli->query("SELECT * FROM `$table_name` ORDER BY 1 DESC");
+            $list = [];
+            if ($res) {
+                while ($row = $res->fetch_assoc()) {
+                    $list[] = $row;
+                }
+            }
+            $converted = keys_convert($list, 'camel');
+            echo json_encode($converted, JSON_UNESCAPED_UNICODE);
+            exit();
+        }
+
+        // --- READ ONE (GET /api/resource/:id) ---
+        if ($method === 'GET' && $id) {
+            $stmt = $mysqli->prepare("SELECT * FROM `$table_name` WHERE `id` = ?");
+            $stmt->bind_param('s', $id);
+            $stmt->execute();
+            $res = $stmt->get_result();
+            $row = $res->fetch_assoc();
+            if ($row) {
+                echo json_encode(keys_convert($row, 'camel'), JSON_UNESCAPED_UNICODE);
+            } else {
+                http_response_code(404);
+                echo json_encode(['error' => 'رکورد مورد نظر یافت نشد.'], JSON_UNESCAPED_UNICODE);
+            }
+            exit();
+        }
+
+        // --- DELETE (DELETE /api/resource/:id) ---
+        if ($method === 'DELETE' && $id) {
+            $stmt = $mysqli->prepare("DELETE FROM `$table_name` WHERE `id` = ?");
+            $stmt->bind_param('s', $id);
+            if ($stmt->execute()) {
+                echo json_encode(['success' => true], JSON_UNESCAPED_UNICODE);
+            } else {
+                http_response_code(500);
+                echo json_encode(['error' => 'خطا در حذف رکورد.'], JSON_UNESCAPED_UNICODE);
+            }
+            exit();
+        }
+
+        // --- CREATE (POST /api/resource) ---
+        if ($method === 'POST') {
+            // Special subroutes check like: POST /api/tickets/:id/messages
+            if ($table_name === 'tickets' && $id && $sub_resource === 'messages') {
+                $msg_id = isset($body['msgId']) ? $body['msgId'] : 'msg_' . uniqid() . '_' . rand(1000, 9999);
+                $ticket_id = $id;
+                $sender_id = isset($body['senderId']) ? $body['senderId'] : '';
+                $sender_name = isset($body['senderName']) ? $body['senderName'] : '';
+                $sender_role = isset($body['senderRole']) ? $body['senderRole'] : 'customer';
+                $message_text = isset($body['message']) ? $body['message'] : '';
+                $timestamp = isset($body['timestamp']) ? $body['timestamp'] : date('Y-m-d H:i:s');
+
+                $stmt = $mysqli->prepare("INSERT INTO `ticket_messages` (`id`, `ticket_id`, `sender_id`, `sender_name`, `sender_role`, `message`, `timestamp`) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                $stmt->bind_param('sssssss', $msg_id, $ticket_id, $sender_id, $sender_name, $sender_role, $message_text, $timestamp);
+                
+                if ($stmt->execute()) {
+                    echo json_encode(['success' => true, 'id' => $msg_id], JSON_UNESCAPED_UNICODE);
+                } else {
+                    http_response_code(500);
+                    echo json_encode(['error' => 'خطا در ذخیره پیام: ' . $mysqli->error], JSON_UNESCAPED_UNICODE);
+                }
+                exit();
+            }
+
+            // Special routes check for notifications mark-read / read-all
+            if ($table_name === 'notifications') {
+                if ($id === 'read-all') {
+                    $mysqli->query("UPDATE `notifications` SET `read` = 1");
+                    echo json_encode(['success' => true], JSON_UNESCAPED_UNICODE);
+                    exit();
+                } elseif ($id && $sub_resource === 'read') {
+                    $stmt = $mysqli->prepare("UPDATE `notifications` SET `read` = 1 WHERE `id` = ?");
+                    $stmt->bind_param('s', $id);
+                    $stmt->execute();
+                    echo json_encode(['success' => true], JSON_UNESCAPED_UNICODE);
+                    exit();
+                }
+            }
+
+            // Map and parse the incoming body
+            $body_snake = keys_convert($body, 'snake');
+            
+            // Generate IDs
+            $record_id = isset($body_snake['id']) ? $body_snake['id'] : (($table_name === 'users') ? 'user_' . uniqid() : 'rec_' . uniqid());
+            $body_snake['id'] = $record_id;
+
+            // Secure user password if not hashed
+            if ($table_name === 'users') {
+                $raw_pass = isset($body_snake['password']) ? $body_snake['password'] : '123';
+                $isHashed = (substr($raw_pass, 0, 4) === '$2y$' || substr($raw_pass, 0, 4) === '$2a$');
+                if (!$isHashed) {
+                    $body_snake['password'] = password_hash($raw_pass, PASSWORD_BCRYPT);
+                }
+                
+                $email = isset($body_snake['email']) ? $body_snake['email'] : '';
+                $phone = isset($body_snake['phone']) ? $body_snake['phone'] : '';
+                $stmt_chk = $mysqli->prepare("SELECT * FROM `users` WHERE (`email` = ? OR `phone` = ?) AND `id` != ?");
+                $stmt_chk->bind_param('sss', $email, $phone, $record_id);
+                $stmt_chk->execute();
+                if ($stmt_chk->get_result()->num_rows > 0) {
+                    http_response_code(400);
+                    echo json_encode(['success' => false, 'error' => 'یک حساب کاربری دیگر با این ایمیل یا شماره موبایل از قبل در سامانه ثبت شده است.'], JSON_UNESCAPED_UNICODE);
+                    exit();
+                }
+            }
+
+            // Insert dynamically with ON DUPLICATE KEY UPDATE check
+            $columns = [];
+            $values = [];
+            $updates = [];
+            $types = '';
+            $bind_params = [];
+
+            foreach ($body_snake as $col => $val) {
+                // Skip virtual sub-arrays which don't map to DB columns
+                if ($col === 'messages') continue;
+                
+                $columns[] = "`$col`";
+                if ($val === null) {
+                    $values[] = "NULL";
+                } else {
+                    $values[] = "?";
+                    $bind_params[] = is_bool($val) ? ($val ? 1 : 0) : $val;
+                    if (is_int($val) || is_bool($val)) {
+                        $types .= 'i';
+                    } else {
+                        $types .= 's';
+                    }
+                }
+                if ($col !== 'id') {
+                    $updates[] = "`$col` = VALUES(`$col`)";
+                }
+            }
+
+            $sql = "INSERT INTO `$table_name` (" . implode(', ', $columns) . ") VALUES (" . implode(', ', $values) . ")";
+            if (count($updates) > 0) {
+                $sql .= " ON DUPLICATE KEY UPDATE " . implode(', ', $updates);
+            }
+
+            $stmt = $mysqli->prepare($sql);
+            if ($stmt) {
+                $stmt->bind_param($types, ...$bind_params);
+                $success = $stmt->execute();
+            } else {
+                $success = false;
+            }
+
+            if ($success) {
+                echo json_encode(['success' => true, 'id' => $record_id], JSON_UNESCAPED_UNICODE);
+            } else {
+                http_response_code(500);
+                echo json_encode(['error' => 'خطا در ذخیره‌سازی داده: ' . $mysqli->error], JSON_UNESCAPED_UNICODE);
+            }
+            exit();
+        }
+
+        // --- UPDATE (PUT /api/resource/:id) ---
+        if ($method === 'PUT' && $id) {
+            $body_snake = keys_convert($body, 'snake');
+            
+            $sets = [];
+            $types = '';
+            $bind_params = [];
+            
+            foreach ($body_snake as $col => $val) {
+                if ($col === 'id' || $col === 'messages') continue;
+                $sets[] = "`$col` = ?";
+                $bind_params[] = is_bool($val) ? ($val ? 1 : 0) : $val;
+                if (is_int($val) || is_bool($val)) {
+                    $types .= 'i';
+                } else {
+                    $types .= 's';
+                }
+            }
+            
+            if (count($sets) > 0) {
+                $sql = "UPDATE `$table_name` SET " . implode(', ', $sets) . " WHERE `id` = ?";
+                $types .= 's';
+                $bind_params[] = $id;
+                
+                $stmt = $mysqli->prepare($sql);
+                $stmt->bind_param($types, ...$bind_params);
+                $success = $stmt->execute();
+                
+                if ($success) {
+                    echo json_encode(['success' => true, 'id' => $id], JSON_UNESCAPED_UNICODE);
+                } else {
+                    http_response_code(500);
+                    echo json_encode(['error' => 'خطا در بروزرسانی رکورد: ' . $mysqli->error], JSON_UNESCAPED_UNICODE);
+                }
+            } else {
+                echo json_encode(['success' => true, 'id' => $id], JSON_UNESCAPED_UNICODE);
+            }
+            exit();
+        }
+    }
+}
+
 // اکشن نامعتبر
 send_response('error', 'اکشن درخواستی نامعتبر است یا مشخص نشده است.');
