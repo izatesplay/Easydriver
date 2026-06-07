@@ -151,7 +151,7 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, setActiveTab }) => {
 
     const registered = getRegisteredUsers();
 
-    // Check if duplicate email or phone exists
+    // Check client-side duplicate email or phone exists
     const duplicate = registered.find(
       (u) =>
         u.email.trim().toLowerCase() === email.trim().toLowerCase() ||
@@ -175,11 +175,7 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, setActiveTab }) => {
       avatarUrl: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(fullName.trim())}`,
     };
 
-    // Save to registered users DB
-    const updatedList = [...registered, newRegisteredUser];
-    localStorage.setItem('ed_registered_users', JSON.stringify(updatedList));
-
-    // Also persist in the backend database (MySQL or Local JSON backup)
+    // First persist in the backend database (MySQL or Local JSON backup)
     fetch("/api/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -194,51 +190,65 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, setActiveTab }) => {
         isActive: signupRole === 'technician' ? false : true,
       })
     })
+    .then(async (res) => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'خطایی در ثبت اطلاعات کاربری از طرف سرور رخ داد. مجدداً بررسی فرمایید.');
+      }
+      return data;
+    })
     .then(() => {
+      // Save to registered users list locally
+      const updatedList = [...registered, newRegisteredUser];
+      localStorage.setItem('ed_registered_users', JSON.stringify(updatedList));
+
+      if (signupRole === 'technician') {
+        // Register in technicians collection as inactive
+        addTechnician({
+          id: newRegisteredId,
+          fullName: fullName.trim(),
+          phone: phone.trim(),
+          email: email.trim().toLowerCase(),
+          specialty: 'all',
+          isActive: false,
+          completedTasks: 0,
+          points: 0,
+          certificationLevel: 'Junior'
+        });
+
+        setSuccessMsg(`ثبت‌نام شما با عنوان تکنسین «${fullName}» با موفقیت انجام شد. حساب شما غیرفعال است و پس از تایید مدیریت فعال خواهد شد.`);
+        setShowSuccess(true);
+
+        setTimeout(() => {
+          setShowSuccess(false);
+          setActiveMode('login');
+          setLoginRole('technician');
+          setLoginIdentifier(email.trim().toLowerCase());
+          setLoginPassword('');
+        }, 3500);
+      } else {
+        setSuccessMsg(`حساب کاربری شما با عنوان «${fullName}» در نقش مشتری با موفقیت ساخته شد.`);
+        setShowSuccess(true);
+
+        setTimeout(() => {
+          login(newRegisteredUser.email, newRegisteredUser.fullName, signupRole, {
+            id: newRegisteredUser.id,
+            phone: newRegisteredUser.phone,
+            avatarUrl: newRegisteredUser.avatarUrl,
+          });
+          if (onSuccess) onSuccess();
+          if (setActiveTab) {
+            setActiveTab('home');
+          }
+        }, 1200);
+      }
+
       if (loadFreshData) loadFreshData();
     })
-    .catch(err => console.error("Error writing user to backend DB:", err));
-
-    if (signupRole === 'technician') {
-      // Register in technicians collection as inactive
-      addTechnician({
-        id: newRegisteredId,
-        fullName: fullName.trim(),
-        phone: phone.trim(),
-        email: email.trim().toLowerCase(),
-        specialty: 'all',
-        isActive: false,
-        completedTasks: 0,
-        points: 0,
-        certificationLevel: 'Junior'
-      });
-
-      setSuccessMsg(`ثبت‌نام شما با عنوان تکنسین «${fullName}» با موفقیت انجام شد. حساب شما غیرفعال است و پس از تایید مدیریت فعال خواهد شد.`);
-      setShowSuccess(true);
-
-      setTimeout(() => {
-        setShowSuccess(false);
-        setActiveMode('login');
-        setLoginRole('technician');
-        setLoginIdentifier(email.trim().toLowerCase());
-        setLoginPassword('');
-      }, 3500);
-    } else {
-      setSuccessMsg(`حساب کاربری شما با عنوان «${fullName}» در نقش مشتری با موفقیت ساخته شد.`);
-      setShowSuccess(true);
-
-      setTimeout(() => {
-        login(newRegisteredUser.email, newRegisteredUser.fullName, signupRole, {
-          id: newRegisteredUser.id,
-          phone: newRegisteredUser.phone,
-          avatarUrl: newRegisteredUser.avatarUrl,
-        });
-        if (onSuccess) onSuccess();
-        if (setActiveTab) {
-          setActiveTab('home');
-        }
-      }, 1200);
-    }
+    .catch(err => {
+      console.error("Error writing user to backend DB:", err);
+      setErrorMsg(err.message || 'خطا در ارتباط با سرور یا تکراری بودن مشخصات. لطفاً مجدداً بررسی فرمایید.');
+    });
   };
 
   return (

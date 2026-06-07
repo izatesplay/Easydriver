@@ -896,19 +896,58 @@ app.post("/api/users", async (req, res) => {
         await pool.query("ALTER TABLE `users` ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1");
       } catch (e) {}
 
+      // Robust check: prevent duplicate registrations by other users with same email or phone
+      const [existing] = await pool.query(
+        "SELECT * FROM `users` WHERE (`email` = ? OR `phone` = ?) AND `id` != ?",
+        [email, phone, id]
+      );
+      if ((existing as any[]).length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: "یک حساب کاربری دیگر با این ایمیل یا شماره موبایل از قبل در سامانه ثبت شده است."
+        });
+      }
+
+      // Standard ON DUPLICATE KEY UPDATE to elegantly handle pre-existing records (e.g. technicians or background inits)
       await pool.query(
-        "INSERT INTO `users` (`id`, `full_name`, `email`, `phone`, `role`, `password`, `avatar_url`, `is_active`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO `users` (`id`, `full_name`, `email`, `phone`, `role`, `password`, `avatar_url`, `is_active`) VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
+        "ON DUPLICATE KEY UPDATE `full_name` = VALUES(`full_name`), `email` = VALUES(`email`), `phone` = VALUES(`phone`), `role` = VALUES(`role`), `password` = VALUES(`password`), `avatar_url` = VALUES(`avatar_url`), `is_active` = VALUES(`is_active`)",
         [id, fullName, email, phone, role, password || '123', avatarUrl || null, isActive !== false ? 1 : 0]
       );
       return res.json({ success: true, id });
-    } catch (err) {
+    } catch (err: any) {
       console.error("MySQL post user query failed:", err);
+      return res.status(500).json({
+        success: false,
+        error: "خطا در پردازش سرور دیتابیس: " + (err.message || "شکست درج مشخصات")
+      });
     }
   }
 
   const local = readLocalJSON();
   if (!local.users) local.users = [];
-  local.users.push(req.body);
+
+  // Also prevent duplicates in local backup JSON
+  const duplicate = local.users.find(
+    (u: any) =>
+      u.id !== id &&
+      (u.email.trim().toLowerCase() === email.trim().toLowerCase() ||
+       u.phone.trim() === phone.trim())
+  );
+  if (duplicate) {
+    return res.status(400).json({
+      success: false,
+      error: "یک حساب کاربری دیگر با این ایمیل یا شماره کاربری در حافظه محلی ثبت شده است."
+    });
+  }
+
+  // Update or insert in local backup
+  const existingIdx = local.users.findIndex((u: any) => u.id === id);
+  if (existingIdx >= 0) {
+    local.users[existingIdx] = { ...local.users[existingIdx], ...req.body };
+  } else {
+    local.users.push(req.body);
+  }
   writeLocalJSON(local);
   res.json({ success: true, id });
 });
@@ -926,13 +965,26 @@ app.put("/api/users/:id", async (req, res) => {
         await pool.query("ALTER TABLE `users` ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1");
       } catch (e) {}
 
+      // Prevent duplicate constraints
+      const [existing] = await pool.query(
+        "SELECT * FROM `users` WHERE (`email` = ? OR `phone` = ?) AND `id` != ?",
+        [email, phone, id]
+      );
+      if ((existing as any[]).length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: "یک حساب کاربری دیگر با این ایمیل یا شماره موبایل از قبل در سامانه ثبت شده است."
+        });
+      }
+
       await pool.query(
         "UPDATE `users` SET `full_name`=?, `email`=?, `phone`=?, `role`=?, `password`=?, `avatar_url`=?, `is_active`=? WHERE `id`=?",
         [fullName, email, phone, role, password || '123', avatarUrl || null, isActive !== false ? 1 : 0, id]
       );
       return res.json({ success: true });
-    } catch (err) {
+    } catch (err: any) {
       console.error("MySQL update user query failed:", err);
+      return res.status(500).json({ success: false, error: err.message || "خطا در بروزرسانی اطلاعات در سرور" });
     }
   }
 
@@ -940,6 +992,20 @@ app.put("/api/users/:id", async (req, res) => {
   if (!local.users) local.users = [];
   const idx = local.users.findIndex((u: any) => u.id === id);
   if (idx >= 0) {
+    // Check local duplicate
+    const duplicate = local.users.find(
+      (u: any) =>
+        u.id !== id &&
+        (u.email.trim().toLowerCase() === email.trim().toLowerCase() ||
+         u.phone.trim() === phone.trim())
+    );
+    if (duplicate) {
+      return res.status(400).json({
+        success: false,
+        error: "یک حساب کاربری دیگر با این ایمیل یا شماره کاربری در حافظه محلی ثبت شده است."
+      });
+    }
+
     local.users[idx] = { ...local.users[idx], ...req.body };
     writeLocalJSON(local);
   }
