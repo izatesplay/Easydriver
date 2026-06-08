@@ -110,23 +110,34 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, setActiveTab }) => {
       return data;
     })
     .then((data) => {
-      if (data.needsPasswordSetup) {
+      console.log("ورود موفقیت‌آمیز - پاسخ دریافت شده از سرور:", data);
+
+      if (data?.needsPasswordSetup) {
         setNeedsPasswordSetup(true);
         setSetupUserId(data.userId);
         setErrorMsg(data.message || 'حساب شما فاقد رمز عبور امن است. لطفاً رمز عبور جدیدی تعیین نمایید.');
         return;
       }
 
-      const matchedUser = data.user;
-      setSuccessMsg(`خوش آمدید، جناب ${matchedUser.fullName}! ورود موفقیت‌آمیز بود.`);
+      // Safe, layered check for user object presence (handles both nested 'user' properties or flat responses)
+      const matchedUser = data?.user || (data?.success && data?.id ? data : null);
+      if (!matchedUser) {
+        throw new Error(data?.error || 'مشخصات دریافتی کاربر از سمت سرور معتبر یا کامل عمومی نیست.');
+      }
+
+      const verifiedFullName = matchedUser.fullName || matchedUser.full_name || 'کاربر گرامی';
+      const verifiedEmail = matchedUser.email || '';
+      const verifiedPhone = matchedUser.phone || '';
+
+      setSuccessMsg(`خوش آمدید، جناب ${verifiedFullName}! ورود موفقیت‌آمیز بود.`);
       setShowSuccess(true);
 
-      // Save user to active frontend auth context
+      // Save user to active frontend auth context with fail-safe properties
       setTimeout(() => {
-        login(matchedUser.email, matchedUser.fullName, loginRole, {
+        login(verifiedEmail, verifiedFullName, loginRole, {
           id: matchedUser.id,
-          phone: matchedUser.phone,
-          avatarUrl: matchedUser.avatarUrl,
+          phone: verifiedPhone,
+          avatarUrl: matchedUser.avatarUrl || matchedUser.avatar_url,
         });
         if (onSuccess) onSuccess();
         if (setActiveTab) {
