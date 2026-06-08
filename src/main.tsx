@@ -5,26 +5,76 @@ import './index.css';
 
 // Global fetch interceptor to support clean routing without URL rewriting dependencies in production PHP hosting
 const originalFetch = window.fetch;
-window.fetch = function (input, init) {
-  if (typeof input === 'string' && input.startsWith('/api/')) {
-    const isProduction = (import.meta as any).env?.PROD || (
-      !window.location.hostname.includes('localhost') && 
-      !window.location.hostname.includes('.run.app') && 
-      !window.location.hostname.includes('127.0.0.1')
-    );
-    if (isProduction) {
-      const apiPath = input.substring(5); // Removes "/api/" prefix
-      let targetUrl = '';
-      if (apiPath.includes('?')) {
-        const [routePart, queryPart] = apiPath.split('?');
-        targetUrl = `/api.php?route=${routePart}&${queryPart}`;
-      } else {
-        targetUrl = `/api.php?route=${apiPath}`;
+window.fetch = async function (input, init) {
+  let targetInput = input;
+  
+  if (typeof input === 'string') {
+    let matchPath = '';
+    if (input.startsWith('/api/')) {
+      matchPath = input;
+    } else {
+      const apiIndex = input.indexOf('/api/');
+      if (apiIndex !== -1) {
+        matchPath = input.substring(apiIndex);
       }
-      return originalFetch(targetUrl, init);
+    }
+    
+    if (matchPath) {
+      const isProduction = (import.meta as any).env?.PROD || (
+        !window.location.hostname.includes('localhost') && 
+        !window.location.hostname.includes('.run.app') && 
+        !window.location.hostname.includes('127.0.0.1')
+      );
+      if (isProduction) {
+        const apiPath = matchPath.substring(5); // Removes "/api/" prefix
+        let targetUrl = '';
+        if (apiPath.includes('?')) {
+          const [routePart, queryPart] = apiPath.split('?');
+          targetUrl = `/api.php?route=${routePart}&${queryPart}`;
+        } else {
+          targetUrl = `/api.php?route=${apiPath}`;
+        }
+        targetInput = targetUrl;
+      }
     }
   }
-  return originalFetch(input, init);
+
+  try {
+    const response = await originalFetch(targetInput, init);
+    const contentType = response.headers.get('content-type') || '';
+    
+    if (contentType.toLowerCase().includes('text/html')) {
+      const text = await response.clone().text();
+      const trimmedText = text.trim();
+      if (trimmedText.startsWith('<!DOCTYPE') || trimmedText.startsWith('<html') || trimmedText.startsWith('<body') || trimmedText.startsWith('<div')) {
+        let errorMsg = 'خطای مفسر یا تداخل در پاسخ سرور پشتیبان رخ داده است. پاسخ دریافتی در قالب وب‌سایت (HTML) است.';
+        if (response.status === 404) {
+          errorMsg = 'آدرس وب‌سرویس یافت نشد (خطای ۴۰۴). لطفاً از صحت بارگذاری فایل api.php و تنظیمات دایرکتوری هاست اطمینان حاصل فرمایید.';
+        } else if (response.status === 500) {
+          errorMsg = 'سرور با خطای داخلی ۵۰۰ مواجه شد. لطفاً وضعیت لاگ خطاهای PHP (error_log) یا اتصال دیتابیس را بررسی نمایید.';
+        }
+        
+        return new Response(JSON.stringify({
+          success: false,
+          error: errorMsg,
+          status: response.status,
+          htmlPreview: trimmedText.substring(0, 150) + "..."
+        }), {
+          status: response.status || 500,
+          headers: { 'Content-Type': 'application/json; charset=utf-8' }
+        });
+      }
+    }
+    return response;
+  } catch (error: any) {
+    return new Response(JSON.stringify({
+      success: false,
+      error: 'خطای ناهماهنگی شبکه یا آفلاین بودن سرور دیتابیس میزبان: ' + (error?.message || 'عدم پاسخگویی سرویس')
+    }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json; charset=utf-8' }
+    });
+  }
 };
 
 // Global error overlay helper for raw script errors

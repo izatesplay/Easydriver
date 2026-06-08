@@ -10,6 +10,8 @@ USE `easydri1_mmd`;
 -- -------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `users` (
   `id` VARCHAR(50) NOT NULL,
+  `username` VARCHAR(100) NOT NULL UNIQUE,
+  `password_hash` VARCHAR(255) NOT NULL,
   `full_name` VARCHAR(100) NOT NULL,
   `email` VARCHAR(100) NOT NULL UNIQUE,
   `phone` VARCHAR(20) NOT NULL,
@@ -91,9 +93,11 @@ CREATE TABLE IF NOT EXISTS `reviews` (
 -- -------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `tickets` (
   `id` VARCHAR(50) NOT NULL,
+  `user_id` VARCHAR(50) NOT NULL,
+  `status` ENUM('open', 'in_progress', 'closed') NOT NULL DEFAULT 'open',
+  `content` TEXT NOT NULL,
   `subject` VARCHAR(200) NOT NULL,
   `message` TEXT NOT NULL,
-  `status` ENUM('open', 'in_progress', 'closed') NOT NULL DEFAULT 'open',
   `priority` ENUM('low', 'medium', 'high') NOT NULL DEFAULT 'medium',
   `category` ENUM('technical', 'billing', 'general', 'complaint') NOT NULL DEFAULT 'general',
   `admin_reply` TEXT NULL,
@@ -128,13 +132,13 @@ CREATE TABLE IF NOT EXISTS `ticket_messages` (
 -- Seed Initial User & Technician Data
 -- -------------------------------------------------------------
 
-INSERT INTO `users` (`id`, `full_name`, `email`, `phone`, `role`, `password`, `avatar_url`) VALUES
-('user-customer', 'سعید رستمی', 'saeed@customer.ir', '09121234567', 'customer', '123', 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80'),
-('tech-1', 'مهندس نوید مرادی', 'navid@easydriver.ir', '09123456789', 'technician', '123', 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&h=150&q=80'),
-('tech-2', 'آرش علوی', 'arash@easydriver.ir', '09187654321', 'technician', '123', 'https://images.unsplash.com/photo-1572451479139-6a308211d8be?auto=format&fit=crop&w=150&h=150&q=80'),
-('tech-3', 'مینا خسروی', 'mina@easydriver.ir', '09351234567', 'technician', '123', 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&h=150&q=80'),
-('tech-4', 'سهراب شریفی', 'sohrab@easydriver.ir', '09219876543', 'technician', '123', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80'),
-('admin-1', 'مدیریت ایزی‌درایور (امین)', 'admin@easydriver.ir', '09010009999', 'admin', '09386561626mM@', 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&h=150&q=80');
+INSERT INTO `users` (`id`, `username`, `password_hash`, `full_name`, `email`, `phone`, `role`, `password`, `avatar_url`) VALUES
+('user-customer', 'saeed@customer.ir', '$2y$10$vY35zS1FvG72e39X1.L2zOpUjIdqB.6hVv.yly7eYpUfHhXFieGmu', 'سعید رستمی', 'saeed@customer.ir', '09121234567', 'customer', '123', 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80'),
+('tech-1', 'navid@easydriver.ir', '$2y$10$vY35zS1FvG72e39X1.L2zOpUjIdqB.6hVv.yly7eYpUfHhXFieGmu', 'مهندس نوید مرادی', 'navid@easydriver.ir', '09123456789', 'technician', '123', 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&h=150&q=80'),
+('tech-2', 'arash@easydriver.ir', '$2y$10$vY35zS1FvG72e39X1.L2zOpUjIdqB.6hVv.yly7eYpUfHhXFieGmu', 'آرش علوی', 'arash@easydriver.ir', '09187654321', 'technician', '123', 'https://images.unsplash.com/photo-1572451479139-6a308211d8be?auto=format&fit=crop&w=150&h=150&q=80'),
+('tech-3', 'mina@easydriver.ir', '$2y$10$vY35zS1FvG72e39X1.L2zOpUjIdqB.6hVv.yly7eYpUfHhXFieGmu', 'مینا خسروی', 'mina@easydriver.ir', '09351234567', 'technician', '123', 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&h=150&q=80'),
+('tech-4', 'sohrab@easydriver.ir', '$2y$10$vY35zS1FvG72e39X1.L2zOpUjIdqB.6hVv.yly7eYpUfHhXFieGmu', 'سهراب شریفی', 'sohrab@easydriver.ir', '09219876543', 'technician', '123', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80'),
+('admin-1', 'admin@easydriver.ir', '$2y$10$2HhL8o488mSUn/L8u36K7OhsU3D4pBeZp.NfFfI3qfN0Vv7uYy3mu', 'مدیریت ایزی‌درایور (امین)', 'admin@easydriver.ir', '09010009999', 'admin', '09386561626mM@', 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&h=150&q=80');
 
 INSERT INTO `technicians` (`id`, `full_name`, `phone`, `email`, `specialty`, `is_active`, `completed_tasks`, `created_date`, `updated_date`, `created_by`, `certification_level`) VALUES
 ('tech-1', 'مهندس نوید مرادی', '09123456789', 'navid@easydriver.ir', 'all', 1, 34, '2026-01-10T08:30:00Z', '2026-05-18T10:20:00Z', 'admin-1', 'Expert'),
@@ -162,10 +166,10 @@ INSERT INTO `reviews` (`id`, `customer_name`, `rating`, `comment`, `service_type
 -- -------------------------------------------------------------
 -- Seed Initial Customer Tickets & Support Line messages
 -- -------------------------------------------------------------
-INSERT INTO `tickets` (`id`, `subject`, `message`, `status`, `priority`, `category`, `admin_reply`, `user_email`, `user_name`, `created_date`, `updated_date`, `created_by`, `availability_time`) VALUES
-('tick-1', 'عدم فعال‌سازی مجدد لایسنس آفیس', 'سلام، آفیس نصب شده به خوبی کار می‌کرد ولی امروز پیام لایسنس داد و وارد حالت Read-Only شد. چیکار باید بکنم؟', 'in_progress', 'high', 'technical', NULL, 'ali@gmail.com', 'علی رضایی', '2026-05-19T11:20:00Z', '2026-05-20T01:30:00Z', 'user-customer', NULL),
-('tick-2', 'آموزش اتصال انی‌دسک', 'من برای اولین بار می‌خوام ثبت درخواست بدم، ولی بلد نیستم چطور برنامه انی‌دسک رو اجرا کنم تا تکنسینتون وصل بشه.', 'open', 'medium', 'general', NULL, 'maryam@gmail.com', 'مریم بهرامی', '2026-05-20T04:30:00Z', '2026-05-20T04:30:00Z', 'user-customer', NULL),
-('tick-3', 'نصب مجدد بعد از ارتقا ویندوز', 'ببخشید من ماه گذشته درخواستم کامل شد. اگر ویندوزم رو دوباره عوض کنم باز هم به صورت رایگان برام نصب می‌کنید یا فاکتور جدید صادر میشه؟', 'closed', 'low', 'billing', 'کاربر گرامی، گارانتی نصب خدمات EasyDriver تا یک هفته می‌باشد. پس از آن هزینه نصب با تخفیف ۵۰درصدی برای مشتریان وفادار محاسبه خواهد شد.', 'sara@gmail.com', 'سارا امینی', '2026-05-15T14:10:00Z', '2026-05-16T10:00:00Z', 'user-customer', NULL);
+INSERT INTO `tickets` (`id`, `user_id`, `status`, `content`, `subject`, `message`, `priority`, `category`, `admin_reply`, `user_email`, `user_name`, `created_date`, `updated_date`, `created_by`, `availability_time`) VALUES
+('tick-1', 'user-customer', 'in_progress', 'سلام، آفیس نصب شده به خوبی کار می‌کرد ولی امروز پیام لایسنس داد و وارد حالت Read-Only شد. چیکار باید بکنم؟', 'عدم فعال‌سازی مجدد لایسنس آفیس', 'سلام، آفیس نصب شده به خوبی کار می‌کرد ولی امروز پیام لایسنس داد و وارد حالت Read-Only شد. چیکار باید بکنم؟', 'high', 'technical', NULL, 'ali@gmail.com', 'علی رضایی', '2026-05-19T11:20:00Z', '2026-05-20T01:30:00Z', 'user-customer', NULL),
+('tick-2', 'user-customer', 'open', 'من برای اولین بار می‌خوام ثبت درخواست بدم، ولی بلد نیستم چطور برنامه انی‌دسک رو اجرا کنم تا تکنسینتون وصل بشه.', 'آموزش اتصال انی‌دسک', 'من برای اولین بار می‌خوام ثبت درخواست بدم، ولی بلد نیستم چطور برنامه انی‌دسک رو اجرا کنم تا تکنسینتون وصل بشه.', 'medium', 'general', NULL, 'maryam@gmail.com', 'مریم بهرامی', '2026-05-20T04:30:00Z', '2026-05-20T04:30:00Z', 'user-customer', NULL),
+('tick-3', 'user-customer', 'closed', 'ببخشید من ماه گذشته درخواستم کامل شد. اگر ویندوزم رو دوباره عوض کنم باز هم به صورت رایگان برام نصب می‌کنید یا فاکتور جدید صادر میشه؟', 'نصب مجدد بعد از ارتقا ویندوز', 'ببخشید من ماه گذشته درخواستم کامل شد. اگر ویندوزم رو دوباره عوض کنم باز هم به صورت رایگان برام نصب می‌کنید یا فاکتور جدید صادر میشه؟', 'low', 'billing', 'کاربر گرامی، گارانتی نصب خدمات EasyDriver تا یک هفته می‌باشد. پس از آن هزینه نصب با تخفیف ۵۰درصدی برای مشتریان وفادار محاسبه خواهد شد.', 'sara@gmail.com', 'سارا امینی', '2026-05-15T14:10:00Z', '2026-05-16T10:00:00Z', 'user-customer', NULL);
 
 INSERT INTO `ticket_messages` (`id`, `ticket_id`, `sender_id`, `sender_name`, `sender_role`, `message`, `timestamp`) VALUES
 ('msg-1', 'tick-1', 'user-customer', 'علی رضایی', 'customer', 'سلام، آفیس نصب شده به خوبی کار می‌کرد ولی امروز پیام لایسنس داد و وارد حالت Read-Only شد. چیکار باید بکنم؟', '2026-05-19T11:20:00Z'),

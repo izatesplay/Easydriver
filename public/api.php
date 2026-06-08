@@ -13,12 +13,43 @@
  * ==============================================================================
  */
 
-// ۱. تنظیمات اتصال دیتابیس (مشخصات دیتابیس خود را در اینجا قرار دهید)
-define('DB_HOST', 'localhost');
-define('DB_USER', 'easydri1_mmd');
-define('DB_PASS', '09386561626mM@');
-define('DB_NAME', 'easydri1_mmd');
-define('DB_PORT', 3306);
+// ۱. تنظیمات اتصال دیتابیس با امکان بارگذاری پویا از فایل دات‌اینوی .env
+$env_path = dirname(__DIR__) . '/.env';
+if (!file_exists($env_path)) {
+    $env_path = __DIR__ . '/.env';
+}
+
+$db_host = 'localhost';
+$db_user = 'easydri1_mmd';
+$db_pass = '09386561626mM@';
+$db_name = 'easydri1_mmd';
+$db_port = 3306;
+
+if (file_exists($env_path)) {
+    $lines = file($env_path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($lines as $line) {
+        $line = trim($line);
+        if ($line === '' || strpos($line, '#') === 0) continue;
+        if (strpos($line, '=') !== false) {
+            list($key, $val) = explode('=', $line, 2);
+            $key = trim($key);
+            $val = trim($val);
+            $val = trim($val, '"\'');
+            
+            if ($key === 'DB_HOST') $db_host = $val;
+            if ($key === 'DB_USER') $db_user = $val;
+            if ($key === 'DB_PASS') $db_pass = $val;
+            if ($key === 'DB_NAME') $db_name = $val;
+            if ($key === 'DB_PORT') $db_port = intval($val);
+        }
+    }
+}
+
+define('DB_HOST', $db_host);
+define('DB_USER', $db_user);
+define('DB_PASS', $db_pass);
+define('DB_NAME', $db_name);
+define('DB_PORT', $db_port);
 
 // ۲. پیکربندی CORS برای اتصال بدون مشکل کلاینت‌های مختلف
 header("Access-Control-Allow-Origin: *");
@@ -234,9 +265,13 @@ function verify_or_create_tables($mysqli) {
         }
     }
 
-    // تضمین وجود ستون‌های رمز عبور و وضعیت فعال در جدول کاربران
+    // تضمین وجود تمام ستون‌های فرعی و اصلی جهت همخوانی ساختار دیتابیس تضمین شده
     @$mysqli->query("ALTER TABLE `users` ADD COLUMN `password` VARCHAR(100) NULL DEFAULT '123';");
     @$mysqli->query("ALTER TABLE `users` ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1;");
+    @$mysqli->query("ALTER TABLE `users` ADD COLUMN `username` VARCHAR(100) NULL AFTER `id`;");
+    @$mysqli->query("ALTER TABLE `users` ADD COLUMN `password_hash` VARCHAR(255) NULL AFTER `password`;");
+    @$mysqli->query("ALTER TABLE `tickets` ADD COLUMN `user_id` VARCHAR(50) NULL AFTER `id`;");
+    @$mysqli->query("ALTER TABLE `tickets` ADD COLUMN `content` TEXT NULL AFTER `message`;");
 }
 
 // بررسی اکشن درخواستی
@@ -250,15 +285,12 @@ if ($action === 'status') {
     $counts = [];
     $tables = ['users', 'technicians', 'requests', 'reviews', 'tickets', 'ticket_messages', 'notifications'];
     foreach ($tables as $t) {
-        $res = $mysqli->query("SELECT COUNT(*) as cnt FROM `$t`Table");
+        $res = $mysqli->query("SELECT COUNT(*) as cnt FROM `$t`");
         if ($res) {
             $row = $res->fetch_assoc();
             $counts[$t] = intval($row['cnt']);
         } else {
-            // ممکن است جدول هنوز به دلیل سینک نشدن دیتای پایه خالی باشد
-            $res_sec = $mysqli->query("SELECT COUNT(*) as cnt FROM `$t`");
-            $row_sec = $res_sec ? $res_sec->fetch_assoc() : ['cnt' => 0];
-            $counts[$t] = intval($row_sec['cnt']);
+            $counts[$t] = 0;
         }
     }
 
@@ -883,6 +915,24 @@ if ($route !== '') {
             $record_id = isset($body_snake['id']) ? $body_snake['id'] : (($table_name === 'users') ? 'user_' . uniqid() : 'rec_' . uniqid());
             $body_snake['id'] = $record_id;
 
+            // Auto-populate required MySQL columns asked in database checks
+            if ($table_name === 'users') {
+                if (!isset($body_snake['username']) || empty($body_snake['username'])) {
+                    $body_snake['username'] = isset($body_snake['email']) ? $body_snake['email'] : '';
+                }
+                if (!isset($body_snake['password_hash']) || empty($body_snake['password_hash'])) {
+                    $body_snake['password_hash'] = isset($body_snake['password']) ? $body_snake['password'] : '123';
+                }
+            }
+            if ($table_name === 'tickets') {
+                if (!isset($body_snake['user_id']) || empty($body_snake['user_id'])) {
+                    $body_snake['user_id'] = isset($body_snake['created_by']) ? $body_snake['created_by'] : '';
+                }
+                if (!isset($body_snake['content']) || empty($body_snake['content'])) {
+                    $body_snake['content'] = isset($body_snake['message']) ? $body_snake['message'] : '';
+                }
+            }
+
             // Secure user password if not hashed
             if ($table_name === 'users') {
                 $raw_pass = isset($body_snake['password']) ? $body_snake['password'] : '123';
@@ -956,6 +1006,24 @@ if ($route !== '') {
         // --- UPDATE (PUT /api/resource/:id) ---
         if ($method === 'PUT' && $id) {
             $body_snake = keys_convert($body, 'snake');
+
+            // Auto-populate custom alias columns if updated
+            if ($table_name === 'users') {
+                if (isset($body_snake['email']) && (!isset($body_snake['username']) || empty($body_snake['username']))) {
+                    $body_snake['username'] = $body_snake['email'];
+                }
+                if (isset($body_snake['password']) && (!isset($body_snake['password_hash']) || empty($body_snake['password_hash']))) {
+                    $body_snake['password_hash'] = $body_snake['password'];
+                }
+            }
+            if ($table_name === 'tickets') {
+                if (isset($body_snake['created_by']) && (!isset($body_snake['user_id']) || empty($body_snake['user_id']))) {
+                    $body_snake['user_id'] = $body_snake['created_by'];
+                }
+                if (isset($body_snake['message']) && (!isset($body_snake['content']) || empty($body_snake['content']))) {
+                    $body_snake['content'] = $body_snake['message'];
+                }
+            }
             
             $sets = [];
             $types = '';
