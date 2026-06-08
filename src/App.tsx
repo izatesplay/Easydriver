@@ -8,6 +8,7 @@ import { MyRequests } from './components/MyRequests';
 import { Reviews } from './components/Reviews';
 import { Tickets } from './components/Tickets';
 import { SupportChat } from './components/SupportChat';
+import { FloatingChatWidget } from './components/FloatingChatWidget';
 import { AdminDashboard } from './components/AdminDashboard';
 import { Auth } from './components/Auth';
 import { TechnicianDashboard } from './components/TechnicianDashboard';
@@ -100,6 +101,9 @@ function AppContent() {
 
         {/* 5. Floating real-time slide-in toasts notification stack */}
         <NotificationToasts />
+
+        {/* Global Floating Support Chat Widget accessible from any page */}
+        <FloatingChatWidget activeTabState={activeTab} setActiveTab={setActiveTab} />
 
       </div>
     </>
