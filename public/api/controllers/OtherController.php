@@ -80,6 +80,15 @@ class OtherController {
         ]);
 
         if ($success) {
+            // Keep the corresponding users table is_active, full_name, phone, and email in sync!
+            $stmtUser = $this->db->prepare("UPDATE `users` SET `is_active` = ?, `full_name` = ?, `phone` = ?, `email` = ? WHERE `id` = ?");
+            $stmtUser->execute([
+                $bodySnake['is_active'] ? 1 : 0,
+                $bodySnake['full_name'],
+                $bodySnake['phone'] ?? '',
+                $bodySnake['email'] ?? '',
+                $id
+            ]);
             Utils::sendResponse(200, true);
         } else {
             Utils::sendResponse(500, false, 'خطا در بروزرسانی اطلاعات تکنسین.');

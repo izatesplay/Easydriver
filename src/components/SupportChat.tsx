@@ -139,7 +139,7 @@ export const SupportChat: React.FC<SupportChatProps> = ({ selectedTicketId, setS
       subject: 'گفتگوی آنلاین حل خطای ویندوز',
       category: 'general',
       priority: 'medium',
-      message: 'سلام، من نیاز به راهنمایی در مورد روش نصب با AnyDesk و دریافت لایسنس دارم.',
+      message: '',
       userName: currentUser.fullName,
       userEmail: currentUser.email,
     });

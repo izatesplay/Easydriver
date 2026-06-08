@@ -47,7 +47,10 @@ export const FloatingChatWidget: React.FC<{ activeTabState?: string; setActiveTa
   useEffect(() => {
     if (activeChat && activeChat.messages && activeChat.messages.length > 0) {
       const lastMsg = activeChat.messages[activeChat.messages.length - 1];
-      if (lastMsg && lastMsg.senderRole === 'customer') {
+      const customerMessages = activeChat.messages.filter(m => m.senderRole === 'customer');
+      
+      // Only auto-reply the very first time the user sends a message
+      if (lastMsg && lastMsg.senderRole === 'customer' && customerMessages.length === 1) {
         // Only trigger if no admin replies are younger than 10 seconds
         const hasRecentReply = activeChat.messages.some(m => m.senderRole === 'admin' && (Date.now() - new Date(m.timestamp).getTime() < 10000));
         if (!hasRecentReply) {
@@ -92,7 +95,7 @@ export const FloatingChatWidget: React.FC<{ activeTabState?: string; setActiveTa
           userId: currentUser.id,
           userName: currentUser.fullName,
           userEmail: currentUser.email,
-          message: 'سلام، من به راهنمایی فنی جهت نصب و فعال‌سازی آنلاین درایورهای سخت‌افزاری نیاز دارم.'
+          message: ''
         })
       });
       const data = await response.json();

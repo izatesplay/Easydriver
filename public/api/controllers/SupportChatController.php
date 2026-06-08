@@ -21,7 +21,7 @@ class SupportChatController {
         $userId = $body['userId'] ?? 'user-customer';
         $userName = $body['userName'] ?? 'مشتری';
         $userEmail = $body['userEmail'] ?? 'customer@easydriver.ir';
-        $initialMessage = $body['message'] ?? 'سلام، من نیاز به راهنمایی در مورد روش نصب با AnyDesk و دریافت لایسنس دارم.';
+        $initialMessage = isset($body['message']) ? trim($body['message']) : '';
 
         // Search for an active open support chat session (category 'general' and status != 'closed')
         $stmt = $this->db->prepare("SELECT * FROM `tickets` WHERE `user_id` = ? AND `category` = 'general' AND `status` != 'closed' ORDER BY `created_date` DESC LIMIT 1");
@@ -40,14 +40,15 @@ class SupportChatController {
         // None exists, let's create a new live chat room
         $chatId = 'chat_' . uniqid();
         $timestamp = date('c');
+        $ticketContentText = !empty($initialMessage) ? $initialMessage : 'گفتگوی چت زنده آغاز شد';
 
         $stmt = $this->db->prepare("INSERT INTO `tickets` (`id`, `user_id`, `status`, `content`, `subject`, `message`, `priority`, `category`, `user_email`, `user_name`, `created_date`, `updated_date`, `created_by`) VALUES (?, ?, 'open', ?, ?, ?, 'medium', 'general', ?, ?, ?, ?, ?)");
         $success = $stmt->execute([
             $chatId,
             $userId,
-            $initialMessage,
+            $ticketContentText,
             'گفتگوی آنلاین حل خطای ویندوز',
-            $initialMessage,
+            $ticketContentText,
             $userEmail,
             $userName,
             $timestamp,
@@ -56,17 +57,19 @@ class SupportChatController {
         ]);
 
         if ($success) {
-            // Add initial message row
-            $msgId = 'msg_init_' . uniqid();
-            $msgStmt = $this->db->prepare("INSERT INTO `ticket_messages` (`id`, `ticket_id`, `sender_id`, `sender_name`, `sender_role`, `message`, `timestamp`) VALUES (?, ?, ?, ?, 'customer', ?, ?)");
-            $msgStmt->execute([
-                $msgId,
-                $chatId,
-                $userId,
-                $userName,
-                $initialMessage,
-                $timestamp
-            ]);
+            if (!empty($initialMessage)) {
+                // Add initial message row only if it is not empty
+                $msgId = 'msg_init_' . uniqid();
+                $msgStmt = $this->db->prepare("INSERT INTO `ticket_messages` (`id`, `ticket_id`, `sender_id`, `sender_name`, `sender_role`, `message`, `timestamp`) VALUES (?, ?, ?, ?, 'customer', ?, ?)");
+                $msgStmt->execute([
+                    $msgId,
+                    $chatId,
+                    $userId,
+                    $userName,
+                    $initialMessage,
+                    $timestamp
+                ]);
+            }
 
             Utils::sendResponse(201, true, null, [
                 'isNew' => true,

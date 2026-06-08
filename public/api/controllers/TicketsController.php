@@ -167,18 +167,20 @@ class TicketsController {
         $success = $stmt->execute($paramsMap);
 
         if ($success) {
-            // Also insert a default first message into ticket_messages for consistent chat views
-            $msgId = 'msg_init_' . uniqid();
-            $msgStmt = $this->db->prepare("INSERT INTO `ticket_messages` (`id`, `ticket_id`, `sender_id`, `sender_name`, `sender_role`, `message`, `timestamp`) VALUES (?, ?, ?, ?, ?, ?, ?)");
-            $msgStmt->execute([
-                $msgId,
-                $recordId,
-                $paramsMap['created_by'] ?? 'user-customer',
-                $paramsMap['user_name'] ?? 'مشتری پلتفرم',
-                'customer',
-                $paramsMap['message'],
-                $paramsMap['created_date'] ?? date('c')
-            ]);
+            if (!empty(trim($paramsMap['message'] ?? ''))) {
+                // Also insert a default first message into ticket_messages for consistent chat views
+                $msgId = 'msg_init_' . uniqid();
+                $msgStmt = $this->db->prepare("INSERT INTO `ticket_messages` (`id`, `ticket_id`, `sender_id`, `sender_name`, `sender_role`, `message`, `timestamp`) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                $msgStmt->execute([
+                    $msgId,
+                    $recordId,
+                    $paramsMap['created_by'] ?? 'user-customer',
+                    $paramsMap['user_name'] ?? 'مشتری پلتفرم',
+                    'customer',
+                    $paramsMap['message'],
+                    $paramsMap['created_date'] ?? date('c')
+                ]);
+            }
 
             Utils::sendResponse(201, true, null, ['id' => $recordId]);
         } else {

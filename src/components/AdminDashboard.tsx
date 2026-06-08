@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Request, Review, Ticket, Technician, SERVICE_LABELS, STATUS_LABELS, STATUS_COLORS, PRIORITY_LABELS, PRIORITY_COLORS, SPECIALTY_LABELS, TechnicianSpecialty, RequestStatus, RequestPriority, TICKET_CATEGORY_LABELS, TICKET_STATUS_LABELS, TICKET_STATUS_COLORS } from '../types';
-import { ShieldAlert, Key, Grid, Clipboard, Users, Star, MessageSquare, Plus, Edit2, Trash2, CheckCircle2, UserPlus, Info, Save, Clock, X, ChevronDown, ChevronUp, Reply, Sparkles, Database, Server, Globe, FileCode as FileCodeIcon, Trophy, Medal, Printer, FileSpreadsheet as FileDown, UserCheck, Camera, Monitor, Timer, BarChart3, RefreshCw, Play, Activity, Paperclip, Loader2 } from 'lucide-react';
+import { ShieldAlert, Key, Grid, Clipboard, Users, Star, MessageSquare, Plus, Edit2, Trash2, CheckCircle2, UserPlus, Info, Save, Clock, X, ChevronDown, ChevronUp, Reply, Sparkles, Database, Server, Globe, FileCode as FileCodeIcon, Trophy, Medal, Printer, FileSpreadsheet as FileDown, UserCheck, UserX, UserMinus, Camera, Monitor, Timer, BarChart3, RefreshCw, Play, Activity, Paperclip, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { calculateTechnicianStats } from '../utils/pointsCalculator';
 import { useRenderTracker } from '../utils/indexedDB';
@@ -1540,34 +1540,94 @@ export const AdminDashboard: React.FC = () => {
 
 
                     {/* Action buttons modifiers for CRUD */}
-                    <div className="pt-3.5 border-t border-slate-100 flex justify-end gap-2 text-xxs font-black">
-                      {!tech.isActive && (
+                    <div className="pt-3.5 border-t border-slate-100 flex justify-end gap-2 text-xxs font-black flex-wrap">
+                      {!tech.isActive ? (
+                        <>
+                          <button
+                            onClick={() => {
+                              updateTechnician({
+                                ...tech,
+                                isActive: true,
+                              });
+                              const registered = JSON.parse(localStorage.getItem('ed_registered_users') || '[]');
+                              const idx = registered.findIndex((u: any) => u.id === tech.id || u.email?.toLowerCase() === tech.email?.toLowerCase());
+                              if (idx >= 0) {
+                                registered[idx].isActive = true;
+                                localStorage.setItem('ed_registered_users', JSON.stringify(registered));
+                                
+                                // PUT updated user back to backend DB so it persists
+                                fetch(`/api/users/${registered[idx].id}`, {
+                                  method: "PUT",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify(registered[idx])
+                                })
+                                .then(() => { if (loadFreshData) loadFreshData(); })
+                                .catch(err => console.error("Error updating user on backend DB during activation:", err));
+                              } else {
+                                // If not found in local localStorage, we should still call backend PUT for user table to activate
+                                fetch(`/api/users/${tech.id}`, {
+                                  method: "PUT",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ is_active: 1 })
+                                })
+                                .then(() => { if (loadFreshData) loadFreshData(); });
+                              }
+                            }}
+                            className="p-1 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition-colors flex items-center gap-1 cursor-pointer shadow-sm animate-pulse"
+                          >
+                            <UserCheck className="h-3.5 w-3.5" />
+                            <span>تایید و فعال‌سازی</span>
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`آیا مایلید درخواست همکاری تکنسین «${tech.fullName}» را رد و حساب وی را دائم حذف نمایید؟`)) {
+                                deleteTechnician(tech.id);
+                              }
+                            }}
+                            className="p-1 px-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-md transition-colors flex items-center gap-1 cursor-pointer shadow-sm"
+                          >
+                            <UserX className="h-3.5 w-3.5" />
+                            <span>رد درخواست</span>
+                          </button>
+                        </>
+                      ) : (
                         <button
                           onClick={() => {
-                            updateTechnician({
-                              ...tech,
-                              isActive: true,
-                            });
-                            const registered = JSON.parse(localStorage.getItem('ed_registered_users') || '[]');
-                            const idx = registered.findIndex((u: any) => u.id === tech.id || u.email?.toLowerCase() === tech.email?.toLowerCase());
-                            if (idx >= 0) {
-                              registered[idx].isActive = true;
-                              localStorage.setItem('ed_registered_users', JSON.stringify(registered));
-                              
-                              // PUT updated user back to backend DB so it persists
-                              fetch(`/api/users/${registered[idx].id}`, {
-                                method: "PUT",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify(registered[idx])
-                              })
-                              .then(() => { if (loadFreshData) loadFreshData(); })
-                              .catch(err => console.error("Error updating user on backend DB during activation:", err));
+                            if (window.confirm(`آیا مایلید حساب کاربری تکنسین «${tech.fullName}» را غیرفعال و معلق نمایید؟`)) {
+                              updateTechnician({
+                                ...tech,
+                                isActive: false,
+                              });
+                              const registered = JSON.parse(localStorage.getItem('ed_registered_users') || '[]');
+                              const idx = registered.findIndex((u: any) => u.id === tech.id || u.email?.toLowerCase() === tech.email?.toLowerCase());
+                              if (idx >= 0) {
+                                registered[idx].isActive = false;
+                                localStorage.setItem('ed_registered_users', JSON.stringify(registered));
+                                
+                                // PUT updated user back to backend DB so it persists
+                                fetch(`/api/users/${registered[idx].id}`, {
+                                  method: "PUT",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify(registered[idx])
+                                })
+                                .then(() => { if (loadFreshData) loadFreshData(); })
+                                .catch(err => console.error("Error updating user on backend DB during deactivation:", err));
+                              } else {
+                                // Fallback: PUT directly to backend user table to deactivate
+                                fetch(`/api/users/${tech.id}`, {
+                                  method: "PUT",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ is_active: 0 })
+                                })
+                                .then(() => { if (loadFreshData) loadFreshData(); });
+                              }
                             }
                           }}
-                          className="p-1 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition-colors flex items-center gap-1 cursor-pointer shadow-sm animate-pulse"
+                          className="p-1 px-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-md transition-colors flex items-center gap-1 cursor-pointer shadow-sm"
                         >
-                          <UserCheck className="h-3.5 w-3.5" />
-                          <span>تایید و فعال‌سازی اکانت</span>
+                          <UserMinus className="h-3.5 w-3.5" />
+                          <span>غیرفعال‌سازی و تعلیق</span>
                         </button>
                       )}
 
