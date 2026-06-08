@@ -3,6 +3,30 @@ import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 
+// Global fetch interceptor to support clean routing without URL rewriting dependencies in production PHP hosting
+const originalFetch = window.fetch;
+window.fetch = function (input, init) {
+  if (typeof input === 'string' && input.startsWith('/api/')) {
+    const isProduction = (import.meta as any).env?.PROD || (
+      !window.location.hostname.includes('localhost') && 
+      !window.location.hostname.includes('.run.app') && 
+      !window.location.hostname.includes('127.0.0.1')
+    );
+    if (isProduction) {
+      const apiPath = input.substring(5); // Removes "/api/" prefix
+      let targetUrl = '';
+      if (apiPath.includes('?')) {
+        const [routePart, queryPart] = apiPath.split('?');
+        targetUrl = `/api.php?route=${routePart}&${queryPart}`;
+      } else {
+        targetUrl = `/api.php?route=${apiPath}`;
+      }
+      return originalFetch(targetUrl, init);
+    }
+  }
+  return originalFetch(input, init);
+};
+
 // Global error overlay helper for raw script errors
 window.addEventListener('error', (event) => {
   renderCrashScreen(event.error || new Error(event.message || 'Unknown window runtime error'));

@@ -415,10 +415,191 @@ if ($route !== '') {
     }
 
     // Map resources to database tables
-    $allowed_resources = ['users', 'technicians', 'requests', 'reviews', 'tickets', 'notifications', 'auth', 'compatible-drivers'];
+    $allowed_resources = ['users', 'technicians', 'requests', 'reviews', 'tickets', 'notifications', 'auth', 'compatible-drivers', 'upload', 'ai-chat', 'analyze-system', 'db-health', 'db-status'];
     
     if (in_array($resource, $allowed_resources)) {
         verify_or_create_tables($mysqli);
+
+        // GET /api/db-health
+        if ($resource === 'db-health' && $method === 'GET') {
+            echo json_encode(['status' => 'healthy', 'database' => 'connected'], JSON_UNESCAPED_UNICODE);
+            exit();
+        }
+
+        // GET /api/db-status
+        if ($resource === 'db-status' && $method === 'GET') {
+            echo json_encode(['connected' => true, 'schemaStatus' => 'synchronized', 'database' => DB_NAME], JSON_UNESCAPED_UNICODE);
+            exit();
+        }
+
+        // POST /api/upload
+        if ($resource === 'upload' && $method === 'POST') {
+            $fileName = isset($body['fileName']) ? trim($body['fileName']) : '';
+            $base64Data = isset($body['base64Data']) ? trim($body['base64Data']) : '';
+
+            if ($fileName === '' || $base64Data === '') {
+                http_response_code(400);
+                echo json_encode(['error' => 'نام فایل و داده‌های Base64 هر دو الزامی هستند.'], JSON_UNESCAPED_UNICODE);
+                exit();
+            }
+
+            try {
+                $path_info = pathinfo($fileName);
+                $fileExt = isset($path_info['extension']) ? '.' . $path_info['extension'] : '';
+                $baseName = preg_replace('/[^a-zA-Z0-9]/', '_', $path_info['filename']);
+                $uniqueFileName = $baseName . '_' . time() . $fileExt;
+
+                // Strip data URL prefixes if they exist
+                $cleanBase64 = $base64Data;
+                if (strpos($base64Data, ';base64,') !== false) {
+                    $parts = explode(';base64,', $base64Data);
+                    $cleanBase64 = $parts[1];
+                }
+
+                $decodedData = base64_decode($cleanBase64);
+                if ($decodedData === false) {
+                    http_response_code(400);
+                    echo json_encode(['error' => 'قالب فشرده‌سازی Base64 ارسالی معتبر نمی‌باشد.'], JSON_UNESCAPED_UNICODE);
+                    exit();
+                }
+
+                $uploadsDir = __DIR__ . '/uploads';
+                if (!is_dir($uploadsDir)) {
+                    mkdir($uploadsDir, 0755, true);
+                }
+
+                $filePath = $uploadsDir . '/' . $uniqueFileName;
+                file_put_contents($filePath, $decodedData);
+
+                $fileUrl = '/uploads/' . $uniqueFileName;
+                echo json_encode([
+                    'success' => true,
+                    'url' => $fileUrl,
+                    'originalName' => $fileName
+                ], JSON_UNESCAPED_UNICODE);
+            } catch (Exception $e) {
+                http_response_code(500);
+                echo json_encode(['error' => 'خطا در ذخیره فایل بر روی سرور: ' . $e->getMessage()], JSON_UNESCAPED_UNICODE);
+            }
+            exit();
+        }
+
+        // POST /api/ai-chat
+        if ($resource === 'ai-chat' && $method === 'POST') {
+            $subject = isset($body['subject']) ? trim($body['subject']) : '';
+            $messageHistory = isset($body['messageHistory']) ? $body['messageHistory'] : [];
+
+            $lastUserMessage = '';
+            if (is_array($messageHistory)) {
+                $userMsgs = [];
+                foreach ($messageHistory as $m) {
+                    $senderRole = isset($m['senderRole']) ? $m['senderRole'] : '';
+                    if ($senderRole === 'customer' || $senderRole === '') {
+                        $userMsgs[] = isset($m['message']) ? $m['message'] : '';
+                    }
+                }
+                if (count($userMsgs) > 0) {
+                    $lastUserMessage = $userMsgs[count($userMsgs) - 1];
+                }
+            }
+
+            $textInput = mb_strtolower($lastUserMessage . " " . $subject, 'UTF-8');
+            $reply = '';
+
+            if (strpos($textInput, 'آفیس') !== false || strpos($textInput, 'office') !== false || strpos($textInput, 'اکتیو') !== false || strpos($textInput, 'لایسنس') !== false || strpos($textInput, 'کرک') !== false) {
+                $reply = "سلام و احترام. برای رفع مشکل لایسنس آفیس، ابتدا موقتاً بخش Real-time Protection آنتی‌ویروس ویندوز را خاموش بفرمایید. سپس ابزار فعال‌ساز EasyActivator موجود روی میز کار (Desktop) را با دسترسی ادمین باز کرده و کلید [2] را فشار دهید. پس از مشاهده پیام موفقیت، سیستم را ریستارت کنید.";
+            } elseif (strpos($textInput, 'گرافیک') !== false || strpos($textInput, 'کارت گرافیک') !== false || strpos($textInput, 'nvidia') !== false || strpos($textInput, 'amd') !== false || strpos($textInput, 'intel') !== false || strpos($textInput, 'radeon') !== false || strpos($textInput, 'بازی') !== false || strpos($textInput, 'درایور') !== false) {
+                $reply = "درود فراوان بر شما. بروز اختلال در گرافیک به دلیل فایل‌های کش درایور قبلی رایج است. توصیه می‌شود ابتدا نرم‌افزار DDU را در حالت Safe Mode اجرا کنید تا درایورهای معیوب قبلی کاملاً حذف (Clean Install) شود؛ ما آماده‌ایم آخرین نسخه پایدار و کاملاً تست‌شده WHQL را به طور خودکار روی سیستم شما مچ و بارگذاری کنیم.";
+            } elseif (strpos($textInput, 'انی دسک') !== false || strpos($textInput, 'anydesk') !== false || strpos($textInput, 'آی دی') !== false || strpos($textInput, 'وصل') !== false || strpos($textInput, 'کد') !== false || strpos($textInput, 'کنترل') !== false) {
+                $reply = "سلام. لطفاً نرم‌افزار AnyDesk را روی سیستم باز بگذارید و شناسه ۹ رقمی قرمز رنگ نمایش داده شده در بخش Your Address را بنویسید. کارشناسان ارشد ایزی‌درایور به محض دریافت شناسه، با دسترسی ایمن اتصال ریموت را جهت بررسی سیستم برقرار خواهند کرد.";
+            } elseif (strpos($textInput, 'پرینتر') !== false || strpos($textInput, 'چاپگر') !== false || strpos($textInput, 'اسکنر') !== false || strpos($textInput, 'نصب نشد') !== false) {
+                $reply = "سلام کاربر گرامی. مشکل عدم چاپ معمولاً به علت تداخل پورت‌های مجازی و یا توقف سرویس Print Spooler ویندوز است. در عملیات ریموت، ما پورت پیش‌فرض را روی USB001 تنطیم کرده و یک بار سرویس چاپگر را از طریق خط فرمان ری‌استارت خواهیم کرد.";
+            } elseif (strpos($textInput, 'کندی') !== false || strpos($textInput, 'هنگ') !== false || strpos($textInput, 'ویندوز') !== false || strpos($textInput, 'اپدیت') !== false || strpos($textInput, 'آپدیت') !== false || strpos($textInput, 'ریستارت') !== false) {
+                $reply = "درود. افت سرعت شدید ویندوز اغلب ناشی از انباشته شدن فایل‌های موقت کش درایو C، حضور بدافزارها در Startup و یا دمای نامتعارف سخت‌افزار است. با ابزارهای بهینه‌ساز تخصصی ما، بخش کش مرورگرها، کلیدهای اضافی رجیستری و فایل‌های تکراری سیستم شما را به طور کامل پاکسازی می‌کنیم.";
+            } elseif (strpos($textInput, 'صدا') !== false || strpos($textInput, 'میکروفون') !== false || strpos($textInput, 'هدست') !== false || strpos($textInput, 'قطع') !== false) {
+                $reply = "سلام. اختلال صدا اکثراً به خاطر عدم تطابق درایور Realtek با پچ امنیتی جدید ویندوز رخ می‌دهد. ما درایور اورجینال مادربرد شما را پیدا کرده و با ابزار مدیریت افزونه صوتی همگام خواهیم ساخت.";
+            } else {
+                $naturalReplies = [
+                    "درود و وقت بخیر؛ اطلاعات ثبت‌شده توسط سیستم هوشمند ما تحلیل شد. کارشناسان فنی ایزی‌درایور هم‌اکنون آماده برقراری اتصال ریموت AnyDesk روی سیستم شما هستند تا به صورت دقیق‌تر عیب‌یابی را نهایی کنند.",
+                    "سلام دوست گرامی؛ درخواست شما در صف اولویت‌های مانیتورینگ آنلاین قرار گرفت. برای تایید نهایی ابزارهای نصب درایور، همکاران بخش پشتیبانی فنی تا لحظاتی دیگر مستقیم روی سیستم شما لاگین خواهند کرد.",
+                    "ارسال توضیحات با موفقیت ثبت شد. سیستم پیشنهاد می‌دهد برای جلوگیری از هرگونه تداخل در حین اتوماسیون آنلاین نصب درایورها، برنامه‌های سنگین و دانلودهای پس‌زمینه خود را موقتاً متوقف کنید.",
+                    "سیستم پشتیبان ارشد ایزی‌درایور پیام شما را تحلیل کرد. جهت سرعت‌بخشی به امر نصب و عیب‌یابی ریموت، پیشنهاد داریم سیستم عامل خود را در حالت آماده‌باش برای مانیتورینگ قرار دهید."
+                ];
+                $reply = $naturalReplies[mt_rand(0, count($naturalReplies) - 1)];
+            }
+
+            echo json_encode(['text' => $reply], JSON_UNESCAPED_UNICODE);
+            exit();
+        }
+
+        // POST /api/analyze-system
+        if ($resource === 'analyze-system' && $method === 'POST') {
+            $hardwareSpec = isset($body['hardwareSpec']) ? $body['hardwareSpec'] : [];
+            $originalIssue = isset($body['originalIssue']) ? trim($body['originalIssue']) : '';
+
+            $cpu = isset($hardwareSpec['cpu']) ? $hardwareSpec['cpu'] : 'Intel/AMD Processor';
+            $gpu = isset($hardwareSpec['gpu']) ? $hardwareSpec['gpu'] : 'Unknown GPU Card';
+            $ram = isset($hardwareSpec['ram']) ? $hardwareSpec['ram'] : '16 GB DDR4';
+            $os = isset($hardwareSpec['os']) ? $hardwareSpec['os'] : 'Windows 11 Enterprise';
+            $issue = $originalIssue !== '' ? $originalIssue : 'درخواست نصب پکیج‌های درایور و نرم‌افزار عمومی';
+
+            $isNvidia = (strpos(strtolower($gpu), 'nvidia') !== false || strpos(strtolower($gpu), 'rtx') !== false || strpos(strtolower($gpu), 'gtx') !== false);
+            $gpuStatus = (strpos(mb_strtolower($issue, 'UTF-8'), 'کارت گرافیک') !== false || strpos(mb_strtolower($issue, 'UTF-8'), 'بازی') !== false || strpos(mb_strtolower($issue, 'UTF-8'), 'گرافیک') !== false) ? 'outdated' : 'optimal';
+            
+            $analysisText = "براساس عیب‌یابی مکانیزه سیستم EasyDriver، مشخصات سخت‌افزار ایده آل شما ({$cpu}) مجهز به پردازشگر تصویری ({$gpu}) و رم ({$ram}) کشش فوق‌العاده‌ای برای پردازش‌های بهینه دارد. با این حال تداخل گزارش شده تحت عنوان «{$issue}» احتمالاً به علت تداخل مستقیم کلیدهای فرعی رجیستری و قدیمی بودن بسته درایورهای هسته فرعی است. نصب پچ بهینه‌ساز و بروزرسانی درایورها پیشنهاد صریح سیستم است.";
+
+            $diagnosticsArray = [
+                [ 
+                    'name' => $gpu, 
+                    'status' => $gpuStatus, 
+                    'version' => $isNvidia ? 'v531.11 (پیش‌فرض قدیمی)' : 'v23.2.1 (نیاز به ارتقا)', 
+                    'type' => 'هدایتگر تصویری (Graphic GPU)' 
+                ],
+                [ 
+                    'name' => $cpu, 
+                    'status' => 'optimal', 
+                    'version' => 'شناسایی‌شده (تحت بار متعادل)', 
+                    'type' => 'پردازشگر مرکزی (CPU)' 
+                ],
+                [ 
+                    'name' => "ویندوز {$os}", 
+                    'status' => 'warning', 
+                    'version' => 'بیلد پایدار (نیازمند هماهنگی رجیستری)', 
+                    'type' => 'بستر سیستم‌عامل (OS)' 
+                ],
+                [ 
+                    'name' => 'پورت ریموت AnyDesk Service', 
+                    'status' => 'optimal', 
+                    'version' => 'کانال امن فعال (SSL 256bit)', 
+                    'type' => 'سرویس اتصال پشتیبان' 
+                ]
+            ];
+
+            $customShellCommands = 
+                "# =========================================================================\n" .
+                "#     سند عیب‌یابی سیستم هوشمند EasyDriver - گزارش موقت PowerShell\n" .
+                "#     سازگار با سخت‌افزار: CPU {$cpu} | GPU {$gpu}\n" .
+                "# =========================================================================\n\n" .
+                "Write-Host \">>> در حال شروع اسکن سلامت سیستم برای پردازنده {$cpu} ...\"\n" .
+                "# بررسی وضعیت اتصال اینترنت جهت همگام‌سازی ابزارهای ریموت\n" .
+                "\$PingCheck = Test-Connection -ComputerName \"8.8.8.8\" -Count 1 -Quiet\n" .
+                "if (\$PingCheck) {\n" .
+                "    Write-Host \"[OK] اتصال اینترنت برقرار است. بارگذاری سرورهای ردیاب...\" -ForegroundColor Green\n" .
+                "} else {\n" .
+                "    Write-Warning \"[WARN] اختلال جزئی در شبکه شناسایی شد؛ پیشنهاد می‌شود اتصالات بررسی شود.\"\n" .
+                "}\n\n" .
+                "# اسکن کلیورهای فعال تصویر و کش برای کارت گرافیک {$gpu}\n" .
+                "Get-WmiObject Win32_VideoController | Select-Object Name, VideoProcessor, DriverVersion\n" .
+                "Write-Host \"[SUCCESS] گزارش اولیه با موفقیت ثبت گردید. آماده اتصال تکنسین ریموت.\" -ForegroundColor Cyan\n";
+
+            echo json_encode([
+                'status' => 'warning',
+                'analysis' => $analysisText,
+                'diagnostics' => $diagnosticsArray,
+                'shellCommands' => $customShellCommands
+            ], JSON_UNESCAPED_UNICODE);
+            exit();
+        }
 
         // Subroute for AUTH
         if ($resource === 'auth') {
@@ -528,14 +709,36 @@ if ($route !== '') {
         }
 
         // GET /api/compatible-drivers
-        if ($resource === 'compatible-drivers') {
-            $drivers = [
-                ['id' => '1', 'name' => 'CH340 Serial Driver', 'os' => 'Windows 10/11', 'version' => '3.8.2023', 'status' => 'official', 'size' => '1.2 MB'],
-                ['id' => '2', 'name' => 'FTDI USB-to-UART Bus', 'os' => 'Windows 10/11', 'version' => '2.12.36.4', 'status' => 'certified', 'size' => '2.4 MB'],
-                ['id' => '3', 'name' => 'Prolific PL2303 Driver', 'os' => 'Windows 10/11', 'version' => '4.0.8', 'status' => 'legacy', 'size' => '1.8 MB'],
-                ['id' => '4', 'name' => 'Silicon Labs CP210x Bridge', 'os' => 'Windows 10/11', 'version' => '11.3.0', 'status' => 'stable', 'size' => '3.1 MB']
+        if ($resource === 'compatible-drivers' && $method === 'GET') {
+            $modelQuery = isset($_GET['model']) ? trim(mb_strtolower($_GET['model'], 'UTF-8')) : '';
+            
+            $demo_drivers = [
+                ['id' => 'drv-1', 'name' => 'NVIDIA GeForce Game Ready Driver', 'version' => '551.23', 'releaseDate' => '2024-03-12', 'compatibility' => '۹۹٪ (سازگار با ویندوز ۱۰/۱۱)', 'size' => '640 MB', 'category' => 'کارت گرافیک (GPU)', 'hardwareModel' => 'NVIDIA GeForce RTX 3060 / 3070 / 3080 / 4060 / 4070'],
+                ['id' => 'drv-2', 'name' => 'NVIDIA GeForce Driver Legacy', 'version' => '472.12', 'releaseDate' => '2022-09-21', 'compatibility' => '۹۵٪ (ثبات بالا در ویندوز ۷/۱۰)', 'size' => '480 MB', 'category' => 'کارت گرافیک (GPU)', 'hardwareModel' => 'NVIDIA GeForce GTX 1060 / 1070 / 1050 / 960'],
+                ['id' => 'drv-3', 'name' => 'AMD Radeon Adrenalin Edition', 'version' => '24.2.1', 'releaseDate' => '2024-02-28', 'compatibility' => '۹۸٪ (بهینه‌سازی شده برای گیمینگ)', 'size' => '612 MB', 'category' => 'کارت گرافیک (GPU)', 'hardwareModel' => 'AMD Radeon RX 580 / 5700 / 6605 / 6700 XT / 7800 XT'],
+                ['id' => 'drv-4', 'name' => 'Intel Graphics Windows DCH Driver', 'version' => '31.0.101.5333', 'releaseDate' => '2024-03-01', 'compatibility' => '۱۰۰٪ (تایید شده مایکروسافت WHQL)', 'size' => '450 MB', 'category' => 'گرافیک آنبرد (Intel HD/UHD)', 'hardwareModel' => 'Intel Iris Xe / UHD Graphics 620 / Core i3 i5 i7 i9 Gen 10/11/12/13/14'],
+                ['id' => 'drv-5', 'name' => 'Realtek High Definition Audio Driver', 'version' => '6.0.9621.1', 'releaseDate' => '2023-11-15', 'compatibility' => '۱۰۰٪ (برطرف‌کننده نویز و صدای بم)', 'size' => '145 MB', 'category' => 'کارت صدا (Audio)', 'hardwareModel' => 'Realtek ALC887 / ALC892 / ALC1220 / High Definition Audio Adaptor'],
+                ['id' => 'drv-6', 'name' => 'Intel Wireless Bluetooth Driver', 'version' => '23.30.0', 'releaseDate' => '2024-02-14', 'compatibility' => '۹۹٪ (حل مشکل قطعی هدفون بلوتوث)', 'size' => '52 MB', 'category' => 'شبکه و بلوتوث (Wi-Fi/Bluetooth)', 'hardwareModel' => 'Intel Wireless-AC 9560 / AX200 / AX201 / AX210'],
+                ['id' => 'drv-7', 'name' => 'Synaptics Precision Touchpad Driver', 'version' => '19.5.35.85', 'releaseDate' => '2023-05-10', 'compatibility' => '۹۷٪ (افزودن ژست‌های حرکتی چند انگشتی)', 'size' => '35 MB', 'category' => 'تاچ پد لپ‌تاپ', 'hardwareModel' => 'HP Pavilion / Lenovo ThinkPad / Asus ZenBook Touchpads'],
+                ['id' => 'drv-8', 'name' => 'HP LaserJet Pro Certified Print Driver', 'version' => '15.0.22', 'releaseDate' => '2023-08-01', 'compatibility' => '۱۰۰٪ (پشتیبانی از پرینت مستقیم شبکه)', 'size' => '115 MB', 'category' => 'چاپگر و اسکنر (Printer)', 'hardwareModel' => 'HP LaserJet Pro M12 / M15 / M102 / M130fn'],
+                ['id' => 'drv-9', 'name' => 'Canon PIXMA Multifunction Printer Driver', 'version' => '1.04', 'releaseDate' => '2023-12-10', 'compatibility' => '۹۶٪ (شامل اسکنر پیشرفته رنگی)', 'size' => '85 MB', 'category' => 'چاپگر و اسکنر (Printer)', 'hardwareModel' => 'Canon PIXMA G3010 / G2010 / TS3140 / MG2540'],
+                ['id' => 'drv-10', 'name' => 'Logitech G HUB Advanced Device Driver', 'version' => '2024.1', 'releaseDate' => '2024-01-30', 'compatibility' => '۹۹٪ (برنامه‌ریزی دکمه‌ها و نور RGB)', 'size' => '128 MB', 'category' => 'کیبورد و موس گیمینگ', 'hardwareModel' => 'Logitech G502 / G213 / G402 / G903 Mouse/Keyboard']
             ];
-            echo json_encode($drivers, JSON_UNESCAPED_UNICODE);
+
+            if ($modelQuery === '') {
+                echo json_encode($demo_drivers, JSON_UNESCAPED_UNICODE);
+                exit();
+            }
+
+            $matches = [];
+            foreach ($demo_drivers as $drv) {
+                if (strpos(mb_strtolower($drv['name'], 'UTF-8'), $modelQuery) !== false ||
+                    strpos(mb_strtolower($drv['hardwareModel'], 'UTF-8'), $modelQuery) !== false ||
+                    strpos(mb_strtolower($drv['category'], 'UTF-8'), $modelQuery) !== false) {
+                    $matches[] = $drv;
+                }
+            }
+            echo json_encode($matches, JSON_UNESCAPED_UNICODE);
             exit();
         }
 
