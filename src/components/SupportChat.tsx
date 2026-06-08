@@ -60,6 +60,38 @@ export const SupportChat: React.FC<SupportChatProps> = ({ selectedTicketId, setS
     }
   };
 
+  // Get only general category tickets (support chat)
+  const generalTickets = currentUser ? tickets.filter(t => t.createdBy === currentUser.id && t.category === 'general') : [];
+
+  // Find active selected ticket object
+  const activeTicket = generalTickets.find(t => t.id === selectedTicketId) || generalTickets[0];
+
+  // Auto-scroll inside chat
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    if (!currentUser) return;
+    scrollToBottom();
+  }, [activeTicket?.messages?.length, currentUser]);
+
+  // Simulate "typing..." status when customer sends a message to make it feel super living
+  useEffect(() => {
+    if (!currentUser || !activeTicket) return;
+    const msgLen = activeTicket.messages?.length || 0;
+    if (msgLen > 0) {
+      const lastMsg = activeTicket.messages?.[msgLen - 1];
+      if (lastMsg && lastMsg.senderRole === 'customer') {
+        setIsTyping(true);
+        const timer = setTimeout(() => {
+          setIsTyping(false);
+        }, 1500);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [activeTicket?.messages?.length, currentUser]);
+
   // Authenticated guard check
   if (!currentUser) {
     return (
@@ -91,37 +123,6 @@ export const SupportChat: React.FC<SupportChatProps> = ({ selectedTicketId, setS
       </div>
     );
   }
-
-  // Get only general category tickets (support chat)
-  const generalTickets = tickets.filter(t => t.createdBy === currentUser.id && t.category === 'general');
-
-  // Find active selected ticket object
-  const activeTicket = generalTickets.find(t => t.id === selectedTicketId) || generalTickets[0];
-
-  // Auto-scroll inside chat
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [activeTicket?.messages?.length]);
-
-  // Simulate "typing..." status when customer sends a message to make it feel super living
-  useEffect(() => {
-    if (!activeTicket) return;
-    const msgLen = activeTicket.messages?.length || 0;
-    if (msgLen > 0) {
-      const lastMsg = activeTicket.messages?.[msgLen - 1];
-      if (lastMsg && lastMsg.senderRole === 'customer') {
-        setIsTyping(true);
-        const timer = setTimeout(() => {
-          setIsTyping(false);
-        }, 1500);
-        return () => clearTimeout(timer);
-      }
-    }
-  }, [activeTicket?.messages?.length]);
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();

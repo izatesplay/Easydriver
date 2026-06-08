@@ -26,13 +26,25 @@ window.fetch = async function (input, init) {
         !window.location.hostname.includes('127.0.0.1')
       );
       if (isProduction) {
+        const getBaseDirectory = () => {
+          const path = window.location.pathname;
+          const segments = path.split('/');
+          const lastSegment = segments[segments.length - 1];
+          if (lastSegment && lastSegment.includes('.')) {
+            segments.pop();
+          }
+          const base = segments.join('/');
+          return base.endsWith('/') ? base.slice(0, -1) : base;
+        };
+        const baseDir = getBaseDirectory();
+        
         const apiPath = matchPath.substring(5); // Removes "/api/" prefix
         let targetUrl = '';
         if (apiPath.includes('?')) {
           const [routePart, queryPart] = apiPath.split('?');
-          targetUrl = `/api.php?route=${routePart}&${queryPart}`;
+          targetUrl = `${baseDir}/api.php?route=${routePart}&${queryPart}`;
         } else {
-          targetUrl = `/api.php?route=${apiPath}`;
+          targetUrl = `${baseDir}/api.php?route=${apiPath}`;
         }
         targetInput = targetUrl;
       }
