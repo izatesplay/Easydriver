@@ -44,11 +44,7 @@ class Utils {
     }
 
     private static function toSnakeCase(string $input): string {
-        preg_match_all('![:upper:][:lower:]?|[:lower:]+|[:digit:]+!', $input, $matches);
-        $words = $matches[0];
-        foreach ($words as &$word) {
-            $word = ($word === strtoupper($word)) ? strtolower($word) : lcfirst($word);
-        }
-        return implode('_', $words);
+        $str = preg_replace('/(?<!^)[A-Z]/', '_$0', $input);
+        return strtolower($str);
     }
 }

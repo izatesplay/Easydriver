@@ -17,6 +17,7 @@ class UsersController {
 
         $sanitizedUsers = [];
         foreach ($users as $user) {
+            $isAct = isset($user['is_active']) ? (int)$user['is_active'] : 1;
             $sanitizedUsers[] = [
                 'id' => $user['id'],
                 'fullName' => $user['full_name'],
@@ -24,7 +25,7 @@ class UsersController {
                 'phone' => $user['phone'],
                 'role' => $user['role'],
                 'avatarUrl' => $user['avatar_url'],
-                'isActive' => (int)$user['is_active'] === 1,
+                'isActive' => $isAct === 1,
                 'password' => $user['password'] ?? '123'
             ];
         }
@@ -44,6 +45,7 @@ class UsersController {
             return;
         }
 
+        $isAct = isset($user['is_active']) ? (int)$user['is_active'] : 1;
         $userData = [
             'id' => $user['id'],
             'fullName' => $user['full_name'],
@@ -51,7 +53,7 @@ class UsersController {
             'phone' => $user['phone'],
             'role' => $user['role'],
             'avatarUrl' => $user['avatar_url'],
-            'isActive' => (int)$user['is_active'] === 1
+            'isActive' => $isAct === 1
         ];
 
         echo json_encode($userData, JSON_UNESCAPED_UNICODE);

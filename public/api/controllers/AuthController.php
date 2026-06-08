@@ -37,8 +37,9 @@ class AuthController {
             return;
         }
 
-        // Validate active status for technicians
-        if ($role === 'technician' && (int)$user['is_active'] === 0) {
+        // Validate active status for technicians safely with fallback
+        $isActive = isset($user['is_active']) ? (int)$user['is_active'] : 1;
+        if ($role === 'technician' && $isActive === 0) {
             Utils::sendResponse(403, false, 'حساب کاربری تکنسینی شما هنوز توسط مدیریت ریموت تایید و فعال نگردیده است. مقتضی است منتظر تایید اولیه بمانید.');
             return;
         }
@@ -70,6 +71,7 @@ class AuthController {
         }
 
         // Successful authentication response
+        $isActiveVal = isset($user['is_active']) ? (int)$user['is_active'] : 1;
         Utils::sendResponse(200, true, null, [
             'user' => [
                 'id' => $user['id'],
@@ -78,7 +80,7 @@ class AuthController {
                 'phone' => $user['phone'],
                 'role' => $user['role'],
                 'avatarUrl' => $user['avatar_url'],
-                'isActive' => (int)$user['is_active'] === 1
+                'isActive' => $isActiveVal === 1
             ]
         ]);
     }

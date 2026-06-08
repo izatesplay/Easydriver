@@ -42,8 +42,9 @@ class Router {
             // 1. Strip the base directory of the script dynamically (e.g. /Ea)
             if (isset($_SERVER['SCRIPT_NAME'])) {
                 $scriptDir = dirname($_SERVER['SCRIPT_NAME']);
-                if ($scriptDir !== '/' && $scriptDir !== '\\' && !empty($scriptDir)) {
-                    $scriptDir = str_replace('\\', '/', $scriptDir);
+                $scriptDir = str_replace('\\', '/', $scriptDir);
+                $scriptDir = rtrim($scriptDir, '/');
+                if ($scriptDir !== '' && $scriptDir !== '.') {
                     if (strpos($requestUri, $scriptDir) === 0) {
                         $requestUri = substr($requestUri, strlen($scriptDir));
                     }
@@ -60,6 +61,18 @@ class Router {
             }
 
             $uri = trim($requestUri, '/');
+        }
+
+        // Friendly fallback for direct file opening or empty queries
+        if ($uri === '') {
+            http_response_code(200);
+            echo json_encode([
+                'success' => true,
+                'message' => 'اتصال امن به درگاه وب‌سرویس ایزی‌درایور (EasyDriver Central API Gateway) برقرار است.',
+                'status' => 'online',
+                'time' => date('Y-m-d H:i:s')
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            exit();
         }
 
         // Read raw JSON requests
