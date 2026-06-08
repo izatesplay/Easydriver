@@ -70,12 +70,11 @@ class Database {
             $pdo->exec("CREATE TABLE IF NOT EXISTS `users` (
                 `id` VARCHAR(50) NOT NULL PRIMARY KEY,
                 `username` VARCHAR(100) NULL,
-                `password_hash` VARCHAR(255) NULL,
                 `full_name` VARCHAR(100) NOT NULL,
                 `email` VARCHAR(100) NOT NULL,
                 `phone` VARCHAR(20) NOT NULL,
                 `role` VARCHAR(20) NOT NULL,
-                `password` VARCHAR(100) NULL DEFAULT '123',
+                `password` VARCHAR(255) NULL DEFAULT '$2y$10$6RbyyA7A9o7W7KzWv5ZpSeRbe0D41jR5rBvGzDxeXq.bQfXy89bKy',
                 `is_active` TINYINT(1) NOT NULL DEFAULT 1,
                 `avatar_url` TEXT NULL,
                 UNIQUE KEY `idx_email` (`email`)
@@ -83,9 +82,8 @@ class Database {
 
             // Safe migration checks for columns that might not exist in old setups
             $this->safeAddColumn($pdo, 'users', 'username', "VARCHAR(100) NULL AFTER `id`");
-            $this->safeAddColumn($pdo, 'users', 'password_hash', "VARCHAR(255) NULL AFTER `username`");
             $this->safeAddColumn($pdo, 'users', 'is_active', "TINYINT(1) NOT NULL DEFAULT 1");
-            $this->safeAddColumn($pdo, 'users', 'password', "VARCHAR(100) NULL DEFAULT '123'");
+            $this->safeAddColumn($pdo, 'users', 'password', "VARCHAR(255) NULL DEFAULT '$2y$10$6RbyyA7A9o7W7KzWv5ZpSeRbe0D41jR5rBvGzDxeXq.bQfXy89bKy'");
 
             // 2. Technicians Table
             $pdo->exec("CREATE TABLE IF NOT EXISTS `technicians` (
@@ -196,16 +194,15 @@ class Database {
             if ($stmt->fetchColumn() == 0) {
                 // Insert default supervisor account (with password_hash for bcrypt)
                 $admin_pass_hash = password_hash('09386561626mM@', PASSWORD_BCRYPT);
-                $stmt = $pdo->prepare("INSERT INTO `users` (`id`, `username`, `password_hash`, `full_name`, `email`, `phone`, `role`, `password`, `is_active`, `avatar_url`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt = $pdo->prepare("INSERT INTO `users` (`id`, `username`, `full_name`, `email`, `phone`, `role`, `password`, `is_active`, `avatar_url`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
                 $stmt->execute([
                     'admin-1',
                     'admin@easydriver.ir',
-                    $admin_pass_hash,
                     'مدیریت ایزی‌درایور (امین)',
                     'admin@easydriver.ir',
                     '09010009999',
                     'admin',
-                    '09386561626mM@',
+                    $admin_pass_hash,
                     1,
                     'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&h=150&q=80'
                 ]);
@@ -216,16 +213,15 @@ class Database {
             $stmt->execute();
             if ($stmt->fetchColumn() == 0) {
                 $user_pass_hash = password_hash('123', PASSWORD_BCRYPT);
-                $stmt = $pdo->prepare("INSERT INTO `users` (`id`, `username`, `password_hash`, `full_name`, `email`, `phone`, `role`, `password`, `is_active`, `avatar_url`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt = $pdo->prepare("INSERT INTO `users` (`id`, `username`, `full_name`, `email`, `phone`, `role`, `password`, `is_active`, `avatar_url`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
                 $stmt->execute([
                     'user-customer',
                     'saeed@customer.ir',
-                    $user_pass_hash,
                     'سعید رستمی',
                     'saeed@customer.ir',
                     '09121234567',
                     'customer',
-                    '123',
+                    $user_pass_hash,
                     1,
                     'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80'
                 ]);

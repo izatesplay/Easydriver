@@ -29,14 +29,14 @@ class OtherController {
         $userCheck->execute([$id]);
         if (!$userCheck->fetch()) {
             $userPassHash = password_hash('123', PASSWORD_BCRYPT);
-            $userInsert = $this->db->prepare("INSERT INTO `users` (`id`, `username`, `password_hash`, `full_name`, `email`, `phone`, `role`, `password`, `is_active`) VALUES (?, ?, ?, ?, ?, ?, 'technician', '123', 0)");
+            $userInsert = $this->db->prepare("INSERT INTO `users` (`id`, `username`, `full_name`, `email`, `phone`, `role`, `password`, `is_active`) VALUES (?, ?, ?, ?, ?, 'technician', ?, 0)");
             $userInsert->execute([
                 $id,
                 $bodySnake['email'] ?? "{$id}@easydriver.ir",
-                $userPassHash,
                 $bodySnake['full_name'],
                 $bodySnake['email'] ?? "{$id}@easydriver.ir",
-                $bodySnake['phone'] ?? '09120000000'
+                $bodySnake['phone'] ?? '09120000000',
+                $userPassHash
             ]);
         }
 

@@ -33,19 +33,32 @@ class Router {
         }
 
         // Determine request URI or fallback route parameter
-        if (isset($_GET['route'])) {
+        if (isset($_GET['route']) && $_GET['route'] !== '') {
             $uri = trim($_GET['route'], '/');
         } else {
             // Check direct request uri e.g. /api/users
             $requestUri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-            // strip "/api" or "/api/index.php" or "/public/api" prefix
-            $prefixes = ['/api/index.php', '/public/api', '/api'];
+            
+            // 1. Strip the base directory of the script dynamically (e.g. /Ea)
+            if (isset($_SERVER['SCRIPT_NAME'])) {
+                $scriptDir = dirname($_SERVER['SCRIPT_NAME']);
+                if ($scriptDir !== '/' && $scriptDir !== '\\' && !empty($scriptDir)) {
+                    $scriptDir = str_replace('\\', '/', $scriptDir);
+                    if (strpos($requestUri, $scriptDir) === 0) {
+                        $requestUri = substr($requestUri, strlen($scriptDir));
+                    }
+                }
+            }
+
+            // 2. Strip standard routing filenames and common entry prefixes
+            $prefixes = ['/api/index.php', '/index.php', '/api.php', '/api'];
             foreach ($prefixes as $prefix) {
                 if (strpos($requestUri, $prefix) === 0) {
                     $requestUri = substr($requestUri, strlen($prefix));
                     break;
                 }
             }
+
             $uri = trim($requestUri, '/');
         }
 

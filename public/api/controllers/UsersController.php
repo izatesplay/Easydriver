@@ -88,16 +88,15 @@ class UsersController {
         $username = $email;
         $isActive = ($role === 'technician') ? 0 : 1; // Technicians require manual admin activation
 
-        $stmt = $this->db->prepare("INSERT INTO `users` (`id`, `username`, `password_hash`, `full_name`, `email`, `phone`, `role`, `password`, `is_active`, `avatar_url`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt = $this->db->prepare("INSERT INTO `users` (`id`, `username`, `full_name`, `email`, `phone`, `role`, `password`, `is_active`, `avatar_url`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
         $success = $stmt->execute([
             $id,
             $username,
-            $passwordHash,
             $fullName,
             $email,
             $phone,
             $role,
-            $password,
+            $passwordHash,
             $isActive,
             $avatarUrl
         ]);
@@ -151,12 +150,10 @@ class UsersController {
         foreach ($fields as $fd) {
             if (array_key_exists($fd, $bodySnake)) {
                 $sets[] = "`$fd` = :$fd";
-                $binds[$fd] = $bodySnake[$fd];
-
-                // If plain password is updated, sync its password_hash as well
                 if ($fd === 'password') {
-                    $sets[] = "`password_hash` = :password_hash";
-                    $binds['password_hash'] = password_hash($bodySnake['password'], PASSWORD_BCRYPT);
+                    $binds[$fd] = password_hash($bodySnake['password'], PASSWORD_BCRYPT);
+                } else {
+                    $binds[$fd] = $bodySnake[$fd];
                 }
             }
         }

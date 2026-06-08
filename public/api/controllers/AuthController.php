@@ -43,30 +43,30 @@ class AuthController {
             return;
         }
 
-        $userPassword = $user['password'] ?? '123';
-        $passwordHash = $user['password_hash'] ?? null;
+        $dbPassword = $user['password'] ?? '123';
 
-        // Check if password_hash is set (secure flow)
-        if (!empty($passwordHash)) {
-            if (!password_verify($password, $passwordHash)) {
+        // Check if value is a bcrypt hash (starts with $2y$, $2a$, or $2b$)
+        $isHash = (substr($dbPassword, 0, 4) === '$2y$' || substr($dbPassword, 0, 4) === '$2a$' || substr($dbPassword, 0, 4) === '$2b$');
+
+        if ($isHash) {
+            if (!password_verify($password, $dbPassword)) {
                 Utils::sendResponse(401, false, 'رمز عبور وارد شده اشتباه است. لطفاً مجدداً بررسی فرمایید.');
                 return;
             }
         } else {
             // Legacy plaintext fallback
-            $expectedPlain = ($userPassword !== '') ? $userPassword : '123';
-            if ($password !== $expectedPlain) {
+            if ($password !== $dbPassword) {
                 Utils::sendResponse(401, false, 'رمز عبور وارد شده اشتباه است. لطفاً مجدداً بررسی فرمایید.');
                 return;
             }
 
-            // Upgrading is required! Send needsPasswordSetup flags so frontend sets a secure bcrypt password
-            Utils::sendResponse(200, true, null, [
-                'needsPasswordSetup' => true,
-                'userId' => $user['id'],
-                'message' => 'حساب کاربری شما با موفقیت احراز گردید اما فاقد رمز عبور امن است. لطفاً همین حالا رمز عبور جدید خود را تعیین نمایید تا با ساختار امنیتی BCrypt ذخیره گردد.'
+            // Auto-upgrade legacy plaintext password to secure bcrypt hash
+            $newHash = password_hash($password, PASSWORD_BCRYPT);
+            $updateStmt = $this->db->prepare("UPDATE `users` SET `password` = :hash WHERE `id` = :id");
+            $updateStmt->execute([
+                'hash' => $newHash,
+                'id' => $user['id']
             ]);
-            return;
         }
 
         // Successful authentication response
@@ -94,11 +94,10 @@ class AuthController {
 
         $passwordHash = password_hash($password, PASSWORD_BCRYPT);
 
-        // Update password and hashed password in database safely
-        $stmt = $this->db->prepare("UPDATE `users` SET `password_hash` = :hash, `password` = :password WHERE `id` = :id");
+        // Update password with hash in database safely
+        $stmt = $this->db->prepare("UPDATE `users` SET `password` = :password WHERE `id` = :id");
         $result = $stmt->execute([
-            'hash' => $passwordHash,
-            'password' => $password,
+            'password' => $passwordHash,
             'id' => $userId
         ]);
 

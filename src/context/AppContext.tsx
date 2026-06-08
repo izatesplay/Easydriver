@@ -61,6 +61,29 @@ export const MOCK_USERS: Record<UserRole, User> = {
   },
 };
 
+// Cookie standard management utilities for 30-minute session expiration
+const setCookie = (name: string, value: string, minutes: number) => {
+  const d = new Date();
+  d.setTime(d.getTime() + (minutes * 60 * 1000));
+  const expires = "expires=" + d.toUTCString();
+  document.cookie = `${name}=${value}; ${expires}; path=/; SameSite=Lax`;
+};
+
+const getCookie = (name: string): string => {
+  const nameEQ = name + "=";
+  const ca = document.cookie.split(';');
+  for (let i = 0; i < ca.length; i++) {
+    let c = ca[i];
+    while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+    if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+  }
+  return "";
+};
+
+const eraseCookie = (name: string) => {
+  document.cookie = name + '=; Max-Age=-99999999; path=/; SameSite=Lax';
+};
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [requests, setRequests] = useState<Request[]>([]);
@@ -178,20 +201,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   useEffect(() => {
-    // Current user authentication setup
-    const storedUser = localStorage.getItem('ed_user');
-    if (storedUser) {
-      try {
-        setCurrentUser(JSON.parse(storedUser));
-      } catch (e) {
-        setCurrentUser(null);
-      }
+    // Current user authentication setup using safe 30-minute DB-backed cookie session lookup
+    const userIdCookie = getCookie('ed_user_id');
+    if (userIdCookie) {
+      // Load user profile details directly from back-end SQL, storing no personal user info in cookie
+      fetch(`/api/users/${encodeURIComponent(userIdCookie)}`)
+        .then(res => {
+          if (!res.ok) throw new Error('Invalid session');
+          return res.json();
+        })
+        .then(user => {
+          if (user && user.id) {
+            setCurrentUser(user);
+          } else {
+            setCurrentUser(null);
+            eraseCookie('ed_user_id');
+          }
+        })
+        .catch(() => {
+          setCurrentUser(null);
+          eraseCookie('ed_user_id');
+        })
+        .finally(() => {
+          loadFreshData();
+        });
     } else {
       setCurrentUser(null);
+      loadFreshData();
     }
-
-    // Load SQL-backed synchronised tables
-    loadFreshData();
   }, []);
 
   const loadNotifications = (userId: string, role: string) => {
@@ -331,9 +368,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const saveUser = (user: User | null) => {
     setCurrentUser(user);
     if (user) {
-      localStorage.setItem('ed_user', JSON.stringify(user));
+      setCookie('ed_user_id', user.id, 30); // Store ONLY user ID in cookie for exactly 30 minutes
     } else {
-      localStorage.removeItem('ed_user');
+      eraseCookie('ed_user_id');
     }
   };
 
