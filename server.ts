@@ -112,7 +112,6 @@ async function getMySQLPool(bypassCooldown: boolean = false): Promise<mysql.Pool
   const user = process.env.DB_USER;
   const password = process.env.DB_PASSWORD;
   const database = process.env.DB_NAME;
-  const port = parseInt(process.env.DB_PORT || "3306", 10);
 
   if (!host || !user || !password || !database) {
     dbStatus.connected = false;
@@ -147,7 +146,6 @@ async function getMySQLPool(bypassCooldown: boolean = false): Promise<mysql.Pool
           user,
           password,
           database,
-          port,
           waitForConnections: true,
           connectionLimit: 10,
           queueLimit: 0,
@@ -176,7 +174,7 @@ async function getMySQLPool(bypassCooldown: boolean = false): Promise<mysql.Pool
           tempPool = null;
         }
 
-        console.warn(`⚠️ MySQL Connection attempt ${i + 1}/${attempts} failed to '${host}:${port}'. Retrying in ${currentDelay}ms... Error: ${err.message}`);
+        console.warn(`⚠️ MySQL Connection attempt ${i + 1}/${attempts} failed to '${host}'. Retrying in ${currentDelay}ms... Error: ${err.message}`);
         
         if (i < attempts - 1) {
           await new Promise<void>((resolve) => setTimeout(resolve, currentDelay));
@@ -192,7 +190,7 @@ async function getMySQLPool(bypassCooldown: boolean = false): Promise<mysql.Pool
     if (lastErr?.code === 'EAI_AGAIN' || lastErr?.code === 'ENOTFOUND') {
       friendlyError = `خطای مکان‌یابی آدرس سرور (DNS/Host Resolution Error): دامنه یا آی‌پی '${host}' روی سرور قابل حل نیست. لطفاً بررسی کنید که آیا آدرس صحیح وارد شده و یا اتصال شبکه برقرار است. (کد خطا: ${errorCode})`;
     } else if (lastErr?.code === 'ECONNREFUSED' || lastErr?.code === 'CONNECT_TIMEOUT') {
-      friendlyError = `خطای رد اتصال یا اتمام زمان انتظار (Connection Refused/Timeout): سرور دیتابیس در آدرس '${host}:${port}' آمادگی دریافت اتصال را ندارد. لطفاً مطمئن شوید سرویس MySQL روی سرور میزبان روشن است و فایروال مانع دسترسی پورت ۳۳۰۶ نمی‌شود. (کد خطا: ${errorCode})`;
+      friendlyError = `خطای رد اتصال یا اتمام زمان انتظار (Connection Refused/Timeout): سرور دیتابیس در آدرس '${host}' آمادگی دریافت اتصال را ندارد. لطفاً مطمئن شوید سرویس MySQL روی سرور میزبان روشن است و ارتباط مسدود نمی‌باشد. (کد خطا: ${errorCode})`;
     } else if (lastErr?.code === 'ER_ACCESS_DENIED_ERROR' || lastErr?.code === '1045' || errorCode === 1045) {
       friendlyError = `خطای دسترسی و اطلاعات عبور کاربری (Access Denied / Authentication Failed): نام کاربری '${user}' یا رمز عبور وارد شده نامعتبر است یا دسترسی‌های کافی برای اتصال از آدرس گیت این هاست را ندارد. (کد خطا: 1045) - لطفاً پسورد و یوز نیم دیتابیس را چک کنید.`;
     } else if (lastErr?.code === 'ER_BAD_DB_ERROR' || lastErr?.code === '1049' || errorCode === 1049) {

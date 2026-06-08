@@ -2139,7 +2139,6 @@ export const AdminDashboard: React.FC = () => {
                       <p><span className="text-rose-400">DB_USER</span>=your_database_username</p>
                       <p><span className="text-rose-400">DB_PASSWORD</span>=your_secure_password</p>
                       <p><span className="text-rose-400">DB_NAME</span>=easydri1_mmd</p>
-                      <p><span className="text-rose-400">DB_PORT</span>=3306</p>
                       <p className="text-slate-500"># Gemini API Intelligent assistant key</p>
                       <p><span className="text-rose-400">GEMINI_API_KEY</span>=AIzaSy...</p>
                     </div>

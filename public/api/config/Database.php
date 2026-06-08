@@ -11,7 +11,6 @@ class Database {
     private string $user = 'easydri1_mmd';
     private string $pass = '09386561626mM@';
     private string $dbname = 'easydri1_mmd';
-    private int $port = 3306;
 
     public function __construct() {
         // Load configuration from .env if present
@@ -37,7 +36,6 @@ class Database {
                         if ($key === 'DB_USER') $this->user = $val;
                         if ($key === 'DB_PASS' || $key === 'DB_PASSWORD') $this->pass = $val;
                         if ($key === 'DB_NAME') $this->dbname = $val;
-                        if ($key === 'DB_PORT') $this->port = (int)$val;
                     }
                 }
                 break; // stop scanning after the first found .env
@@ -48,7 +46,7 @@ class Database {
     public function getConnection(): PDO {
         if (self::$instance === null) {
             try {
-                $dsn = "mysql:host={$this->host};dbname={$this->dbname};port={$this->port};charset=utf8mb4";
+                $dsn = "mysql:host={$this->host};dbname={$this->dbname};charset=utf8mb4";
                 $options = [
                     PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
                     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
