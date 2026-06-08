@@ -57,18 +57,11 @@ export const FloatingChatWidget: React.FC<{ activeTabState?: string; setActiveTa
           setIsTyping(true);
           const typingTimer = setTimeout(() => {
             setIsTyping(false);
-            // Simulate typical technical reply based on keywords
-            let simulatedReplyText = "پیام شما دریافت شد. کارشناسان ما به زودی با شما همگام خواهند شد؛ همچنین می‌توانید با شماره تلفن وب‌سایت جهت پیگیری فوق‌سریع هماهنگ شوید.";
-            const msgLower = lastMsg.message.toLowerCase();
-            if (msgLower.includes('anydesk') || msgLower.includes('پارامتر') || msgLower.includes('ریموت')) {
-              simulatedReplyText = "اطلاعات ریموت جهت بررسی اولیه ثبت گردید. لطفا کلاینت AnyDesk خود را باز نگه دارید تا تکنسین‌های ایزی‌درایور مستقیما متصل شوند.";
-            } else if (msgLower.includes('گرافیک') || msgLower.includes('nvidia') || msgLower.includes('بازی')) {
-              simulatedReplyText = "خطاهای کارت گرافیک معمولا با نصب تمیز نسخه WHQL و پاک‌سازی نسخه‌های تداخلی برطرف می‌گردد؛ آماده ارائه‌دهی خدمات درایور هستیم.";
-            }
+            let simulatedReplyText = "سلام، جزئیات شما ثبت شد. به زودی در ریموت خدمترسانی میکنیم";
 
             // Push simulated answer using addTicketMessage for live-feel
             addTicketMessage(activeChat.id, simulatedReplyText, 'admin');
-          }, 3500);
+          }, 2000);
 
           return () => clearTimeout(typingTimer);
         }

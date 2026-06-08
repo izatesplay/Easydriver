@@ -185,7 +185,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch("/api/technicians")
       .then(r => r.json())
       .then(data => {
-        if (Array.isArray(data)) setTechnicians(data);
+        if (Array.isArray(data)) {
+          const sanitized = data.map((tech: any) => ({
+            ...tech,
+            isActive: tech.isActive === true || tech.isActive === 1 || tech.isActive === '1' || tech.isActive === 'true'
+          }));
+          setTechnicians(sanitized);
+        }
       })
       .catch(err => console.error("Error loading technicians:", err));
 
@@ -194,7 +200,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .then(r => r.json())
       .then(data => {
         if (Array.isArray(data) && data.length > 0) {
-          localStorage.setItem('ed_registered_users', JSON.stringify(data));
+          const sanitizedUsers = data.map((u: any) => ({
+            ...u,
+            isActive: u.isActive === true || u.isActive === 1 || u.isActive === '1' || u.isActive === 'true'
+          }));
+          localStorage.setItem('ed_registered_users', JSON.stringify(sanitizedUsers));
         }
       })
       .catch(err => console.error("Error loading and syncing users:", err));
