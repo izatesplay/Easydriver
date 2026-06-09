@@ -7,6 +7,7 @@ import { calculateTechnicianStats } from '../utils/pointsCalculator';
 import { useRenderTracker } from '../utils/indexedDB';
 import { ResponsiveContainer, BarChart as RechartsBarChart, Bar as RechartsBar, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid, Cell } from 'recharts';
 import { Profile } from './Profile';
+import { StatusBadge } from './StatusBadge';
 
 export const AdminDashboard: React.FC = () => {
   useRenderTracker("پیشخوان ادمین (Admin)");
@@ -967,15 +968,7 @@ export const AdminDashboard: React.FC = () => {
                             <div className="space-y-1 grow">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-[9px] bg-slate-100 font-mono text-slate-600 px-1.5 rounded font-bold">#{req.id}</span>
-                                <motion.span
-                                  key={`${req.id}-${req.status}`}
-                                  initial={{ scale: 0.9, opacity: 0.8 }}
-                                  animate={{ scale: 1, opacity: 1, filter: ["brightness(1.5)", "brightness(1)"] }}
-                                  transition={{ duration: 0.45 }}
-                                  className={`text-[10px] px-2 py-0.5 rounded-full border font-bold ${STATUS_COLORS[req.status]}`}
-                                >
-                                  {STATUS_LABELS[req.status]}
-                                </motion.span>
+                                <StatusBadge status={req.status} id={`status-badge-admin-${req.id}`} />
                                 <span className="text-xs font-black text-slate-800 mr-1">{SERVICE_LABELS[req.serviceType]}</span>
                               </div>
                               <div className="text-slate-450 text-[10px] flex items-center gap-2 pt-1 font-semibold">

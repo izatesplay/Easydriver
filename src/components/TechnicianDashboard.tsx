@@ -7,6 +7,7 @@ import { calculateTechnicianStats, getLevelInfo } from '../utils/pointsCalculato
 import { MonthlyPerformanceChart } from './MonthlyPerformanceChart';
 import { useRenderTracker } from '../utils/indexedDB';
 import { Profile } from './Profile';
+import { StatusBadge } from './StatusBadge';
 
 export const TechnicianDashboard: React.FC = () => {
   useRenderTracker("پنل تکنسین (Tech)");
@@ -178,7 +179,7 @@ export const TechnicianDashboard: React.FC = () => {
         const assignedId = r.assignedToId?.toString().trim();
         const currentId = currentUser.id?.toString().trim();
         const belongsToMe = assignedId === currentId || (!r.assignedToId && currentId === 'tech-1');
-        return belongsToMe && r.status === 'assigned';
+        return belongsToMe && r.status && String(r.status).trim() === 'assigned';
       }) 
     : [];
 
@@ -399,9 +400,7 @@ export const TechnicianDashboard: React.FC = () => {
                             <div className="space-y-1 grow">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-[9px] bg-slate-100 text-slate-600 px-1 rounded font-mono font-bold">#{task.id}</span>
-                                <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold ${STATUS_COLORS[task.status]}`}>
-                                  {STATUS_LABELS[task.status]}
-                                </span>
+                                <StatusBadge status={task.status} id={`status-badge-tech-${task.id}`} />
                                 <span className="text-xs font-black text-slate-800 mr-1">{SERVICE_LABELS[task.serviceType]}</span>
                               </div>
                               <div className="text-[10px] text-slate-400 font-semibold flex items-center gap-2">
