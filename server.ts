@@ -1039,6 +1039,9 @@ app.post("/api/auth/login", async (req, res) => {
       try {
         await pool.query("ALTER TABLE `users` ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1");
       } catch (e) {}
+      try {
+        await pool.query("ALTER TABLE `users` MODIFY COLUMN `avatar_url` LONGTEXT NULL");
+      } catch (e) {}
 
       const [rows] = await pool.query(
         "SELECT * FROM `users` WHERE (`email` = ? OR `phone` = ?) AND `role` = ?",
@@ -1191,6 +1194,9 @@ app.get("/api/users", async (req, res) => {
       try {
         await pool.query("ALTER TABLE `users` ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1");
       } catch (e) {}
+      try {
+        await pool.query("ALTER TABLE `users` MODIFY COLUMN `avatar_url` LONGTEXT NULL");
+      } catch (e) {}
 
       const [rows] = await pool.query("SELECT * FROM `users` ORDER BY `created_at` DESC");
       const formatted = (rows as any[]).map(r => ({
@@ -1229,6 +1235,9 @@ app.post("/api/users", async (req, res) => {
       } catch (e) {}
       try {
         await pool.query("ALTER TABLE `users` ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1");
+      } catch (e) {}
+      try {
+        await pool.query("ALTER TABLE `users` MODIFY COLUMN `avatar_url` LONGTEXT NULL");
       } catch (e) {}
 
       // Robust check: prevent duplicate registrations by other users with same email or phone
@@ -1309,6 +1318,9 @@ app.put("/api/users/:id", async (req, res) => {
       } catch (e) {}
       try {
         await pool.query("ALTER TABLE `users` ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1");
+      } catch (e) {}
+      try {
+        await pool.query("ALTER TABLE `users` MODIFY COLUMN `avatar_url` LONGTEXT NULL");
       } catch (e) {}
 
       // Get existing password first if none or unhashed provided
