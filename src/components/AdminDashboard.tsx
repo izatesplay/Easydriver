@@ -222,11 +222,23 @@ export const AdminDashboard: React.FC = () => {
     // Explicitly check for changes to assigned technician
     const isNewAssignment = techId && (req.assignedToId !== techId);
     
+    let finalStatus = status;
+    let finalIsApproved = req.isApproved;
+    if (techId) {
+      finalIsApproved = true;
+      if (finalStatus === 'pending') {
+        finalStatus = 'assigned';
+      }
+    } else if (finalStatus !== 'pending' && finalStatus !== 'cancelled') {
+      finalIsApproved = true;
+    }
+
     const updatedObj: Request = {
       ...req,
       assignedToId: techId || undefined,
       assignedToName: assignedTech ? assignedTech.fullName : undefined,
-      status: status,
+      status: finalStatus,
+      isApproved: finalIsApproved,
       adminNotes: note ? note.trim() : undefined,
       assignedAt: isNewAssignment ? new Date().toISOString() : (techId ? req.assignedAt || new Date().toISOString() : undefined),
       updatedDate: new Date().toISOString()
@@ -1325,9 +1337,29 @@ export const AdminDashboard: React.FC = () => {
                                   const selectTechId = (document.getElementById(`tech-assign-${req.id}`) as HTMLSelectElement).value;
                                   const selectSchedule = (document.getElementById(`scheduled-date-${req.id}`) as HTMLInputElement).value;
                                   
+                                  let finalStatus = selectStatus;
+                                  let finalIsApproved = req.isApproved;
+                                  let finalApprovedAt = req.approvedAt;
+                                  let finalAssignedAt = req.assignedAt;
+
+                                  if (selectTechId) {
+                                    finalIsApproved = true;
+                                    if (!finalApprovedAt) finalApprovedAt = new Date().toISOString();
+                                    if (!finalAssignedAt) finalAssignedAt = new Date().toISOString();
+                                    if (finalStatus === 'pending') {
+                                      finalStatus = 'assigned';
+                                    }
+                                  } else if (finalStatus !== 'pending' && finalStatus !== 'cancelled') {
+                                    finalIsApproved = true;
+                                    if (!finalApprovedAt) finalApprovedAt = new Date().toISOString();
+                                  }
+
                                   const updatedReq: Request = {
                                     ...req,
-                                    status: selectStatus,
+                                    status: finalStatus,
+                                    isApproved: finalIsApproved,
+                                    approvedAt: finalApprovedAt,
+                                    assignedAt: finalAssignedAt,
                                     assignedToId: selectTechId || undefined,
                                     assignedToName: technicians.find(t => t.id === selectTechId)?.fullName || undefined,
                                     scheduledDate: selectSchedule || undefined,
