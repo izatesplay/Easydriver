@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { calculateTechnicianStats, getLevelInfo } from '../utils/pointsCalculator';
 import { MonthlyPerformanceChart } from './MonthlyPerformanceChart';
 import { useRenderTracker } from '../utils/indexedDB';
+import { Profile } from './Profile';
 
 export const TechnicianDashboard: React.FC = () => {
   useRenderTracker("پنل تکنسین (Tech)");
@@ -38,7 +39,7 @@ export const TechnicianDashboard: React.FC = () => {
     ? (techReviews.reduce((sum, r) => sum + r.rating, 0) / techReviews.length).toFixed(1)
     : '5.0';
 
-  const [activeTab, setActiveTab] = useState<'tasks' | 'tickets' | 'achievements'>('tasks');
+  const [activeTab, setActiveTab] = useState<'tasks' | 'tickets' | 'achievements' | 'profile'>('tasks');
 
   // Notes state
   const [techNotes, setTechNotes] = useState<string>('');
@@ -171,17 +172,27 @@ export const TechnicianDashboard: React.FC = () => {
   // Filter tasks assigned to this technician
   // Both: check if assignedToId matches currentUser.id
   // To keep it comprehensive for the demo, if no task is specifically assigned, let also show tasks that are assigned to 'tech-1' (as that's our default mock technician Novid)
+  // Filter tasks assigned to this technician and whose status is strictly 'assigned' (ارجاع به تکنسین)
   const myTasks = currentUser 
     ? requests.filter(r => {
         const assignedId = r.assignedToId?.toString().trim();
         const currentId = currentUser.id?.toString().trim();
-        return assignedId === currentId || (!r.assignedToId && currentId === 'tech-1');
+        const belongsToMe = assignedId === currentId || (!r.assignedToId && currentId === 'tech-1');
+        return belongsToMe && r.status === 'assigned';
       }) 
     : [];
 
-  const pendingTasks = myTasks.filter(t => t.status === 'assigned' || t.status === 'approved').length;
-  const activeTasks = myTasks.filter(t => t.status === 'in_progress').length;
-  const completedTasksCount = myTasks.filter(t => t.status === 'completed').length;
+  const rawTasks = currentUser
+    ? requests.filter(r => {
+        const assignedId = r.assignedToId?.toString().trim();
+        const currentId = currentUser.id?.toString().trim();
+        return assignedId === currentId || (!r.assignedToId && currentId === 'tech-1');
+      })
+    : [];
+
+  const pendingTasks = rawTasks.filter(t => t.status === 'assigned' || t.status === 'approved').length;
+  const activeTasks = rawTasks.filter(t => t.status === 'in_progress').length;
+  const completedTasksCount = rawTasks.filter(t => t.status === 'completed').length;
 
   // Toggle checklist step
   const handleToggleCheckstep = (taskId: string, index: number) => {
@@ -331,6 +342,18 @@ export const TechnicianDashboard: React.FC = () => {
                 ★ {techStats.achievements.filter(a => a.unlocked).length}
               </span>
             )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('profile')}
+            className={`py-3 px-5 rounded-xl border text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'profile'
+                ? 'bg-purple-600 border-purple-600 text-white shadow-md shadow-purple-500/15'
+                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            <User className="h-4 w-4 shrink-0" />
+            <span>تنظیمات پروفایل کاربری</span>
           </button>
         </div>
 
@@ -986,6 +1009,8 @@ export const TechnicianDashboard: React.FC = () => {
                 </div>
               )}
             </div>
+          ) : activeTab === 'profile' ? (
+            <Profile />
           ) : (
             /* Tab 3: Points, Achievements & Live Leaderboard */
             <div className="space-y-8 text-right font-sans">

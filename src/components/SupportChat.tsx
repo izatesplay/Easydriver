@@ -11,11 +11,31 @@ interface SupportChatProps {
 }
 
 export const SupportChat: React.FC<SupportChatProps> = ({ selectedTicketId, setSelectedTicketId, onNavigateToAuth }) => {
-  const { currentUser, tickets, addTicket, addTicketMessage } = useApp();
+  const { currentUser, tickets, addTicket, addTicketMessage, loadFreshData } = useApp();
   const [typedMessage, setTypedMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [debouncedSender, setDebouncedSender] = useState<{ ticketId: string; message: string; role: any } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Polling for live chat updates every 2 seconds without refreshing the page
+  useEffect(() => {
+    if (!currentUser || !selectedTicketId) return;
+    const interval = setInterval(() => {
+      loadFreshData();
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [selectedTicketId, currentUser, loadFreshData]);
+
+  // Debouncing logic using useEffect and local state to prevent duplicate submissions
+  useEffect(() => {
+    if (!debouncedSender) return;
+    const handler = setTimeout(() => {
+      addTicketMessage(debouncedSender.ticketId, debouncedSender.message, debouncedSender.role);
+      setDebouncedSender(null);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [debouncedSender, addTicketMessage]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -126,10 +146,14 @@ export const SupportChat: React.FC<SupportChatProps> = ({ selectedTicketId, setS
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!typedMessage.trim() || !activeTicket) return;
+    if (!typedMessage.trim() || !activeTicket || debouncedSender) return;
 
-    // Send customer message
-    addTicketMessage(activeTicket.id, typedMessage.trim(), 'customer');
+    // Delegate message delivery to debouncer to prevent duplicates
+    setDebouncedSender({
+      ticketId: activeTicket.id,
+      message: typedMessage.trim(),
+      role: currentUser?.role || 'customer'
+    });
     setTypedMessage('');
   };
 

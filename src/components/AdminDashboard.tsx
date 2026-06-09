@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { calculateTechnicianStats } from '../utils/pointsCalculator';
 import { useRenderTracker } from '../utils/indexedDB';
 import { ResponsiveContainer, BarChart as RechartsBarChart, Bar as RechartsBar, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid, Cell } from 'recharts';
+import { Profile } from './Profile';
 
 export const AdminDashboard: React.FC = () => {
   useRenderTracker("پیشخوان ادمین (Admin)");
@@ -28,7 +29,7 @@ export const AdminDashboard: React.FC = () => {
   } = useApp();
 
   // Active admin tab selection
-  const [adminTab, setAdminTab] = useState<'overview' | 'requests' | 'technicians' | 'tickets' | 'reviews' | 'db' | 'reports'>('overview');
+  const [adminTab, setAdminTab] = useState<'overview' | 'requests' | 'technicians' | 'tickets' | 'reviews' | 'db' | 'reports' | 'profile'>('overview');
 
   // Report filters state
   const [reportReqStatus, setReportReqStatus] = useState<'all' | 'pending' | 'in_progress' | 'completed' | 'cancelled'>('all');
@@ -193,13 +194,20 @@ export const AdminDashboard: React.FC = () => {
     }));
   }, [requests, chartInterval]);
 
-  // Handles approving a service request
+  // Handles approving a service request with automatic technician assignment
   const handleApproveRequest = (req: Request) => {
+    // Automatically find an active technician, otherwise fall back to any technician or default tech-1 (Novid)
+    const activeTechs = (technicians || []).filter(t => t.isActive);
+    const chosenTech = activeTechs.length > 0 ? activeTechs[0] : ((technicians || []).length > 0 ? technicians[0] : null);
+
     updateRequest({
       ...req,
       isApproved: true,
-      status: 'approved',
+      status: 'assigned', // Shift status to referred ('assigned')
       approvedAt: new Date().toISOString(),
+      assignedToId: chosenTech ? chosenTech.id : 'tech-1',
+      assignedToName: chosenTech ? chosenTech.fullName : 'نوید مرادی',
+      assignedAt: new Date().toISOString(),
     });
   };
 
@@ -722,7 +730,7 @@ export const AdminDashboard: React.FC = () => {
         </div>
 
         {/* Core Admin Navigation Grid tabs */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2.5 mb-8">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8 gap-2.5 mb-8">
           {[
             { id: 'overview', label: 'داشبورد خلاصه آمار', icon: Grid },
             { id: 'requests', label: 'مدیریت درخواست‌ها', icon: Clipboard, badge: pendingRequests },
@@ -731,6 +739,7 @@ export const AdminDashboard: React.FC = () => {
             { id: 'reviews', label: 'تایید نظرات کاربران', icon: Star, badge: pendingReviewsCount },
             { id: 'db', label: 'پایگاه داده (MySQL)', icon: Database, badge: dbInfo?.connected ? 0 : 0 },
             { id: 'reports', label: 'خروجی اکسل و PDF', icon: Printer },
+            { id: 'profile', label: 'تنظیمات پروفایل کاربری', icon: UserCheck },
           ].map((tab) => {
             const TabIcon = tab.icon;
             const isActive = adminTab === tab.id;
@@ -2230,6 +2239,11 @@ export const AdminDashboard: React.FC = () => {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* TAB 8: PROFILE SETTINGS */}
+          {adminTab === 'profile' && (
+            <Profile />
           )}
 
           {/* TAB 7: REPORTS & EXPORTS CENTER */}

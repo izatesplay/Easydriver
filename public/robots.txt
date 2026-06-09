@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Disallow: /technician/
+
+Sitemap: https://easydriver.ir/sitemap.xml

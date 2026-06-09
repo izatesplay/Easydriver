@@ -7,6 +7,7 @@ interface AppContextProps {
   currentUser: User | null;
   login: (email: string, fullName: string, role: UserRole, extra?: Partial<User>) => void;
   logout: () => void;
+  saveUser: (user: User | null) => void;
   requests: Request[];
   addRequest: (request: Omit<Request, 'id' | 'createdDate' | 'updatedDate' | 'createdBy' | 'isApproved' | 'status'>) => Request;
   updateRequest: (request: Request) => void;
@@ -467,6 +468,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       timestamp: new Date().toISOString(),
     };
 
+    const initialWelcome: ChatMessage = {
+      id: `msg-${Date.now() + 100}`,
+      senderId: 'admin-1',
+      senderName: 'پشتیبان هوشمند EasyDriver',
+      senderRole: 'admin',
+      message: 'سلام کاربر گرامی. خوش آمدید به پنل گفتگو و پشتیبانی هوشمند EasyDriver. همکارهای بخش فنی حاضر روی خط هستند. لطفاً شناسه ۹ رقمی AnyDesk یا جزئیات و کد خطای ویندوز خود را یادداشت و ارسال کنید تا برقراری اتصال ریموت هم‌اکنون به جریان افتد.',
+      timestamp: new Date(Date.now() + 100).toISOString(),
+    };
+
     const newTicket: Ticket = {
       ...ticketData,
       id: newTicketId,
@@ -474,7 +484,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdDate: new Date().toISOString(),
       updatedDate: new Date().toISOString(),
       createdBy: currentUser?.id || 'anonymous',
-      messages: [initialMsg],
+      messages: ticketData.message ? [initialMsg, initialWelcome] : [initialWelcome],
     };
 
     // Optimistic Update
@@ -553,7 +563,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     })
     .then(() => {
       // Dynamic support assistant auto-response Trigger (for Gemini API Support Assistant)
-      if (roleToSend === 'customer') {
+      const customerMsgsCount = (updatedMessages || []).filter(m => m.senderRole === 'customer').length;
+      if (roleToSend === 'customer' && customerMsgsCount === 1) {
         fetch("/api/ai-chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -741,6 +752,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       currentUser,
       login,
       logout,
+      saveUser,
       requests,
       addRequest,
       updateRequest,

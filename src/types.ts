@@ -26,7 +26,7 @@ export const SERVICE_LABELS: Record<ServiceType, string> = {
 export type RequestStatus = 'pending' | 'approved' | 'assigned' | 'in_progress' | 'completed' | 'cancelled';
 
 export const STATUS_LABELS: Record<RequestStatus, string> = {
-  pending: 'در انتظار بررسی',
+  pending: 'در انتظار تایید',
   approved: 'تایید شده توسط مدیریت',
   assigned: 'ارجاع به تکنسین',
   in_progress: 'در حال انجام',
