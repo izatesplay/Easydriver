@@ -197,32 +197,42 @@ export const AdminDashboard: React.FC = () => {
 
   // Handles approving a service request with automatic technician assignment
   const handleApproveRequest = (req: Request) => {
-    // Automatically find an active technician, otherwise fall back to any technician or default tech-1 (Novid)
+    // Audit active technician options
     const activeTechs = (technicians || []).filter(t => t.isActive);
     const chosenTech = activeTechs.length > 0 ? activeTechs[0] : ((technicians || []).length > 0 ? technicians[0] : null);
 
-    updateRequest({
+    const updatedObj: Request = {
       ...req,
       isApproved: true,
-      status: 'assigned', // Shift status to referred ('assigned')
+      status: 'assigned', // Transition to assigned upon approval
       approvedAt: new Date().toISOString(),
       assignedToId: chosenTech ? chosenTech.id : 'tech-1',
       assignedToName: chosenTech ? chosenTech.fullName : 'نوید مرادی',
       assignedAt: new Date().toISOString(),
-    });
+      updatedDate: new Date().toISOString(),
+    };
+
+    updateRequest(updatedObj);
   };
 
-  // Handles updating request assignment, status, or note
+  // Handles updating request assignment, status, schedule or notes
   const handleUpdateRequestDetails = (req: Request, techId: string, status: RequestStatus, note: string) => {
-    const assignedTech = technicians.find(t => t.id === techId);
-    updateRequest({
+    const assignedTech = (technicians || []).find(t => t.id === techId);
+    
+    // Explicitly check for changes to assigned technician
+    const isNewAssignment = techId && (req.assignedToId !== techId);
+    
+    const updatedObj: Request = {
       ...req,
       assignedToId: techId || undefined,
-      assignedToName: assignedTech?.fullName || undefined,
+      assignedToName: assignedTech ? assignedTech.fullName : undefined,
       status: status,
-      adminNotes: note || undefined,
-      assignedAt: techId ? new Date().toISOString() : undefined,
-    });
+      adminNotes: note ? note.trim() : undefined,
+      assignedAt: isNewAssignment ? new Date().toISOString() : (techId ? req.assignedAt || new Date().toISOString() : undefined),
+      updatedDate: new Date().toISOString()
+    };
+
+    updateRequest(updatedObj);
     setExpandedRequestId(null);
     setAdminNotesInput('');
   };
