@@ -60,12 +60,33 @@ export const Profile: React.FC = () => {
     setErrorMsg('');
 
     try {
+      let finalAvatarUrl = avatarUrl;
+      if (avatarUrl.startsWith('data:image/')) {
+        try {
+          const uploadRes = await fetch('/api/upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fileName: `profile_${currentUser.id}.png`,
+              base64Data: avatarUrl
+            })
+          });
+          const uploadData = await uploadRes.json();
+          if (uploadRes.ok && uploadData.success) {
+            finalAvatarUrl = uploadData.url;
+            setAvatarUrl(uploadData.url); // update state preview/url to point to static URL
+          }
+        } catch (uploadErr) {
+          console.error('Failed to upload avatar image, falling back to base64:', uploadErr);
+        }
+      }
+
       const payload: Partial<User> & { password?: string; isActive?: boolean } = {
         fullName: fullName.trim(),
         email: email.trim(),
         phone: currentUser.phone || '09120000000',
         role: currentUser.role,
-        avatarUrl: avatarUrl,
+        avatarUrl: finalAvatarUrl,
         isActive: true,
       };
 
@@ -86,7 +107,7 @@ export const Profile: React.FC = () => {
           ...currentUser,
           fullName: fullName.trim(),
           email: email.trim(),
-          avatarUrl: avatarUrl,
+          avatarUrl: finalAvatarUrl,
         };
         saveUser(updatedUser);
         setSuccessMsg('پروفایل کاربری شما با موفقیت بروزرسانی شد.');

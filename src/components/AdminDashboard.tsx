@@ -979,8 +979,23 @@ export const AdminDashboard: React.FC = () => {
                             </div>
                           </div>
 
-                          <div className="shrink-0">
-                            {isExpanded ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+                          <div className="shrink-0 flex items-center gap-2">
+                            {!req.isApproved && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleApproveRequest(req);
+                                }}
+                                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-[10px] font-extrabold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                                title="تایید و ارجاع سریع به کارشناس"
+                              >
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                <span>تایید درخواست</span>
+                              </button>
+                            )}
+                            <div className="p-1">
+                              {isExpanded ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+                            </div>
                           </div>
                         </div>
 

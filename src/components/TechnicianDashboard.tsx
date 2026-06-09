@@ -48,6 +48,7 @@ export const TechnicianDashboard: React.FC = () => {
 
   // Expanded details state
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [taskStatusFilter, setTaskStatusFilter] = useState<'active' | 'completed' | 'all'>('active');
 
   // Ticket reply interactive state
   const [replyText, setReplyText] = useState<string>('');
@@ -173,13 +174,22 @@ export const TechnicianDashboard: React.FC = () => {
   // Filter tasks assigned to this technician
   // Both: check if assignedToId matches currentUser.id
   // To keep it comprehensive for the demo, if no task is specifically assigned, let also show tasks that are assigned to 'tech-1' (as that's our default mock technician Novid)
-  // Filter tasks assigned to this technician and whose status is strictly 'assigned' (ارجاع به تکنسین)
+  // Filter tasks assigned to this technician based on selected taskStatusFilter
   const myTasks = currentUser 
     ? requests.filter(r => {
         const assignedId = r.assignedToId?.toString().trim();
         const currentId = currentUser.id?.toString().trim();
         const belongsToMe = assignedId === currentId || (!r.assignedToId && currentId === 'tech-1');
-        return belongsToMe && r.status && String(r.status).trim() === 'assigned';
+        if (!belongsToMe) return false;
+
+        const statusStr = r.status ? String(r.status).trim() : '';
+        if (taskStatusFilter === 'active') {
+          return statusStr === 'assigned' || statusStr === 'approved' || statusStr === 'in_progress';
+        } else if (taskStatusFilter === 'completed') {
+          return statusStr === 'completed';
+        } else {
+          return true;
+        }
       }) 
     : [];
 
@@ -373,6 +383,40 @@ export const TechnicianDashboard: React.FC = () => {
                   <p className="text-slate-500 leading-relaxed text-[11px]">
                     شما مجموعاً هم‌اکنون به عنوان پرسنل فعال سیستم حضور دارید. در بخش پایین لیست خدمات فنی ارجاع شده به نام شما را مشاهده می‌فرمایید. وضعیت خدمات را تغییر دهید تا مشتری فوراً در صفحه پیگیری شخصی خود، روند لحظه‌ای کار را ببیند.
                   </p>
+                </div>
+
+                {/* Tasks Status Segmented Tab Switcher */}
+                <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl max-w-sm mr-auto text-right">
+                  <button
+                    onClick={() => setTaskStatusFilter('active')}
+                    className={`flex-1 py-1.5 px-3 text-[10px] font-bold rounded-lg transition-all cursor-pointer text-center ${
+                      taskStatusFilter === 'active'
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-slate-600 hover:bg-white/50 hover:text-indigo-700'
+                    }`}
+                  >
+                    کارهای فعال ({rawTasks.filter(t => t.status === 'assigned' || t.status === 'approved' || t.status === 'in_progress').length})
+                  </button>
+                  <button
+                    onClick={() => setTaskStatusFilter('completed')}
+                    className={`flex-1 py-1.5 px-3 text-[10px] font-bold rounded-lg transition-all cursor-pointer text-center ${
+                      taskStatusFilter === 'completed'
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-slate-600 hover:bg-white/50 hover:text-indigo-700'
+                    }`}
+                  >
+                    کارهای انجام‌شده ({completedTasksCount})
+                  </button>
+                  <button
+                    onClick={() => setTaskStatusFilter('all')}
+                    className={`flex-1 py-1.5 px-3 text-[10px] font-bold rounded-lg transition-all cursor-pointer text-center ${
+                      taskStatusFilter === 'all'
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-slate-600 hover:bg-white/50 hover:text-indigo-700'
+                    }`}
+                  >
+                    همه ({rawTasks.length})
+                  </button>
                 </div>
 
                 {myTasks.length === 0 ? (

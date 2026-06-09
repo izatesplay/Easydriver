@@ -1219,6 +1219,41 @@ app.get("/api/users", async (req, res) => {
   res.json(local.users || []);
 });
 
+app.get("/api/users/:id", async (req, res) => {
+  const { id } = req.params;
+  const pool = await getMySQLPool();
+  if (pool) {
+    try {
+      try {
+        await pool.query("ALTER TABLE `users` MODIFY COLUMN `avatar_url` LONGTEXT NULL");
+      } catch (e) {}
+      const [rows] = await pool.query("SELECT * FROM `users` WHERE `id` = ?", [id]);
+      const r = (rows as any[])[0];
+      if (r) {
+        return res.json({
+          id: r.id,
+          fullName: r.full_name,
+          email: r.email,
+          phone: r.phone,
+          role: r.role,
+          avatarUrl: r.avatar_url,
+          password: r.password,
+          isActive: r.is_active === 1 || r.is_active === true
+        });
+      }
+    } catch (err) {
+      console.error("MySQL read user by id query failed:", err);
+    }
+  }
+
+  const local = readLocalJSON();
+  const u = (local.users || []).find((x: any) => x.id === id);
+  if (u) {
+    return res.json(u);
+  }
+  res.status(404).json({ error: "User not found" });
+});
+
 app.post("/api/users", async (req, res) => {
   const { id, fullName, email, phone, role, password, avatarUrl, isActive } = req.body;
   
