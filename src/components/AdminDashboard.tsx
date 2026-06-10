@@ -1056,7 +1056,7 @@ export const AdminDashboard: React.FC = () => {
 
                                 {/* Status modifier */}
                                 <div className="space-y-1">
-                                  <label className="text-[10px] font-bold text-slate-400 block">تغییر زردآلو وضعیت جاری:</label>
+                                  <label className="text-[10px] font-bold text-slate-400 block">تغییر وضعیت جاری درخواست:</label>
                                   <select
                                     id={`status-mod-${req.id}`}
                                     defaultValue={req.status}
