@@ -84,13 +84,14 @@ export const TechnicianDashboard: React.FC = () => {
 
   // Filter tasks belonging exactly to this technician
   const myTasks = useMemo(() => {
-    if (!currentUser) return [];
+    if (!currentUser?.id) return [];
+    const currentId = String(currentUser.id).trim().toLowerCase();
+
     return requests.filter(r => {
-      const assignedId = r.assignedToId?.toString().trim();
-      const currentId = currentUser.id?.toString().trim();
+      const assignedId = r.assignedToId ? String(r.assignedToId).trim().toLowerCase() : '';
       
       // Keep it intuitive: default fallback tech acts as Novid (tech-1)
-      const belongsToMe = assignedId === currentId || (!r.assignedToId && currentId === 'tech-1');
+      const belongsToMe = assignedId === currentId || (assignedId === '' && currentId === 'tech-1');
       if (!belongsToMe) return false;
 
       const statusStr = r.status ? String(r.status).trim() : '';
@@ -105,20 +106,22 @@ export const TechnicianDashboard: React.FC = () => {
   }, [requests, currentUser, taskStatusFilter]);
 
   const rawTasksCount = useMemo(() => {
-    if (!currentUser) return 0;
+    if (!currentUser?.id) return 0;
+    const currentId = String(currentUser.id).trim().toLowerCase();
+
     return requests.filter(r => {
-      const assignedId = r.assignedToId?.toString().trim();
-      const currentId = currentUser.id?.toString().trim();
-      return assignedId === currentId || (!r.assignedToId && currentId === 'tech-1');
+      const assignedId = r.assignedToId ? String(r.assignedToId).trim().toLowerCase() : '';
+      return assignedId === currentId || (assignedId === '' && currentId === 'tech-1');
     }).length;
   }, [requests, currentUser]);
 
   const activeTasksCount = useMemo(() => {
-    if (!currentUser) return 0;
+    if (!currentUser?.id) return 0;
+    const currentId = String(currentUser.id).trim().toLowerCase();
+
     return requests.filter(r => {
-      const assignedId = r.assignedToId?.toString().trim();
-      const currentId = currentUser.id?.toString().trim();
-      const belongsToMe = assignedId === currentId || (!r.assignedToId && currentId === 'tech-1');
+      const assignedId = r.assignedToId ? String(r.assignedToId).trim().toLowerCase() : '';
+      const belongsToMe = assignedId === currentId || (assignedId === '' && currentId === 'tech-1');
       if (!belongsToMe) return false;
       const statusStr = r.status ? String(r.status).trim() : '';
       return statusStr === 'assigned' || statusStr === 'approved' || statusStr === 'in_progress';
@@ -126,11 +129,12 @@ export const TechnicianDashboard: React.FC = () => {
   }, [requests, currentUser]);
 
   const completedTasksCount = useMemo(() => {
-    if (!currentUser) return 0;
+    if (!currentUser?.id) return 0;
+    const currentId = String(currentUser.id).trim().toLowerCase();
+
     return requests.filter(r => {
-      const assignedId = r.assignedToId?.toString().trim();
-      const currentId = currentUser.id?.toString().trim();
-      const belongsToMe = assignedId === currentId || (!r.assignedToId && currentId === 'tech-1');
+      const assignedId = r.assignedToId ? String(r.assignedToId).trim().toLowerCase() : '';
+      const belongsToMe = assignedId === currentId || (assignedId === '' && currentId === 'tech-1');
       if (!belongsToMe) return false;
       return r.status === 'completed';
     }).length;

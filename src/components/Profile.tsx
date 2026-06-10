@@ -16,6 +16,14 @@ export const Profile: React.FC = () => {
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
+  React.useEffect(() => {
+    if (currentUser) {
+      setFullName(currentUser.fullName || '');
+      setEmail(currentUser.email || '');
+      setAvatarUrl(currentUser.avatarUrl || '');
+    }
+  }, [currentUser]);
+
   if (!currentUser) {
     return (
       <div className="p-8 text-center" dir="rtl">

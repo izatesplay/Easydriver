@@ -1488,30 +1488,33 @@ app.get("/api/requests", async (req, res) => {
 
       const [rows] = await pool.query("SELECT * FROM `requests` ORDER BY `created_date` DESC");
       // Map database snake_case columns to TS camelCase
-      const formatted = (rows as any[]).map(row => ({
-        id: row.id,
-        fullName: row.full_name,
-        phone: row.phone,
-        serviceType: row.service_type,
-        description: row.description,
-        status: row.status,
-        priority: row.priority,
-        adminNotes: row.admin_notes,
-        scheduledDate: row.scheduled_date,
-        assignedToId: row.assigned_to_id,
-        assignedToName: row.assigned_to_name,
-        isApproved: parseMySQLBoolean(row.is_approved),
-        approvedAt: row.approved_at,
-        assignedAt: row.assigned_at,
-        createdDate: row.created_date,
-        updatedDate: row.updated_date,
-        createdBy: row.created_by,
-        rating: row.rating,
-        ratingComment: row.rating_comment,
-        ratedAt: row.rated_at,
-        desktopScreenshots: row.desktop_screenshots ? JSON.parse(row.desktop_screenshots) : [],
-        loggedDurationMinutes: row.logged_duration_minutes || 0,
-      }));
+      const formatted = (rows as any[]).map(row => {
+        const rowStatus = row.status || 'pending';
+        return {
+          id: row.id,
+          fullName: row.full_name,
+          phone: row.phone,
+          serviceType: row.service_type,
+          description: row.description,
+          status: rowStatus,
+          priority: row.priority,
+          adminNotes: row.admin_notes,
+          scheduledDate: row.scheduled_date,
+          assignedToId: row.assigned_to_id,
+          assignedToName: row.assigned_to_name,
+          isApproved: rowStatus === 'pending' ? false : parseMySQLBoolean(row.is_approved),
+          approvedAt: row.approved_at,
+          assignedAt: row.assigned_at,
+          createdDate: row.created_date,
+          updatedDate: row.updated_date,
+          createdBy: row.created_by,
+          rating: row.rating,
+          ratingComment: row.rating_comment,
+          ratedAt: row.rated_at,
+          desktopScreenshots: row.desktop_screenshots ? JSON.parse(row.desktop_screenshots) : [],
+          loggedDurationMinutes: row.logged_duration_minutes || 0,
+        };
+      });
       return res.json(formatted);
     } catch (err: any) {
       console.error("Error reading requests from MySQL:", err);
@@ -1520,13 +1523,25 @@ app.get("/api/requests", async (req, res) => {
 
   // Fallback to local file db
   const local = readLocalJSON();
-  res.json(local.requests);
+  const formattedLocal = (local.requests || []).map((row: any) => {
+    const rowStatus = row.status || 'pending';
+    return {
+      ...row,
+      status: rowStatus,
+      isApproved: rowStatus === 'pending' ? false : !!row.isApproved
+    };
+  });
+  res.json(formattedLocal);
 });
 
 app.post("/api/requests", async (req, res) => {
   const { id, fullName, phone, serviceType, description, status, priority, adminNotes, scheduledDate, assignedToId, assignedToName, isApproved, approvedAt, assignedAt, createdDate, updatedDate, createdBy, desktopScreenshots, loggedDurationMinutes } = req.body;
   const pool = await getMySQLPool();
   let saved = false;
+
+  const finalStatus = status || 'pending';
+  const finalIsApproved = finalStatus === 'pending' ? false : (isApproved === true || isApproved === 1 || String(isApproved) === 'true');
+
   if (pool) {
     try {
       try {
@@ -1538,7 +1553,7 @@ app.post("/api/requests", async (req, res) => {
 
       await pool.query(
         "INSERT INTO `requests` (`id`, `full_name`, `phone`, `service_type`, `description`, `status`, `priority`, `admin_notes`, `scheduled_date`, `assigned_to_id`, `assigned_to_name`, `is_approved`, `approved_at`, `assigned_at`, `created_date`, `updated_date`, `created_by`, `desktop_screenshots`, `logged_duration_minutes`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [id, fullName, phone, serviceType, description, status, priority, adminNotes || null, scheduledDate || null, assignedToId || null, assignedToName || null, isApproved ? 1 : 0, approvedAt || null, assignedAt || null, createdDate, updatedDate, createdBy, desktopScreenshots ? JSON.stringify(desktopScreenshots) : null, loggedDurationMinutes || 0]
+        [id, fullName, phone, serviceType, description, finalStatus, priority, adminNotes || null, scheduledDate || null, assignedToId || null, assignedToName || null, finalIsApproved ? 1 : 0, approvedAt || null, assignedAt || null, createdDate, updatedDate, createdBy, desktopScreenshots ? JSON.stringify(desktopScreenshots) : null, loggedDurationMinutes || 0]
       );
       saved = true;
     } catch (err) {
@@ -1548,11 +1563,16 @@ app.post("/api/requests", async (req, res) => {
 
   // Always write fallback to guarantee robust, up-to-date data state
   const local = readLocalJSON();
+  const reqObj = {
+    ...req.body,
+    status: finalStatus,
+    isApproved: finalIsApproved
+  };
   const index = local.requests.findIndex(r => r.id === id);
   if (index >= 0) {
-    local.requests[index] = req.body;
+    local.requests[index] = reqObj;
   } else {
-    local.requests.unshift(req.body);
+    local.requests.unshift(reqObj);
   }
   writeLocalJSON(local);
 
@@ -1572,6 +1592,9 @@ app.post("/api/requests", async (req, res) => {
 app.put("/api/requests/:id", async (req, res) => {
   const { id } = req.params;
   const { fullName, phone, serviceType, description, status, priority, adminNotes, scheduledDate, assignedToId, assignedToName, isApproved, approvedAt, assignedAt, updatedDate, rating, ratingComment, ratedAt, createdBy, desktopScreenshots, loggedDurationMinutes } = req.body;
+
+  const finalStatus = status || 'pending';
+  const finalIsApproved = finalStatus === 'pending' ? false : (isApproved === true || isApproved === 1 || String(isApproved) === 'true');
 
   let prevStatus = "";
   let prevTechName = "";
@@ -1609,7 +1632,7 @@ app.put("/api/requests/:id", async (req, res) => {
         await pool.query("ALTER TABLE `requests` ADD COLUMN `logged_duration_minutes` INT NOT NULL DEFAULT 0");
       } catch (e) {}
 
-      if (status === "completed") {
+      if (finalStatus === "completed") {
         const [oldReq] = await pool.query("SELECT `status` FROM `requests` WHERE `id`=?", [id]);
         if (oldReq && (oldReq as any[]).length > 0 && (oldReq as any[])[0].status !== "completed") {
           if (assignedToId) {
@@ -1622,7 +1645,7 @@ app.put("/api/requests/:id", async (req, res) => {
       }
       await pool.query(
         "UPDATE `requests` SET `full_name`=?, `phone`=?, `service_type`=?, `description`=?, `status`=?, `priority`=?, `admin_notes`=?, `scheduled_date`=?, `assigned_to_id`=?, `assigned_to_name`=?, `is_approved`=?, `approved_at`=?, `assigned_at`=?, `updated_date`=?, `rating`=?, `rating_comment`=?, `rated_at`=?, `desktop_screenshots`=?, `logged_duration_minutes`=? WHERE `id`=?",
-        [fullName, phone, serviceType, description, status, priority, adminNotes || null, scheduledDate || null, assignedToId || null, assignedToName || null, isApproved ? 1 : 0, approvedAt || null, assignedAt || null, updatedDate, rating || null, ratingComment || null, ratedAt || null, desktopScreenshots ? JSON.stringify(desktopScreenshots) : null, loggedDurationMinutes || 0, id]
+        [fullName, phone, serviceType, description, finalStatus, priority, adminNotes || null, scheduledDate || null, assignedToId || null, assignedToName || null, finalIsApproved ? 1 : 0, approvedAt || null, assignedAt || null, updatedDate, rating || null, ratingComment || null, ratedAt || null, desktopScreenshots ? JSON.stringify(desktopScreenshots) : null, loggedDurationMinutes || 0, id]
       );
     } catch (err) {
       console.error("MySQL update request failed:", err);
@@ -1633,13 +1656,18 @@ app.put("/api/requests/:id", async (req, res) => {
   const index = local.requests.findIndex(r => r.id === id);
   let justCompleted = false;
   let oldRequest: any = null;
+  const reqObj = {
+    ...req.body,
+    status: finalStatus,
+    isApproved: finalIsApproved
+  };
   if (index >= 0) {
     oldRequest = { ...local.requests[index] };
     const oldStatus = local.requests[index].status;
-    if (oldStatus !== "completed" && status === "completed") {
+    if (oldStatus !== "completed" && finalStatus === "completed") {
       justCompleted = true;
     }
-    local.requests[index] = { ...local.requests[index], ...req.body };
+    local.requests[index] = { ...local.requests[index], ...reqObj };
     
     if (justCompleted && assignedToId) {
       const techIdx = local.technicians.findIndex(t => t.id === assignedToId);
@@ -1660,14 +1688,14 @@ app.put("/api/requests/:id", async (req, res) => {
   const subjectText = description ? (description.slice(0, 30) + "...") : "خدمات فنی";
 
   if (oldRequest) {
-    if (status && oldRequest.status !== status) {
-      let PersianStatus = status;
-      if (status === "approved") PersianStatus = "تایید شده";
-      else if (status === "assigned") PersianStatus = "تخصیص یافته";
-      else if (status === "in_progress") PersianStatus = "در حال انجام";
-      else if (status === "completed") PersianStatus = "کامل شده";
-      else if (status === "cancelled") PersianStatus = "لغو شده";
-      else if (status === "pending") PersianStatus = "در انتظار بررسی";
+    if (finalStatus && oldRequest.status !== finalStatus) {
+      let PersianStatus = finalStatus;
+      if (finalStatus === "approved") PersianStatus = "تایید شده";
+      else if (finalStatus === "assigned") PersianStatus = "تخصیص یافته";
+      else if (finalStatus === "in_progress") PersianStatus = "در حال انجام";
+      else if (finalStatus === "completed") PersianStatus = "کامل شده";
+      else if (finalStatus === "cancelled") PersianStatus = "لغو شده";
+      else if (finalStatus === "pending") PersianStatus = "در انتظار بررسی";
       
       changedParts.push(`وضعیت به «${PersianStatus}» تغییر یافت`);
       notificationTitle = "تغییر وضعیت درخواست شما";
