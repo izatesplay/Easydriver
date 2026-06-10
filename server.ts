@@ -1453,6 +1453,7 @@ app.put("/api/users/:id", async (req, res) => {
           fullName,
           email,
           phone,
+          avatarUrl,
         };
       }
     }
@@ -2166,7 +2167,11 @@ app.get("/api/technicians", async (req, res) => {
   const pool = await getMySQLPool();
   if (pool) {
     try {
-      const [rows] = await pool.query("SELECT * FROM `technicians` ORDER BY `completed_tasks` DESC");
+      const [rows] = await pool.query(
+        "SELECT t.*, u.avatar_url FROM `technicians` t " +
+        "LEFT JOIN `users` u ON t.id = u.id " +
+        "ORDER BY t.completed_tasks DESC"
+      );
       const formatted = (rows as any[]).map(t => ({
         id: t.id,
         fullName: t.full_name,
@@ -2179,6 +2184,7 @@ app.get("/api/technicians", async (req, res) => {
         updatedDate: t.updated_date,
         createdBy: t.created_by,
         certificationLevel: t.certification_level || 'Junior',
+        avatarUrl: t.avatar_url || null,
       }));
       return res.json(formatted);
     } catch (err) {
@@ -2187,7 +2193,15 @@ app.get("/api/technicians", async (req, res) => {
   }
 
   const local = readLocalJSON();
-  res.json(local.technicians);
+  // Ensure we copy-map avatarUrl from users for safety in fallback mode
+  const resolvedTechs = (local.technicians || []).map((t: any) => {
+    const matchingUser = (local.users || []).find((u: any) => u.id === t.id);
+    return {
+      ...t,
+      avatarUrl: t.avatarUrl || (matchingUser ? matchingUser.avatarUrl : null)
+    };
+  });
+  res.json(resolvedTechs);
 });
 
 app.post("/api/technicians", async (req, res) => {
