@@ -1387,6 +1387,18 @@ app.put("/api/users/:id", async (req, res) => {
         "UPDATE `users` SET `full_name`=?, `email`=?, `phone`=?, `role`=?, `password`=?, `avatar_url`=?, `is_active`=? WHERE `id`=?",
         [fullName, email, phone, role, finalPassword, avatarUrl || null, isActive !== false ? 1 : 0, id]
       );
+
+      if (role === "technician" || String(id).startsWith("tech-")) {
+        try {
+          await pool.query(
+            "UPDATE `technicians` SET `full_name`=?, `phone`=?, `email`=? WHERE `id`=?",
+            [fullName, phone, email, id]
+          );
+        } catch (techErr) {
+          console.error("Failed to update cascading technician row:", techErr);
+        }
+      }
+
       return res.json({ success: true });
     } catch (err: any) {
       console.error("MySQL update user query failed:", err);
@@ -1431,6 +1443,20 @@ app.put("/api/users/:id", async (req, res) => {
       avatarUrl, 
       isActive: isActive !== false 
     };
+
+    if (role === "technician" || String(id).startsWith("tech-")) {
+      if (!local.technicians) local.technicians = [];
+      const tIdx = local.technicians.findIndex((t: any) => t.id === id);
+      if (tIdx >= 0) {
+        local.technicians[tIdx] = {
+          ...local.technicians[tIdx],
+          fullName,
+          email,
+          phone,
+        };
+      }
+    }
+
     writeLocalJSON(local);
   }
   res.json({ success: true });

@@ -1008,7 +1008,7 @@ export const AdminDashboard: React.FC = () => {
                                   e.stopPropagation();
                                   handleApproveRequest(req);
                                 }}
-                                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-[10px] font-extrabold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                                className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl text-[10px] font-extrabold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
                                 title="تایید و ارجاع سریع به کارشناس"
                               >
                                 <CheckCircle2 className="h-3.5 w-3.5" />
@@ -1042,7 +1042,7 @@ export const AdminDashboard: React.FC = () => {
                                 {!req.isApproved ? (
                                   <button
                                     onClick={() => handleApproveRequest(req)}
-                                    className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
                                   >
                                     <CheckCircle2 className="h-4 w-4" />
                                     <span>تایید نهایی این درخواست</span>
