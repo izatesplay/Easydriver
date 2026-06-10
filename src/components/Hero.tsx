@@ -18,7 +18,12 @@ import {
   Check, 
   Search, 
   Wrench,
-  Gauge
+  Gauge,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
+  Plus,
+  Minus
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { motion, AnimatePresence, useScroll, useTransform, useMotionValue, useSpring } from 'motion/react';
@@ -30,6 +35,7 @@ interface HeroProps {
 export const Hero: React.FC<HeroProps> = ({ setActiveTab }) => {
   const { reviews } = useApp();
   const [currentReviewIndex, setCurrentReviewIndex] = useState(0);
+  const [activeFaq, setActiveFaq] = useState<number | null>(null);
   
   // Interactive Simulator States
   const [scanStep, setScanStep] = useState<'idle' | 'scanning' | 'analyzing' | 'complete'>('idle');
@@ -684,6 +690,82 @@ export const Hero: React.FC<HeroProps> = ({ setActiveTab }) => {
           </div>
         </section>
       )}
+
+      {/* 4.5. Frequently Asked Questions (FAQ) Accordion Section */}
+      <section className="bg-slate-950 text-white py-20 relative border-t border-slate-900">
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-indigo-950/5 to-transparent pointer-events-none" />
+        
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 relative z-10 space-y-12">
+          
+          <div className="text-center space-y-3">
+            <span className="text-[10px] bg-indigo-500/20 text-indigo-300 font-bold px-3.5 py-1.5 rounded-full uppercase tracking-wider block w-fit mx-auto">
+              سوالات متداول کاربران ایزی‌درایور (FAQ)
+            </span>
+            <h2 className="text-3xl font-black text-slate-100 tracking-tight">پاسخ به سوالات و ابهامات متداول شما</h2>
+            <p className="text-xs text-slate-400 max-w-lg mx-auto leading-relaxed">
+              هر آنچه برای شروع بکار، اطمینان از فرآیند اتصال امن، نحوه انجام کارهای نرم‌افزاری و روش‌های همگام‌سازی ابزار بر رایانه خود نیاز دارید را در اینجا بیابید.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            {[
+              {
+                q: "چه خدماتی در ایزی‌درایور (EasyDriver) ارائه می‌شود؟",
+                a: "ایزی‌درایور پلتفرم تخصصی نصب، بروزرسانی و پیکربندی درایورهای سخت‌افزاری انواع رایانه‌ها و لپ‌تاپ‌ها به همراه نصب برنامه‌های کاربردی، تخصصی مهندسی، معماری، گرافیک و اداری با فعال‌سازی و لایسنس دائمی بر روی ویندوز است. ما متعهد به انجام روان‌ترین عیب‌یابی در بازار هستیم."
+              },
+              {
+                q: "چگونه می‌توانم یک درخواست خدمات ثبت کنم؟",
+                a: "جهت ثبت درخواست، کافیست وارد حساب کاربری خود شده، به بخش «ثبت درخواست جدید» بروید و با پر کردن فیلد نام، شماره همراه و توصیف مشکل سیستم نسبت به ایجاد پرونده اقدام کنید. به محض ثبت، کارشناسان یا اپراتورهای ما پرونده را بررسی کرده و بهترین متخصص فنی را به شما اختصاص می‌دهند."
+              },
+              {
+                q: "پروسه عیب‌یابی و نصب از راه دور چگونه انجام می‌گیرد؟",
+                a: "اتصال کارشناسان ما از طریق بسترهای کاملاً امن و رمزنگاری‌شده نظیر برنامه‌های محبوب انی‌دسک (AnyDesk) یا ریموت دسکتاپ برقرار می‌شود. تمامی مراحل عملیات فنی به طور مستقیم روی مانیتور شما قابل رویت بوده، ما هیچ فایلی خارج از هماهنگی شما جابجا نمی‌کنیم و هر زمان تمایل داشتید می‌توانید اتصال را فوراً با یک کلیک یکطرفه قطع کنید."
+              },
+              {
+                q: "شیوه‌های پرداخت و تسویه حساب مالی به چه صورت است؟",
+                a: "ما از درگاه‌های پرداخت امن اینترنتی شتاب کارمزد، تراکنش‌های پایا/کارت‌به‌کارت تحت فاکتور شفاف سیستم استفاده می‌کنیم. علاوه بر این، تمامی سرویس‌های ما شامل گارانتی برگشت ۱۰۰ درصدی وجه در صورت حل نشدن مشکل فنی رایانه شماست تا تجربه‌ای بی‌دغدغه داشته باشید."
+              }
+            ].map((item, index) => {
+              const isOpen = activeFaq === index;
+              return (
+                <div 
+                  key={index} 
+                  className="bg-slate-900/60 border border-slate-800/80 rounded-2xl overflow-hidden transition-all duration-300 hover:border-slate-700/80"
+                >
+                  <button
+                    onClick={() => setActiveFaq(isOpen ? null : index)}
+                    className="w-full p-5 text-right flex items-center justify-between gap-4 font-black text-xs sm:text-sm text-slate-200 hover:text-white transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-3">
+                      <HelpCircle className="h-4.5 w-4.5 text-indigo-400 shrink-0" />
+                      <span>{item.q}</span>
+                    </div>
+                    <div className="p-1.5 bg-slate-800 rounded-lg text-slate-400">
+                      {isOpen ? <Minus className="h-3.5 w-3.5 text-indigo-300" /> : <Plus className="h-3.5 w-3.5 text-slate-300" />}
+                    </div>
+                  </button>
+
+                  <AnimatePresence initial={false}>
+                    {isOpen && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.25, ease: "easeInOut" }}
+                      >
+                        <div className="p-5 pt-0 border-t border-slate-800/40 text-xs text-slate-400 font-normal leading-relaxed text-right pl-10 pr-12">
+                          {item.a}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              );
+            })}
+          </div>
+
+        </div>
+      </section>
 
       {/* 5. Fluid Contact Info Segment */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center space-y-7 relative">

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { Ticket, ChatMessage } from '../types';
-import { ShieldAlert, Key, Send, Inbox, MessageSquare, Laptop, Headset, CornerDownLeft, Sparkles, Smile, RefreshCw, Plus, Paperclip, Loader2 } from 'lucide-react';
+import { ShieldAlert, Key, Send, Inbox, MessageSquare, Laptop, Headset, CornerDownLeft, Sparkles, Smile, RefreshCw, Plus, Paperclip, Loader2, Mic, MicOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface SupportChatProps {
@@ -17,6 +17,79 @@ export const SupportChat: React.FC<SupportChatProps> = ({ selectedTicketId, setS
   const [isUploading, setIsUploading] = useState(false);
   const [debouncedSender, setDebouncedSender] = useState<{ ticketId: string; message: string; role: any } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Web Speech API Microphone Integration
+  const [isListening, setIsListening] = useState(false);
+  const [speechError, setSpeechError] = useState<string | null>(null);
+  const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const rec = new SpeechRecognition();
+      rec.continuous = false;
+      rec.interimResults = false;
+      rec.lang = 'fa-IR'; // Persian language support
+      
+      rec.onstart = () => {
+        setIsListening(true);
+        setSpeechError(null);
+      };
+
+      rec.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        if (transcript) {
+          setTypedMessage(prev => {
+            const separator = prev.endsWith(' ') || prev.length === 0 ? '' : ' ';
+            return prev + separator + transcript;
+          });
+        }
+      };
+
+      rec.onerror = (event: any) => {
+        console.error("Speech recognition error:", event.error);
+        if (event.error === 'not-allowed') {
+          setSpeechError('دسترسی به میکروفون غیرمجاز است.');
+        } else if (event.error === 'no-speech') {
+          // No speech detected, ignore
+        } else {
+          setSpeechError('خطایی در تشخیص گفتار رخ داد.');
+        }
+        setIsListening(false);
+      };
+
+      rec.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = rec;
+    }
+    
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch (e) {}
+      }
+    };
+  }, []);
+
+  const toggleListening = () => {
+    if (!recognitionRef.current) {
+      alert("سیستم تشخیص گفتار در مرورگر شما پشتیبانی نمی‌شود. لطفاً از مرورگر جدیدتری استفاده کنید.");
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current.stop();
+    } else {
+      try {
+        recognitionRef.current.start();
+      } catch (err) {
+        console.error("Speech start failed:", err);
+      }
+    }
+  };
 
   // Polling for live chat updates every 2 seconds without refreshing the page
   useEffect(() => {
@@ -385,6 +458,13 @@ export const SupportChat: React.FC<SupportChatProps> = ({ selectedTicketId, setS
               </div>
 
               {/* Chat Input Area */}
+              {speechError && (
+                <div className="px-4 py-2 bg-rose-50 text-rose-650 text-[10px] font-bold border-t border-rose-100 flex items-center justify-between shrink-0">
+                  <span>{speechError}</span>
+                  <button type="button" onClick={() => setSpeechError(null)} className="hover:underline">متوجه شدم</button>
+                </div>
+              )}
+
               <form onSubmit={handleSendMessage} className="p-3 border-t border-slate-200 shrink-0 bg-white flex items-center gap-2">
                 <label className="p-3 bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 rounded-2xl cursor-pointer transition-all flex items-center justify-center shrink-0 shadow-sm" title="ارسال فایل ضمیمه">
                   <input
@@ -401,11 +481,25 @@ export const SupportChat: React.FC<SupportChatProps> = ({ selectedTicketId, setS
                   )}
                 </label>
 
+                {/* Microphone Speech to Text Trigger */}
+                <button
+                  type="button"
+                  onClick={toggleListening}
+                  className={`p-3 rounded-2xl flex items-center justify-center shrink-0 shadow-sm transition-all cursor-pointer ${
+                    isListening
+                      ? 'bg-rose-600 text-white animate-pulse'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800'
+                  }`}
+                  title={isListening ? "در حال تایپ صوتی... برای توقف کلیک کنید" : "تایپ صوتی با میکروفون (فارسی)"}
+                >
+                  <Mic className="h-4 w-4" />
+                </button>
+
                 <input
                   type="text"
                   value={typedMessage}
                   onChange={(e) => setTypedMessage(e.target.value)}
-                  placeholder="پیام خود را به مهندس پشتیبان بنویسید..."
+                  placeholder={isListening ? "در حال گوش دادن به صدای شما..." : "پیام خود را به مهندس پشتیبان بنویسید..."}
                   className="grow px-4 py-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-2xl text-xs outline-none focus:bg-white focus:border-blue-600 transition-all font-normal"
                 />
                 

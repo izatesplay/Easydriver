@@ -503,11 +503,11 @@ export const NewRequest: React.FC<NewRequestProps> = ({ setActiveTab }) => {
               {/* Submit Action button CTA */}
               <button
                 type="submit"
-                disabled={isSubmitting || ((touched.fullName || touched.phone || touched.description) && !isFormValid)}
-                className={`w-full py-3.5 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer ${
-                  (touched.fullName || touched.phone || touched.description) && !isFormValid
-                    ? 'bg-slate-350 shadow-none cursor-not-allowed text-slate-500'
-                    : 'bg-indigo-650 hover:bg-indigo-700 hover:shadow-indigo-500/10 active:scale-95'
+                disabled={isSubmitting || !isFormValid}
+                className={`w-full py-4 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer ${
+                  !isFormValid
+                    ? 'bg-slate-205 border border-slate-300 text-slate-400 cursor-not-allowed shadow-none'
+                    : 'bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-indigo-500/10 active:scale-95'
                 }`}
               >
                 {isSubmitting ? (

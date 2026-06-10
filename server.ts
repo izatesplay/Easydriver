@@ -1455,6 +1455,21 @@ app.delete("/api/users/:id", async (req, res) => {
   res.json({ success: true });
 });
 
+// Helper to reliably parse MySQL TINYINT/BIT columns as boolean
+function parseMySQLBoolean(val: any): boolean {
+  if (val === undefined || val === null) return false;
+  if (typeof val === 'boolean') return val;
+  if (typeof val === 'number') return val !== 0;
+  if (typeof val === 'string') {
+    return val === '1' || val.toLowerCase() === 'true';
+  }
+  if (Buffer.isBuffer(val)) {
+    if (val.length === 0) return false;
+    return val[0] === 1 || val[0] === 49;
+  }
+  return !!val;
+}
+
 // -------------------------------------------------------------
 // APIs: Dynamic REST Routes supporting MySQL & Backup
 // -------------------------------------------------------------
@@ -1485,7 +1500,7 @@ app.get("/api/requests", async (req, res) => {
         scheduledDate: row.scheduled_date,
         assignedToId: row.assigned_to_id,
         assignedToName: row.assigned_to_name,
-        isApproved: row.is_approved === 1 || row.is_approved === true || (Buffer.isBuffer(row.is_approved) && row.is_approved[0] === 1),
+        isApproved: parseMySQLBoolean(row.is_approved),
         approvedAt: row.approved_at,
         assignedAt: row.assigned_at,
         createdDate: row.created_date,
@@ -1996,8 +2011,8 @@ app.get("/api/reviews", async (req, res) => {
         rating: r.rating,
         comment: r.comment,
         serviceType: r.service_type,
-        isApproved: r.is_approved === 1,
-        isRejected: r.is_approved === -1,
+        isApproved: parseMySQLBoolean(r.is_approved),
+        isRejected: r.is_approved === -1 || String(r.is_approved) === '-1' || (Buffer.isBuffer(r.is_approved) && r.is_approved[0] === 255),
         createdDate: r.created_date,
         updatedDate: r.updated_date,
         createdBy: r.created_by,
@@ -2104,7 +2119,7 @@ app.get("/api/technicians", async (req, res) => {
         phone: t.phone,
         email: t.email,
         specialty: t.specialty,
-        isActive: t.is_active === 1 || t.is_active === true || (Buffer.isBuffer(t.is_active) && t.is_active[0] === 1),
+        isActive: parseMySQLBoolean(t.is_active),
         completedTasks: t.completed_tasks,
         createdDate: t.created_date,
         updatedDate: t.updated_date,

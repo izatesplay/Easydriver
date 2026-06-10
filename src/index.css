@@ -24,6 +24,15 @@
 @theme {
   --font-sans: "Vazirmatn", "Inter", system-ui, -apple-system, sans-serif;
   
+  /* Custom extra colors used across components */
+  --color-indigo-650: #493ee3;
+  --color-slate-650: #576882;
+  --color-rose-650: #d01641;
+  --color-red-650: #cc2121;
+  --color-pink-650: #cc1f6a;
+  --color-slate-350: #b0bdcd;
+  --color-slate-205: #e9eff6;
+
   /* Remap standard tailwind colors to dark mode responsive CSS variables */
   --color-white: var(--bg-card);
   --color-slate-50: var(--bg-app);
@@ -31,6 +40,7 @@
   --color-slate-200: var(--border-color);
   --color-slate-900: var(--text-primary);
   --color-slate-800: var(--text-secondary);
+  --color-slate-705: var(--text-secondary);
   --color-slate-700: var(--text-secondary);
   --color-slate-600: var(--text-secondary);
   --color-slate-500: var(--text-muted);
