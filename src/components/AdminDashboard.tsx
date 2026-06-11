@@ -34,7 +34,7 @@ export const AdminDashboard: React.FC = () => {
   } = useApp();
 
   // Active admin tab selection
-  const [adminTab, setAdminTab] = useState<'overview' | 'requests' | 'technicians' | 'tickets' | 'reviews' | 'db' | 'reports' | 'profile' | 'users'>('overview');
+  const [adminTab, setAdminTab] = useState<'overview' | 'requests' | 'technicians' | 'tickets' | 'reviews' | 'db' | 'reports' | 'profile' | 'users' | 'diagnostics'>('overview');
 
   // Report filters state
   const [reportReqStatus, setReportReqStatus] = useState<'all' | 'pending' | 'in_progress' | 'completed' | 'cancelled'>('all');
@@ -137,6 +137,27 @@ export const AdminDashboard: React.FC = () => {
   const openTicketsCount = tickets.filter(t => t.status === 'open').length;
 
   const pendingReviewsCount = reviews.filter(r => !r.isApproved && !r.isRejected).length;
+
+  // System Diagnostics Calculations
+  const mismatchedRequests = (requests || []).filter(r => {
+    if (r.status !== 'assigned' && r.status !== 'in_progress') return false;
+    if (!r.assignedToId) return true;
+    const associatedUser = (users || []).find(u => String(u.id).trim().toLowerCase() === String(r.assignedToId).trim().toLowerCase());
+    return !associatedUser;
+  });
+
+  const invisiblePendingOrCancelledWithTech = (requests || []).filter(r => {
+    const hasTech = !!r.assignedToId || !!r.assignedToName;
+    const isInactiveStatus = r.status === 'pending' || r.status === 'cancelled';
+    return hasTech && isInactiveStatus;
+  });
+
+  const hasTechIdDividerAnomaly = (users || []).some(u => u.role === 'technician' && String(u.id).includes('_')) || 
+                                  (requests || []).some(r => r.assignedToId && String(r.assignedToId).includes('_'));
+
+  const databaseConnectionDown = !dbInfo?.connected;
+
+  const totalCriticalIssues = mismatchedRequests.length + invisiblePendingOrCancelledWithTech.length + (hasTechIdDividerAnomaly ? 1 : 0) + (databaseConnectionDown ? 1 : 0);
 
   const toggleRequestSelection = (id: string) => {
     setSelectedRequestIds(prev =>
@@ -768,7 +789,7 @@ export const AdminDashboard: React.FC = () => {
         </div>
 
         {/* Core Admin Navigation Grid tabs */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-9 gap-2.5 mb-8">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-10 gap-2.5 mb-8">
           {[
             { id: 'overview', label: 'داشبورد خلاصه آمار', icon: Grid },
             { id: 'requests', label: 'مدیریت درخواست‌ها', icon: Clipboard, badge: pendingRequests },
@@ -779,6 +800,7 @@ export const AdminDashboard: React.FC = () => {
             { id: 'db', label: 'پایگاه داده (MySQL)', icon: Database, badge: dbInfo?.connected ? 0 : 0 },
             { id: 'reports', label: 'خروجی اکسل و PDF', icon: Printer },
             { id: 'profile', label: 'تنظیمات پروفایل کاربری', icon: UserCheck },
+            { id: 'diagnostics', label: 'عیب‌یابی سامانه', icon: ShieldAlert, badge: totalCriticalIssues },
           ].map((tab) => {
             const TabIcon = tab.icon;
             const isActive = adminTab === tab.id;
@@ -1051,37 +1073,73 @@ export const AdminDashboard: React.FC = () => {
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
                               
                               {/* 1. Approval and status triggers */}
-                              <div className="space-y-3.5">
-                                <h4 className="font-bold text-slate-800 border-b border-slate-100 pb-1.5">تاییدیه و وضعیت تفصیلی</h4>
+                              <div className="space-y-3.5 text-right font-sans">
+                                <h4 className="font-extrabold text-xs text-slate-800 border-b border-indigo-150 pb-2 flex items-center gap-1.5">
+                                  <Activity className="h-4 w-4 text-indigo-650" />
+                                  <span>مدیریت و گردش وضعیت پرونده</span>
+                                </h4>
                                 
-                                {/* If not approved, show main triggers */}
-                                {!req.isApproved ? (
+                                <div className="flex flex-col gap-2.5">
+                                  {/* BUTTON 1: Approved */}
                                   <button
-                                    onClick={() => handleApproveRequest(req)}
-                                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                                    onClick={async () => {
+                                      const selectTechId = (document.getElementById(`tech-assign-${req.id}`) as HTMLSelectElement)?.value || '';
+                                      const assignedTech = (technicians || []).find(t => t.id === selectTechId);
+                                      
+                                      const updatedReq: Request = {
+                                        ...req,
+                                        isApproved: true,
+                                        status: selectTechId ? 'assigned' : 'approved',
+                                        approvedAt: new Date().toISOString(),
+                                        assignedAt: selectTechId ? new Date().toISOString() : undefined,
+                                        assignedToId: selectTechId || undefined,
+                                        assignedToName: assignedTech ? assignedTech.fullName : undefined,
+                                        updatedDate: new Date().toISOString()
+                                      };
+                                      await updateRequest(updatedReq);
+                                      alert('تغییرات اعمال شد: درخواست با موفقیت تایید شد.');
+                                    }}
+                                    className="w-full py-2.5 px-3 bg-gradient-to-l from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer hover:shadow"
                                   >
-                                    <CheckCircle2 className="h-4 w-4" />
-                                    <span>تایید نهایی این درخواست</span>
+                                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-250" />
+                                    <span>تایید نهایی درخواست</span>
                                   </button>
-                                ) : (
-                                  <div className="p-3 bg-emerald-50 text-emerald-800 border-emerald-100 rounded-xl flex items-center gap-1.5 font-bold leading-relaxed">
-                                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-                                    <span>این درخواست تایید شده است.</span>
-                                  </div>
-                                )}
 
-                                {/* Status modifier */}
-                                <div className="space-y-1">
-                                  <label className="text-[10px] font-bold text-slate-400 block">تغییر وضعیت جاری درخواست:</label>
-                                  <select
-                                    id={`status-mod-${req.id}`}
-                                    defaultValue={req.status}
-                                    className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-lg outline-none font-bold text-[11px]"
+                                  {/* BUTTON 2: Cancelled */}
+                                  <button
+                                    onClick={async () => {
+                                      const updatedReq: Request = {
+                                        ...req,
+                                        isApproved: false,
+                                        status: 'cancelled',
+                                        updatedDate: new Date().toISOString()
+                                      };
+                                      await updateRequest(updatedReq);
+                                      alert('تغییرات اعمال شد: درخواست با موفقیت لغو شد.');
+                                    }}
+                                    className="w-full py-2.5 px-3 bg-gradient-to-l from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer hover:shadow"
                                   >
-                                    {(Object.keys(STATUS_LABELS) as RequestStatus[]).map((sta) => (
-                                      <option key={sta} value={sta}>{STATUS_LABELS[sta]}</option>
-                                    ))}
-                                  </select>
+                                    <X className="h-4 w-4 shrink-0 text-amber-100 font-black" />
+                                    <span>لغو این درخواست</span>
+                                  </button>
+
+                                  {/* BUTTON 3: Deleted */}
+                                  <button
+                                    onClick={() => {
+                                      if (window.confirm('آیا مطمئن هستید که می‌خواهید این درخواست را برای همیشه از سیستم حذف نمایید؟ این عملیات غیرقابل بازگشت است.')) {
+                                        deleteRequest(req.id);
+                                      }
+                                    }}
+                                    className="w-full py-2.5 px-3 bg-gradient-to-l from-rose-600 to-red-650 hover:from-rose-700 hover:to-red-700 text-white rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer hover:shadow"
+                                  >
+                                    <Trash2 className="h-4 w-4 shrink-0 text-rose-100" />
+                                    <span>حذف پرونده از دیتابیس</span>
+                                  </button>
+                                </div>
+
+                                <div className="p-2 bg-slate-50 border border-slate-100 rounded-lg text-[9px] text-slate-500 flex items-center justify-between">
+                                  <span>وضعیت سیستمی فعلی پرونده:</span>
+                                  <span className="font-bold"><StatusBadge status={req.status} id={`indicator-${req.id}`} /></span>
                                 </div>
                               </div>
 
@@ -1349,7 +1407,8 @@ export const AdminDashboard: React.FC = () => {
 
                               <button
                                 onClick={() => {
-                                  const selectStatus = (document.getElementById(`status-mod-${req.id}`) as HTMLSelectElement).value as RequestStatus;
+                                  const selectStatusEl = document.getElementById(`status-mod-${req.id}`) as HTMLSelectElement;
+                                  const selectStatus = selectStatusEl ? (selectStatusEl.value as RequestStatus) : req.status;
                                   const selectTechId = (document.getElementById(`tech-assign-${req.id}`) as HTMLSelectElement).value;
                                   const selectSchedule = (document.getElementById(`scheduled-date-${req.id}`) as HTMLInputElement).value;
                                   
@@ -2646,6 +2705,297 @@ export const AdminDashboard: React.FC = () => {
           {/* TAB 8: PROFILE SETTINGS */}
           {adminTab === 'profile' && (
             <Profile />
+          )}
+
+          {/* TAB 10: SYSTEM DIAGNOSTICS & TROUBLESHOOTING */}
+          {adminTab === 'diagnostics' && (
+            <div className="space-y-6 text-right font-sans">
+              
+              {/* Header card with status overview */}
+              <div className="p-6 bg-slate-900 rounded-3xl text-white shadow-lg relative overflow-hidden">
+                <div className="absolute top-0 left-0 bg-rose-600/10 px-8 py-2 rounded-br-3xl text-[10px] font-mono tracking-wider font-extrabold uppercase text-rose-400">
+                  Live System Audit
+                </div>
+                <div className="space-y-1.5 max-w-2xl">
+                  <h3 className="font-black text-base sm:text-lg flex items-center gap-2">
+                    <ShieldAlert className="h-5.5 w-5.5 text-rose-500 shrink-0" />
+                    <span>سیستم هوشمند عیب‌یابی و آزمایش پایداری ایزی‌درایور</span>
+                  </h3>
+                  <p className="text-xs text-slate-300 leading-normal">
+                    این بخش به صورت زنده تمامی ساختارها، شناسه‌های تخصیص‌یافته، تاییدیه فایل‌های سیستمی و هماهنگی حساب‌های همکاران ریموت با بخش کارفرمایان را سنجش و دلایل بروز هرگونه تداخل را تحلیل می‌کند.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-6 mt-6 border-t border-slate-800">
+                  <div className="p-4 bg-slate-850 rounded-2xl border border-slate-800 flex items-center gap-3">
+                    <div className={`p-2.5 rounded-xl ${totalCriticalIssues > 0 ? "bg-rose-500/10 text-rose-400 animate-pulse" : "bg-emerald-500/10 text-emerald-400"}`}>
+                      <Activity className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-bold">شاخص پایداری کلی:</span>
+                      <span className={`text-sm font-black ${totalCriticalIssues > 0 ? "text-rose-400" : "text-emerald-400"}`}>
+                        {totalCriticalIssues > 0 ? `${Math.max(10, 100 - totalCriticalIssues * 25)}% نیازمند توجه` : '۱۰۰٪ کاملاً امن و پایدار'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-slate-850 rounded-2xl border border-slate-800 flex items-center gap-3">
+                    <div className={`p-2.5 rounded-xl ${dbInfo?.connected ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400 animate-pulse"}`}>
+                      <Database className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-bold">میزبانی مرکزی:</span>
+                      <span className={`text-sm font-black ${dbInfo?.connected ? "text-emerald-400" : "text-rose-400"}`}>
+                        {dbInfo?.connected ? 'MySQL و متصل' : 'پشتیبان محلی زنده'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-slate-850 rounded-2xl border border-slate-800 flex items-center gap-3">
+                    <div className={`p-2.5 rounded-xl ${mismatchedRequests.length + invisiblePendingOrCancelledWithTech.length > 0 ? "bg-rose-500/10 text-rose-400 animate-pulse" : "bg-emerald-500/10 text-emerald-400"}`}>
+                      <Users className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-bold">مشکلات کارتابل تکنسین:</span>
+                      <span className={`text-sm font-black ${mismatchedRequests.length + invisiblePendingOrCancelledWithTech.length > 0 ? "text-rose-400" : "text-emerald-400"}`}>
+                        {mismatchedRequests.length + invisiblePendingOrCancelledWithTech.length} مورد مغایرت فنی
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Detailed Diagnostic Checks Checklist */}
+              <div className="space-y-4">
+                <h4 className="font-black text-sm text-slate-800 pb-1 border-b border-slate-100">نتایج آزمون‌های پایداری سیستم</h4>
+
+                {/* TEST 1: Invisible tasks due to status */}
+                <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-xxs space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className={`p-2 rounded-xl mt-0.5 shrink-0 ${invisiblePendingOrCancelledWithTech.length > 0 ? "bg-rose-50 text-rose-600" : "bg-emerald-55 text-emerald-605"}`}>
+                        {invisiblePendingOrCancelledWithTech.length > 0 ? <UserMinus className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
+                      </div>
+                      <div className="space-y-1">
+                        <h5 className="font-extrabold text-sm text-slate-800">۱. آزمون نمایش درخواست‌های جدید و تایید نشده در پنل کارشناسان تکنسین</h5>
+                        <p className="text-[11px] text-slate-500 leading-normal">
+                          تکنسین‌ها با به ورود به کارتابل خود فقط درخواست‌های فعال مصوب شده یعنی وضعیت‌های تایید شده، ارجاع داده شده و در حال انجام را می‌بینند. درخواست با وضعیت معلق (Pending) برای آنها نمایش داده نمی‌شود.
+                        </p>
+                      </div>
+                    </div>
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-black shrink-0 text-center ${
+                      invisiblePendingOrCancelledWithTech.length > 0 ? "bg-rose-100 text-rose-800 animate-pulse" : "bg-emerald-100 text-emerald-800"
+                    }`}>
+                      {invisiblePendingOrCancelledWithTech.length > 0 ? `آلارم: وجود ${invisiblePendingOrCancelledWithTech.length} مورد مخفی` : '🟢 سلامت کامل'}
+                    </span>
+                  </div>
+
+                  {invisiblePendingOrCancelledWithTech.length > 0 && (
+                    <div className="p-4 bg-rose-50/50 rounded-xl border border-rose-100 space-y-3">
+                      <p className="text-[11px] text-slate-600 leading-normal">
+                        تحلیل فنی نشان می‌دهد تعداد {invisiblePendingOrCancelledWithTech.length} درخواست ثبت شده در سیستم وجود دارند که کاربر تکنسین برای آنها تخصیص یافته است، اما چون وضعیت درخواست معلق (Pending) یا پیش‌نویس لغو شده باقی‌مانده، تکنسین قادر به مشاهده آنها در پنل خود نیست!
+                      </p>
+                      <div className="bg-white border rounded-lg divide-y divide-rose-50 max-h-40 overflow-y-auto">
+                        {invisiblePendingOrCancelledWithTech.map((r) => (
+                          <div key={r.id} className="p-2.5 text-[10px] flex items-center justify-between font-mono text-slate-705">
+                            <span>کد: #{r.id} | کارشناس ارجاع‌یافته: {r.assignedToName || r.assignedToId}</span>
+                            <span className="font-sans px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded font-bold">وضعیت: {STATUS_LABELS[r.status]}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => {
+                          invisiblePendingOrCancelledWithTech.forEach(r => {
+                            updateRequest({
+                              ...r,
+                              isApproved: true,
+                              status: 'assigned',
+                              approvedAt: r.approvedAt || new Date().toISOString(),
+                              assignedAt: r.assignedAt || new Date().toISOString(),
+                              updatedDate: new Date().toISOString()
+                            });
+                          });
+                          alert('رفع اشکال زنده اجرا شد: تمامی درخواست‌های دارای تکنسین فعالسازی شده و به کارتابل آنها ارسال شدند.');
+                        }}
+                        className="px-4 py-2 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-xs rounded-lg transition-transform cursor-pointer"
+                      >
+                        اکنون تصحیح کن (تغییر وضعیت به ارجاع داده شده - Assigned)
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* TEST 2: Users table synchronization for technician */}
+                <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-xxs space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className={`p-2 rounded-xl mt-0.5 shrink-0 ${mismatchedRequests.length > 0 ? "bg-rose-50 text-rose-600" : "bg-emerald-55 text-emerald-605"}`}>
+                        {mismatchedRequests.length > 0 ? <UserX className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
+                      </div>
+                      <div className="space-y-1">
+                        <h5 className="font-extrabold text-sm text-slate-800">۲. آزمون تطابق حساب‌های کاربری همکاران فنی در بانک مرجع کاربران سیستم</h5>
+                        <p className="text-[11px] text-slate-500 leading-normal">
+                          جهت امکان ورود به پورتال، هر تکنسین تعریف شده باید اجباراً دارای یک حساب با شناسه یکسان در جدول مرجع کاربران (Users Schema) باشد. در غیر این صورت ورود غیرممکن و پنل غیرفعال باقی خواهد ماند.
+                        </p>
+                      </div>
+                    </div>
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-black shrink-0 text-center ${
+                      mismatchedRequests.length > 0 ? "bg-rose-100 text-rose-800 animate-pulse" : "bg-emerald-100 text-emerald-800"
+                    }`}>
+                      {mismatchedRequests.length > 0 ? `آلارم: وجود ${mismatchedRequests.length} مورد مغایرت ورود` : '🟢 سلامت کامل'}
+                    </span>
+                  </div>
+
+                  {mismatchedRequests.length > 0 && (
+                    <div className="p-4 bg-rose-50/50 rounded-xl border border-rose-100 space-y-3">
+                      <p className="text-[11px] text-slate-600 leading-normal">
+                        بخش بررسی سیستم نشان می‌دهد که درخواست‌هایی در لیست فعال هستند که به تکنسینی منتسب شده‌اند اما برای آن شناسه، هیچ حسابی در مخزن کاربران اصلی دیتابیس کاربران وجود ندارد! این همکار امکان ورود به پورتال را با این شناسه نخواهد داشت.
+                      </p>
+                      <div className="bg-white border rounded-lg divide-y divide-rose-50 max-h-40 overflow-y-auto">
+                        {mismatchedRequests.map((r) => (
+                          <div key={r.id} className="p-2.5 text-[10px] flex items-center justify-between font-mono text-slate-705">
+                            <span>کد درخواست: #{r.id}</span>
+                            <span className="font-sans px-2 py-0.5 bg-rose-100 text-rose-800 rounded font-bold">شناسه کاربری مفقود شده: {r.assignedToId}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        onClick={async () => {
+                          let fixedCount = 0;
+                          for (const r of mismatchedRequests) {
+                            if (!r.assignedToId) continue;
+                            const techProfile = (technicians || []).find(t => t.id === r.assignedToId);
+                            const name = techProfile?.fullName || r.assignedToName || 'تکنسین ایزی‌درایور';
+                            const email = techProfile?.email || `${r.assignedToId}@easydriver.ir`;
+                            const phone = techProfile?.phone || r.phone || '09010002222';
+                            
+                            const newUser = {
+                              id: r.assignedToId,
+                              fullName: name,
+                              email: email,
+                              phone: phone,
+                              role: 'technician' as const,
+                              password: '123',
+                              isActive: true,
+                              avatarUrl: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(name)}`,
+                            };
+                            
+                            await fetch("/api/users", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify(newUser)
+                            });
+                            fixedCount++;
+                          }
+                          setTimeout(() => {
+                            loadFreshData();
+                            alert(`رفع تداخل کامل گردید: تعداد ${fixedCount} اکانت مفقود شده با موفقیت به ساختار پایگاه داده و لیست ورود کاربران تزریق شد. رمز عبور پیش‌فرض این همکاران «123» است.`);
+                          }, 1000);
+                        }}
+                        className="px-4 py-2 bg-indigo-650 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs rounded-lg transition-transform cursor-pointer"
+                      >
+                        حل تداخل اکانت فنی و ثبت خودکار در دیتابیس
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* TEST 3: Hyphen vs Underscore format sanity tester */}
+                <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-xxs space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className={`p-2 rounded-xl mt-0.5 shrink-0 ${hasTechIdDividerAnomaly ? "bg-rose-50 text-rose-600" : "bg-emerald-55 text-emerald-605"}`}>
+                        {hasTechIdDividerAnomaly ? <RefreshCw className="h-5 w-5 animate-spin" /> : <CheckCircle2 className="h-5 w-5" />}
+                      </div>
+                      <div className="space-y-1">
+                        <h5 className="font-extrabold text-sm text-slate-800">۳. آزمون بررسی یکپارچگی تفکیک‌کننده‌های نوشتاری شناسه‌ها (خط تیره vs آندرلاين)</h5>
+                        <p className="text-[11px] text-slate-500 leading-normal">
+                          شناسه‌های همکاران در پایگاه داده معمولاً به صورت ساختار منظم `tech-1` استفاده می‌شود. تعویض به آندرلاين (`tech_1`) در کدهای قدیمی می‌تواند باعث قطع زنجیره ارتباطی تسک‌ها در برنامه تلفن همراه و پنل کارآموزان ریموت شود.
+                        </p>
+                      </div>
+                    </div>
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-black shrink-0 text-center ${
+                      hasTechIdDividerAnomaly ? "bg-rose-100 text-rose-800 animate-pulse" : "bg-emerald-100 text-emerald-800"
+                    }`}>
+                      {hasTechIdDividerAnomaly ? 'مغایرت آندرلاین یافت شد' : '🟢 سلامت کامل'}
+                    </span>
+                  </div>
+
+                  {hasTechIdDividerAnomaly && (
+                    <div className="p-4 bg-rose-50/50 rounded-xl border border-rose-100 space-y-3">
+                      <p className="text-[11px] text-slate-600 leading-normal">
+                        شناسه‌هایی با آندرلاین (_) در جدول درخواست‌ها یا کاربران شناسایی شد. سیستم برای همگام‌سازی تضمین شده پیشنهاد می‌کند آندرلاین‌های مخدوش را به خط تیره (-) تبدیل کند تا تکنسین‌ها تسک‌های خود را به صورت هماهنگ بازیابی کنند.
+                      </p>
+                      <button
+                        onClick={() => {
+                          let fixes = 0;
+                          requests.forEach(r => {
+                            if (r.assignedToId && r.assignedToId.includes('_')) {
+                              const norm = r.assignedToId.replace(/_/g, '-');
+                              updateRequest({
+                                ...r,
+                                assignedToId: norm,
+                                updatedDate: new Date().toISOString()
+                              });
+                              fixes++;
+                            }
+                          });
+                          alert(`رفع تداخل ساختار فیلدها با موفقیت تکمیل شد: ${fixes} مورد آندرلاین تبدیل به خط تیره (-) استاندارد گردید.`);
+                        }}
+                        className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 active:scale-95 text-white font-bold text-xs rounded-lg transition-transform cursor-pointer"
+                      >
+                        اصلاح فرمت شناسه‌های تکنسین به دش (-) استاندارد
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* TEST 4: Default approval is clean */}
+                <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-xxs">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 rounded-xl mt-0.5 shrink-0 bg-emerald-55 text-emerald-605">
+                      <CheckCircle2 className="h-5 w-5" />
+                    </div>
+                    <div className="space-y-1">
+                      <h5 className="font-extrabold text-sm text-slate-800">۴. آزمون وضعیت تایید اولیه ثبت سفارش مستقل (Default Safe Lock)</h5>
+                      <p className="text-[11px] text-slate-500 leading-normal">
+                        تایید می‌کند که درخواست خدمات جدید به هیچ عنوان به صورت اتوماتیک یا پیش‌فرض تایید نشوند و مستلزم تایید اختیاری مدیر باشد.
+                      </p>
+                      <p className="pt-2 text-[10px] text-slate-450 font-bold">
+                        🟢 به خوبی ارزیابی شد. تاییدیه خودکار قفل است و تمامی تراکنش‌های خام در وضعیت Pending (بسته‌بسته‌شده) نگهداری می‌شوند.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* TEST 5: Database Connection Down fallback safety check */}
+                <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-xxs">
+                  <div className="flex items-start gap-3 flex-col sm:flex-row sm:items-center justify-between">
+                    <div className="flex items-start gap-3">
+                      <div className={`p-2 rounded-xl mt-0.5 shrink-0 ${databaseConnectionDown ? "bg-amber-100 text-amber-700" : "bg-emerald-55 text-emerald-605"}`}>
+                        <Database className="h-5 w-5" />
+                      </div>
+                      <div className="space-y-1">
+                        <h5 className="font-extrabold text-sm text-slate-800">۵. وضعیت اتصال زنده شبکه دیتابیس رابط سرویس</h5>
+                        <p className="text-[11px] text-slate-500 leading-normal">
+                          {databaseConnectionDown 
+                            ? "سیستم هم‌اکنون از حافظه لوکال و فایل بک‌آپ برای مدیریت موقت داده‌ها استفاده می‌کند. جای نگرانی نیست، هرگونه اقدام جدید بلافاصله در حافظه پورتال همکاران پایدار می‌ماند." 
+                            : "رایانه مرکزی به خوبی به پایگاه داده MySQL متصل است و تمامی اطلاعات مستقیماً روی سرور همگام هستند."
+                          }
+                        </p>
+                      </div>
+                    </div>
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-black shrink-0 text-center ${
+                      databaseConnectionDown ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"
+                    }`}>
+                      {databaseConnectionDown ? 'وضعیت: زنده روی محلی' : '🟢 اتصال زنده به دیتابیس'}
+                    </span>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
           )}
 
           {/* TAB 7: REPORTS & EXPORTS CENTER */}

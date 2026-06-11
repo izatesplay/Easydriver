@@ -12,6 +12,7 @@ export interface User {
   role: UserRole;
   avatarUrl?: string;
   password?: string;
+  isActive?: boolean;
 }
 
 export type ServiceType = 'driver_install' | 'software_install' | 'anydesk_support' | 'other';

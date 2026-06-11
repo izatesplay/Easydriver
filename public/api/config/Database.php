@@ -221,9 +221,9 @@ class Database {
                 $stmt = $pdo->prepare("INSERT INTO `users` (`id`, `username`, `full_name`, `email`, `phone`, `role`, `password`, `is_active`, `avatar_url`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
                 $stmt->execute([
                     'admin-1',
-                    'admin@easydriver.ir',
+                    'izatesplay@gmail.com',
                     'مدیریت ایزی‌درایور (امین)',
-                    'admin@easydriver.ir',
+                    'izatesplay@gmail.com',
                     '09010009999',
                     'admin',
                     $admin_pass_hash,
