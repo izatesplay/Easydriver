@@ -1598,14 +1598,46 @@ app.post("/api/requests", async (req, res) => {
 
       // Get exact column names dynamically
       const cols = await getRequestsTableColumns(pool);
-      const isAssignedToIdColExistent = cols.includes('assigned_to_id');
-      const techIdCol = isAssignedToIdColExistent ? 'assigned_to_id' : 'technician_id';
-      const techNameCol = isAssignedToIdColExistent ? 'assigned_to_name' : 'technician_name';
 
-      await pool.query(
-        `INSERT INTO \`requests\` (\`id\`, \`full_name\`, \`phone\`, \`service_type\`, \`description\`, \`status\`, \`priority\`, \`admin_notes\`, \`scheduled_date\`, \`${techIdCol}\`, \`${techNameCol}\`, \`is_approved\`, \`approved_at\`, \`assigned_at\`, \`created_date\`, \`updated_date\`, \`created_by\`, \`desktop_screenshots\`, \`logged_duration_minutes\`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, fullName, phone, serviceType, description, finalStatus, priority, adminNotes || null, scheduledDate || null, assignedToId || null, assignedToName || null, finalIsApproved ? 1 : 0, approvedAt || null, assignedAt || null, createdDate, updatedDate, createdBy, desktopScreenshots ? JSON.stringify(desktopScreenshots) : null, loggedDurationMinutes || 0]
-      );
+      const insertKeys: string[] = [];
+      const insertPlaceholders: string[] = [];
+      const queryValues: any[] = [];
+      
+      const addFieldForInsert = (colName: string, value: any) => {
+        if (cols.includes(colName)) {
+          insertKeys.push(`\`${colName}\``);
+          insertPlaceholders.push('?');
+          queryValues.push(value);
+        }
+      };
+      
+      addFieldForInsert('id', id);
+      addFieldForInsert('full_name', fullName);
+      addFieldForInsert('phone', phone);
+      addFieldForInsert('service_type', serviceType);
+      addFieldForInsert('description', description);
+      addFieldForInsert('status', finalStatus);
+      addFieldForInsert('priority', priority);
+      addFieldForInsert('admin_notes', adminNotes || null);
+      addFieldForInsert('scheduled_date', scheduledDate || null);
+      
+      // Update BOTH technician columns to sync with all schemas
+      addFieldForInsert('assigned_to_id', assignedToId || null);
+      addFieldForInsert('technician_id', assignedToId || null);
+      addFieldForInsert('assigned_to_name', assignedToName || null);
+      addFieldForInsert('technician_name', assignedToName || null);
+      
+      addFieldForInsert('is_approved', finalIsApproved ? 1 : 0);
+      addFieldForInsert('approved_at', approvedAt || null);
+      addFieldForInsert('assigned_at', assignedAt || null);
+      addFieldForInsert('created_date', createdDate);
+      addFieldForInsert('updated_date', updatedDate);
+      addFieldForInsert('created_by', createdBy);
+      addFieldForInsert('desktop_screenshots', desktopScreenshots ? JSON.stringify(desktopScreenshots) : null);
+      addFieldForInsert('logged_duration_minutes', loggedDurationMinutes || 0);
+
+      const queryStr = `INSERT INTO \`requests\` (${insertKeys.join(', ')}) VALUES (${insertPlaceholders.join(', ')})`;
+      await pool.query(queryStr, queryValues);
       saved = true;
     } catch (err) {
       console.error("MySQL Insert request failed:", err);
@@ -1702,10 +1734,50 @@ app.put("/api/requests/:id", async (req, res) => {
           }
         }
       }
-      await pool.query(
-        `UPDATE \`requests\` SET \`full_name\`=?, \`phone\`=?, \`service_type\`=?, \`description\`=?, \`status\`=?, \`priority\`=?, \`admin_notes\`=?, \`scheduled_date\`=?, \`${techIdCol}\`=?, \`${techNameCol}\`=?, \`is_approved\`=?, \`approved_at\`=?, \`assigned_at\`=?, \`updated_date\`=?, \`rating\`=?, \`rating_comment\`=?, \`rated_at\`=?, \`desktop_screenshots\`=?, \`logged_duration_minutes\`=? WHERE \`id\`=?`,
-        [fullName, phone, serviceType, description, finalStatus, priority, adminNotes || null, scheduledDate || null, assignedToId || null, assignedToName || null, finalIsApproved ? 1 : 0, approvedAt || null, assignedAt || null, updatedDate, rating || null, ratingComment || null, ratedAt || null, desktopScreenshots ? JSON.stringify(desktopScreenshots) : null, loggedDurationMinutes || 0, id]
-      );
+
+      // Get existing columns dynamically for a safe dynamic update
+      const cols = await getRequestsTableColumns(pool);
+
+      const updateFields: string[] = [];
+      const queryValues: any[] = [];
+      
+      const addFieldForUpdate = (colName: string, value: any) => {
+        if (cols.includes(colName)) {
+          updateFields.push(`\`${colName}\` = ?`);
+          queryValues.push(value);
+        }
+      };
+
+      addFieldForUpdate('full_name', fullName);
+      addFieldForUpdate('phone', phone);
+      addFieldForUpdate('service_type', serviceType);
+      addFieldForUpdate('description', description);
+      addFieldForUpdate('status', finalStatus);
+      addFieldForUpdate('priority', priority);
+      addFieldForUpdate('admin_notes', adminNotes || null);
+      addFieldForUpdate('scheduled_date', scheduledDate || null);
+      
+      // Update both technician columns if present
+      addFieldForUpdate('assigned_to_id', assignedToId || null);
+      addFieldForUpdate('technician_id', assignedToId || null);
+      addFieldForUpdate('assigned_to_name', assignedToName || null);
+      addFieldForUpdate('technician_name', assignedToName || null);
+      
+      addFieldForUpdate('is_approved', finalIsApproved ? 1 : 0);
+      addFieldForUpdate('approved_at', approvedAt || null);
+      addFieldForUpdate('assigned_at', assignedAt || null);
+      addFieldForUpdate('updated_date', updatedDate);
+      addFieldForUpdate('rating', rating || null);
+      addFieldForUpdate('rating_comment', ratingComment || null);
+      addFieldForUpdate('rated_at', ratedAt || null);
+      addFieldForUpdate('desktop_screenshots', desktopScreenshots ? JSON.stringify(desktopScreenshots) : null);
+      addFieldForUpdate('logged_duration_minutes', loggedDurationMinutes || 0);
+
+      if (updateFields.length > 0) {
+        queryValues.push(id);
+        const queryStr = `UPDATE \`requests\` SET ${updateFields.join(', ')} WHERE \`id\` = ?`;
+        await pool.query(queryStr, queryValues);
+      }
     } catch (err) {
       console.error("MySQL update request failed:", err);
     }
