@@ -89,9 +89,11 @@ export const TechnicianDashboard: React.FC = () => {
 
     return requests.filter(r => {
       const assignedId = r.assignedToId ? String(r.assignedToId).trim().toLowerCase() : '';
+      const techId = r.technicianId ? String(r.technicianId).trim().toLowerCase() : '';
       
-      // Keep it intuitive: default fallback tech acts as Novid (tech-1)
-      const belongsToMe = assignedId === currentId || (assignedId === '' && currentId === 'tech-1');
+      // Look at BOTH assignedToId and technicianId for matching
+      const belongsToMe = assignedId === currentId || techId === currentId || 
+        ((assignedId === '' || assignedId === 'null') && (techId === '' || techId === 'null') && currentId === 'tech-1');
       if (!belongsToMe) return false;
 
       const statusStr = r.status ? String(r.status).trim() : '';
@@ -111,7 +113,9 @@ export const TechnicianDashboard: React.FC = () => {
 
     return requests.filter(r => {
       const assignedId = r.assignedToId ? String(r.assignedToId).trim().toLowerCase() : '';
-      return assignedId === currentId || (assignedId === '' && currentId === 'tech-1');
+      const techId = r.technicianId ? String(r.technicianId).trim().toLowerCase() : '';
+      return assignedId === currentId || techId === currentId || 
+        ((assignedId === '' || assignedId === 'null') && (techId === '' || techId === 'null') && currentId === 'tech-1');
     }).length;
   }, [requests, currentUser]);
 
@@ -121,7 +125,9 @@ export const TechnicianDashboard: React.FC = () => {
 
     return requests.filter(r => {
       const assignedId = r.assignedToId ? String(r.assignedToId).trim().toLowerCase() : '';
-      const belongsToMe = assignedId === currentId || (assignedId === '' && currentId === 'tech-1');
+      const techId = r.technicianId ? String(r.technicianId).trim().toLowerCase() : '';
+      const belongsToMe = assignedId === currentId || techId === currentId || 
+        ((assignedId === '' || assignedId === 'null') && (techId === '' || techId === 'null') && currentId === 'tech-1');
       if (!belongsToMe) return false;
       const statusStr = r.status ? String(r.status).trim() : '';
       return statusStr === 'assigned' || statusStr === 'approved' || statusStr === 'in_progress';
@@ -134,7 +140,9 @@ export const TechnicianDashboard: React.FC = () => {
 
     return requests.filter(r => {
       const assignedId = r.assignedToId ? String(r.assignedToId).trim().toLowerCase() : '';
-      const belongsToMe = assignedId === currentId || (assignedId === '' && currentId === 'tech-1');
+      const techId = r.technicianId ? String(r.technicianId).trim().toLowerCase() : '';
+      const belongsToMe = assignedId === currentId || techId === currentId || 
+        ((assignedId === '' || assignedId === 'null') && (techId === '' || techId === 'null') && currentId === 'tech-1');
       if (!belongsToMe) return false;
       return r.status === 'completed';
     }).length;

@@ -72,6 +72,8 @@ export interface Request {
   scheduledDate?: string;
   assignedToId?: string;
   assignedToName?: string;
+  technicianId?: string;
+  technicianName?: string;
   isApproved: boolean;
   approvedAt?: string;
   assignedAt?: string;

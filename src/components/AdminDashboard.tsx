@@ -1040,11 +1040,27 @@ export const AdminDashboard: React.FC = () => {
                           </div>
 
                           <div className="shrink-0 flex items-center gap-2">
-                            {!req.isApproved && (
+                            {(!req.isApproved || (!req.assignedToId && !req.technicianId)) && (
                               <button
-                                onClick={(e) => {
+                                onClick={async (e) => {
                                   e.stopPropagation();
-                                  handleApproveRequest(req);
+                                  const activeTechs = (technicians || []).filter(t => t.isActive);
+                                  const chosenTech = activeTechs.length > 0 ? activeTechs[0] : ((technicians || []).length > 0 ? technicians[0] : null);
+                                  
+                                  const updatedObj: Request = {
+                                    ...req,
+                                    isApproved: true,
+                                    status: 'assigned',
+                                    approvedAt: new Date().toISOString(),
+                                    assignedToId: chosenTech ? chosenTech.id : 'tech-1',
+                                    assignedToName: chosenTech ? chosenTech.fullName : 'نوید مرادی',
+                                    technicianId: chosenTech ? chosenTech.id : 'tech-1',
+                                    technicianName: chosenTech ? chosenTech.fullName : 'نوید مرادی',
+                                    assignedAt: new Date().toISOString(),
+                                    updatedDate: new Date().toISOString(),
+                                  };
+                                  await updateRequest(updatedObj);
+                                  alert('درخواست با موفقیت تایید و ارجاع شد.');
                                 }}
                                 className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl text-[10px] font-extrabold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
                                 title="تایید و ارجاع سریع به کارشناس"
@@ -1072,11 +1088,11 @@ export const AdminDashboard: React.FC = () => {
                             {/* Action block forms */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
                               
-                              {/* 1. Approval and status triggers */}
+                              {/* 1. Direct Status Management Actions */}
                               <div className="space-y-3.5 text-right font-sans">
                                 <h4 className="font-extrabold text-xs text-slate-800 border-b border-indigo-150 pb-2 flex items-center gap-1.5">
                                   <Activity className="h-4 w-4 text-indigo-650" />
-                                  <span>مدیریت و گردش وضعیت پرونده</span>
+                                  <span>مدیریت و گردش مستقیم وضعیت پرونده</span>
                                 </h4>
                                 
                                 <div className="flex flex-col gap-2.5">
@@ -1096,15 +1112,17 @@ export const AdminDashboard: React.FC = () => {
                                         assignedAt: selectTechId ? new Date().toISOString() : undefined,
                                         assignedToId: selectTechId || undefined,
                                         assignedToName: assignedTech ? assignedTech.fullName : undefined,
+                                        technicianId: selectTechId || undefined,
+                                        technicianName: assignedTech ? assignedTech.fullName : undefined,
                                         updatedDate: new Date().toISOString()
                                       };
                                       await updateRequest(updatedReq);
-                                      alert('تغییرات اعمال شد: درخواست با موفقیت تایید شد.');
+                                      alert('درخواست با موفقیت تایید شد.');
                                     }}
-                                    className="w-full py-2.5 px-3 bg-gradient-to-l from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer hover:shadow"
+                                    className="w-full py-2.5 px-3 bg-gradient-to-l from-emerald-650 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer hover:shadow"
                                   >
                                     <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-250" />
-                                    <span>تایید نهایی درخواست</span>
+                                    <span>تایید و تصویب نهایی درخواست</span>
                                   </button>
 
                                   {/* BUTTON 2: Cancelled */}
@@ -1117,82 +1135,51 @@ export const AdminDashboard: React.FC = () => {
                                         updatedDate: new Date().toISOString()
                                       };
                                       await updateRequest(updatedReq);
-                                      alert('تغییرات اعمال شد: درخواست با موفقیت لغو شد.');
+                                      alert('درخواست با موفقیت لغو شد.');
                                     }}
                                     className="w-full py-2.5 px-3 bg-gradient-to-l from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer hover:shadow"
                                   >
-                                    <X className="h-4 w-4 shrink-0 text-amber-100 font-black" />
-                                    <span>لغو این درخواست</span>
+                                    <X className="h-4 w-4 shrink-0 text-amber-100 font-bold" />
+                                    <span>لغو رسمی این درخواست</span>
                                   </button>
 
                                   {/* BUTTON 3: Deleted */}
                                   <button
-                                    onClick={() => {
+                                    onClick={async () => {
                                       if (window.confirm('آیا مطمئن هستید که می‌خواهید این درخواست را برای همیشه از سیستم حذف نمایید؟ این عملیات غیرقابل بازگشت است.')) {
-                                        deleteRequest(req.id);
+                                        await deleteRequest(req.id);
+                                        alert('درخواست با موفقیت حذف گردید.');
                                       }
                                     }}
                                     className="w-full py-2.5 px-3 bg-gradient-to-l from-rose-600 to-red-650 hover:from-rose-700 hover:to-red-700 text-white rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer hover:shadow"
                                   >
                                     <Trash2 className="h-4 w-4 shrink-0 text-rose-100" />
-                                    <span>حذف پرونده از دیتابیس</span>
+                                    <span>حذف پرونده از سیستم (حذف دائم)</span>
                                   </button>
                                 </div>
 
-                                <div className="space-y-2.5 my-3 bg-white p-3 border border-slate-150 rounded-xl">
-                                  <label className="text-[10px] font-black text-slate-500 block mb-1">تغییر مستقیم وضعیت پرونده (ثبت آنی و لحظه‌ای):</label>
-                                  <div className="flex flex-wrap gap-1 font-sans">
-                                    {(Object.keys(STATUS_LABELS) as RequestStatus[]).map((sta) => {
-                                      const isCurrent = req.status === sta;
-                                      let colorClasses = "bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200";
-                                      if (isCurrent) {
-                                        if (sta === 'pending') colorClasses = "bg-amber-600 text-white border border-amber-700 shadow-sm ring-1 ring-amber-600/30 font-black";
-                                        else if (sta === 'approved') colorClasses = "bg-blue-600 text-white border border-blue-700 shadow-sm ring-1 ring-blue-600/30 font-black";
-                                        else if (sta === 'assigned') colorClasses = "bg-purple-600 text-white border border-purple-700 shadow-sm ring-1 ring-purple-600/30 font-black";
-                                        else if (sta === 'in_progress') colorClasses = "bg-indigo-600 text-white border border-indigo-700 shadow-sm ring-1 ring-indigo-600/30 font-black";
-                                        else if (sta === 'completed') colorClasses = "bg-emerald-600 text-white border border-emerald-700 shadow-sm ring-1 ring-emerald-600/30 font-black";
-                                        else if (sta === 'cancelled') colorClasses = "bg-rose-600 text-white border border-rose-700 shadow-sm ring-1 ring-rose-600/30 font-black";
-                                      }
-                                      return (
-                                        <button
-                                          key={sta}
-                                          type="button"
-                                          onClick={() => {
-                                            const updatedReq: Request = {
-                                              ...req,
-                                              status: sta,
-                                              updatedDate: new Date().toISOString()
-                                            };
-                                            updateRequest(updatedReq);
-                                          }}
-                                          className={`px-2 py-1.5 text-[10px] font-bold rounded-lg cursor-pointer transition-all flex-1 min-w-[75px] text-center active:scale-95 ${colorClasses}`}
-                                        >
-                                          {STATUS_LABELS[sta]}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-
-                                <div className="p-2.5 bg-slate-50 border border-slate-100 rounded-lg text-[9px] text-slate-500 flex items-center justify-between">
+                                <div className="p-2.5 bg-slate-50 border border-slate-100 rounded-lg text-[10px] text-slate-500 flex items-center justify-between">
                                   <span>وضعیت سیستمی فعلی پرونده:</span>
-                                  <span className="font-bold"><StatusBadge status={req.status} id={`indicator-${req.id}`} /></span>
+                                  <span className="font-extrabold"><StatusBadge status={req.status} id={`indicator-${req.id}`} /></span>
                                 </div>
                               </div>
 
-                              {/* 2. Technician assignment block */}
+                              {/* 2. Direct Technician Assignment List */}
                               <div className="space-y-3">
-                                <h4 className="font-extrabold text-[#111] border-b border-slate-100 pb-1.5 text-xs">ارجاع مستقیم تکنسین (کلیک جهت ثبت آنی ارجاع)</h4>
+                                <h4 className="font-extrabold text-xs text-slate-800 border-b border-indigo-150 pb-2 flex items-center gap-1.5">
+                                  <UserCheck className="h-4 w-4 text-indigo-650" />
+                                  <span>ارجاع فوری و آنی به تکنسین‌ها</span>
+                                </h4>
                                 
                                 <div className="space-y-2">
-                                  <label className="text-[10px] font-bold text-slate-400 block mb-1">انتخاب کارشناس فنی:</label>
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-sans">
+                                  <label className="text-[10px] font-bold text-slate-400 block mb-1">یک تکنسین را جهت ارجاع و تایید خودکار انتخاب کنید:</label>
+                                  <div className="grid grid-cols-1 gap-2 font-sans max-h-[175px] overflow-y-auto pr-1">
                                     {/* Option: Unassigned */}
                                     {(() => {
                                       const currentTechId = assignedTechOverride[req.id] !== undefined 
                                         ? assignedTechOverride[req.id] 
                                         : (req.assignedToId || '');
-                                      const isUnassigned = currentTechId === '';
+                                      const isUnassigned = currentTechId === '' || currentTechId === 'null';
                                       return (
                                         <button
                                           type="button"
@@ -1202,14 +1189,18 @@ export const AdminDashboard: React.FC = () => {
                                               ...req,
                                               assignedToId: undefined,
                                               assignedToName: undefined,
+                                              technicianId: undefined,
+                                              technicianName: undefined,
+                                              status: 'approved', // Reset status as approved without technician
                                               updatedDate: new Date().toISOString()
                                             };
                                             updateRequest(updatedReq);
+                                            alert('ارجاع تکنسین لغو شد.');
                                           }}
                                           className={`px-3 py-2 text-[10px] font-bold rounded-xl border text-right transition-all flex items-center justify-between cursor-pointer active:scale-[0.98] ${
                                             isUnassigned
                                               ? "bg-slate-800 text-white border-slate-900 shadow-md ring-1 ring-slate-800/30 font-black"
-                                              : "bg-slate-50 hover:bg-slate-100 text-slate-500 border-slate-200"
+                                              : "bg-slate-50 hover:bg-slate-100 text-slate-550 border-slate-200"
                                           }`}
                                         >
                                           <span>بدون تکنسین ارجاع‌یافته (در انتظار)</span>
@@ -1229,20 +1220,21 @@ export const AdminDashboard: React.FC = () => {
                                           type="button"
                                           onClick={() => {
                                             setAssignedTechOverride(prev => ({ ...prev, [req.id]: tech.id }));
+                                            
                                             const updatedReq: Request = {
                                               ...req,
                                               assignedToId: tech.id,
                                               assignedToName: tech.fullName,
-                                              status: 'assigned', // Auto transition to 'assigned' status upon tech assignment
+                                              technicianId: tech.id,
+                                              technicianName: tech.fullName,
+                                              status: 'assigned', // Auto-transition to assigned upon tech selection
                                               assignedAt: new Date().toISOString(),
-                                              updatedDate: new Date().toISOString()
+                                              updatedDate: new Date().toISOString(),
+                                              isApproved: true, // Autoapprove on technician assignment
+                                              approvedAt: req.approvedAt || new Date().toISOString()
                                             };
-                                            // Auto-approve if not already approved
-                                            if (!req.isApproved) {
-                                              updatedReq.isApproved = true;
-                                              updatedReq.approvedAt = new Date().toISOString();
-                                            }
                                             updateRequest(updatedReq);
+                                            alert(`پرونده با موفقیت به کارشناس ${tech.fullName} ارجاع داده شد.`);
                                           }}
                                           className={`px-3 py-2 text-[10px] font-bold rounded-xl border transition-all flex items-center justify-between cursor-pointer text-right active:scale-[0.98] ${
                                             isCurrentlyAssigned
@@ -1273,14 +1265,30 @@ export const AdminDashboard: React.FC = () => {
                                       if (recs && recs.length > 0) {
                                         const bestTech = recs[0].tech;
                                         setAssignedTechOverride(prev => ({ ...prev, [req.id]: bestTech.id }));
+                                        
+                                        const updatedReq: Request = {
+                                          ...req,
+                                          assignedToId: bestTech.id,
+                                          assignedToName: bestTech.fullName,
+                                          technicianId: bestTech.id,
+                                          technicianName: bestTech.fullName,
+                                          status: 'assigned',
+                                          assignedAt: new Date().toISOString(),
+                                          updatedDate: new Date().toISOString(),
+                                          isApproved: true,
+                                          approvedAt: req.approvedAt || new Date().toISOString()
+                                        };
+                                        updateRequest(updatedReq);
+                                        alert(`پیشنهاد هوشمند اعمال شد: ارجاع به کارشناس برتر ${bestTech.fullName}`);
                                       }
                                     }}
                                     className="w-full mt-2 py-1.5 px-3 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-lg text-[10px] font-black flex items-center justify-center gap-1 cursor-pointer transition-all shadow-sm"
                                   >
                                     <Sparkles className="h-3.5 w-3.5 text-amber-300 animate-pulse shrink-0" />
-                                    <span>پیشنهاد هوشمند (ارجاع خودکار برترین نیرو)</span>
+                                    <span>پیشنهاد هوشمند (ارجاع خودکار برتر)</span>
                                   </button>
                                 </div>
+                              </div>
 
                                 {/* Intelligent Recommendation Helper system */}
                                 <div className="bg-indigo-50/40 border border-indigo-150/70 p-3 rounded-2xl space-y-2 mt-2">
@@ -1447,8 +1455,6 @@ export const AdminDashboard: React.FC = () => {
                                   </div>
                                 </div>
 
-                              </div>
-
                               {/* Customer Desktop documentation & Time Logs row */}
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-3 border-t border-slate-150">
                                 {/* Desktop screenshots list */}
@@ -1534,6 +1540,7 @@ export const AdminDashboard: React.FC = () => {
                                     if (!finalApprovedAt) finalApprovedAt = new Date().toISOString();
                                   }
 
+                                  const assignedTech = technicians.find(t => t.id === selectTechId);
                                   const updatedReq: Request = {
                                     ...req,
                                     status: finalStatus,
@@ -1541,7 +1548,9 @@ export const AdminDashboard: React.FC = () => {
                                     approvedAt: finalApprovedAt,
                                     assignedAt: finalAssignedAt,
                                     assignedToId: selectTechId || undefined,
-                                    assignedToName: technicians.find(t => t.id === selectTechId)?.fullName || undefined,
+                                    assignedToName: assignedTech?.fullName || undefined,
+                                    technicianId: selectTechId || undefined,
+                                    technicianName: assignedTech?.fullName || undefined,
                                     scheduledDate: selectSchedule || undefined,
                                     adminNotes: adminNotesInput ? adminNotesInput.trim() : undefined,
                                     updatedDate: new Date().toISOString()

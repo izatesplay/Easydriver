@@ -117,6 +117,20 @@ class OtherController {
         $bodySnake = Utils::keysConvert($body, 'snake');
         $id = $bodySnake['id'] ?? 'req_' . uniqid();
 
+        // Ensure cross-compatibility between assigned_to_id and technician_id and names
+        if (isset($bodySnake['assigned_to_id']) && (!isset($bodySnake['technician_id']) || $bodySnake['technician_id'] === null)) {
+            $bodySnake['technician_id'] = $bodySnake['assigned_to_id'];
+        }
+        if (isset($bodySnake['assigned_to_name']) && (!isset($bodySnake['technician_name']) || $bodySnake['technician_name'] === null)) {
+            $bodySnake['technician_name'] = $bodySnake['assigned_to_name'];
+        }
+        if (isset($bodySnake['technician_id']) && (!isset($bodySnake['assigned_to_id']) || $bodySnake['assigned_to_id'] === null)) {
+            $bodySnake['assigned_to_id'] = $bodySnake['technician_id'];
+        }
+        if (isset($bodySnake['technician_name']) && (!isset($bodySnake['assigned_to_name']) || $bodySnake['assigned_to_name'] === null)) {
+            $bodySnake['assigned_to_name'] = $bodySnake['technician_name'];
+        }
+
         $stmt = $this->db->prepare("INSERT INTO `requests` (`id`, `full_name`, `phone`, `service_type`, `description`, `status`, `priority`, `admin_notes`, `technician_id`, `technician_name`, `anydesk_id`, `anydesk_password`, `is_approved`, `price`, `created_date`, `updated_date`, `created_by`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         $success = $stmt->execute([
             $id,
@@ -161,6 +175,20 @@ class OtherController {
     public function updateRequest(array $params, array $body): void {
         $id = $params['id'] ?? '';
         $bodySnake = Utils::keysConvert($body, 'snake');
+
+        // Ensure cross-compatibility between assigned_to_id and technician_id and names
+        if (isset($bodySnake['assigned_to_id']) && (!isset($bodySnake['technician_id']) || $bodySnake['technician_id'] === null)) {
+            $bodySnake['technician_id'] = $bodySnake['assigned_to_id'];
+        }
+        if (isset($bodySnake['assigned_to_name']) && (!isset($bodySnake['technician_name']) || $bodySnake['technician_name'] === null)) {
+            $bodySnake['technician_name'] = $bodySnake['assigned_to_name'];
+        }
+        if (isset($bodySnake['technician_id']) && (!isset($bodySnake['assigned_to_id']) || $bodySnake['assigned_to_id'] === null)) {
+            $bodySnake['assigned_to_id'] = $bodySnake['technician_id'];
+        }
+        if (isset($bodySnake['technician_name']) && (!isset($bodySnake['assigned_to_name']) || $bodySnake['assigned_to_name'] === null)) {
+            $bodySnake['assigned_to_name'] = $bodySnake['technician_name'];
+        }
 
         $fields = [
             'full_name', 'phone', 'service_type', 'description', 'status', 'priority',
