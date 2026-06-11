@@ -1497,6 +1497,20 @@ function parseMySQLBoolean(val: any): boolean {
   return !!val;
 }
 
+let requestsColumnsCached: string[] | null = null;
+async function getRequestsTableColumns(pool: any): Promise<string[]> {
+  if (requestsColumnsCached) return requestsColumnsCached;
+  try {
+    const [rows] = await pool.query("SHOW COLUMNS FROM `requests`");
+    const names = (rows as any[]).map(r => r.Field);
+    requestsColumnsCached = names;
+    return names;
+  } catch (err) {
+    console.error("Error showing columns for requests table:", err);
+    return [];
+  }
+}
+
 // -------------------------------------------------------------
 // APIs: Dynamic REST Routes supporting MySQL & Backup
 // -------------------------------------------------------------
@@ -1517,6 +1531,10 @@ app.get("/api/requests", async (req, res) => {
       // Map database snake_case columns to TS camelCase
       const formatted = (rows as any[]).map(row => {
         const rowStatus = row.status || 'pending';
+        // Auto-detect columns (technician_id vs assigned_to_id)
+        const assignedToId = row.assigned_to_id !== undefined ? row.assigned_to_id : (row.technician_id || null);
+        const assignedToName = row.assigned_to_name !== undefined ? row.assigned_to_name : (row.technician_name || null);
+        
         return {
           id: row.id,
           fullName: row.full_name,
@@ -1527,8 +1545,8 @@ app.get("/api/requests", async (req, res) => {
           priority: row.priority,
           adminNotes: row.admin_notes,
           scheduledDate: row.scheduled_date,
-          assignedToId: row.assigned_to_id,
-          assignedToName: row.assigned_to_name,
+          assignedToId: assignedToId,
+          assignedToName: assignedToName,
           isApproved: rowStatus === 'pending' ? false : parseMySQLBoolean(row.is_approved),
           approvedAt: row.approved_at,
           assignedAt: row.assigned_at,
@@ -1578,8 +1596,14 @@ app.post("/api/requests", async (req, res) => {
         await pool.query("ALTER TABLE `requests` ADD COLUMN `logged_duration_minutes` INT NOT NULL DEFAULT 0");
       } catch (e) {}
 
+      // Get exact column names dynamically
+      const cols = await getRequestsTableColumns(pool);
+      const isAssignedToIdColExistent = cols.includes('assigned_to_id');
+      const techIdCol = isAssignedToIdColExistent ? 'assigned_to_id' : 'technician_id';
+      const techNameCol = isAssignedToIdColExistent ? 'assigned_to_name' : 'technician_name';
+
       await pool.query(
-        "INSERT INTO `requests` (`id`, `full_name`, `phone`, `service_type`, `description`, `status`, `priority`, `admin_notes`, `scheduled_date`, `assigned_to_id`, `assigned_to_name`, `is_approved`, `approved_at`, `assigned_at`, `created_date`, `updated_date`, `created_by`, `desktop_screenshots`, `logged_duration_minutes`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        `INSERT INTO \`requests\` (\`id\`, \`full_name\`, \`phone\`, \`service_type\`, \`description\`, \`status\`, \`priority\`, \`admin_notes\`, \`scheduled_date\`, \`${techIdCol}\`, \`${techNameCol}\`, \`is_approved\`, \`approved_at\`, \`assigned_at\`, \`created_date\`, \`updated_date\`, \`created_by\`, \`desktop_screenshots\`, \`logged_duration_minutes\`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [id, fullName, phone, serviceType, description, finalStatus, priority, adminNotes || null, scheduledDate || null, assignedToId || null, assignedToName || null, finalIsApproved ? 1 : 0, approvedAt || null, assignedAt || null, createdDate, updatedDate, createdBy, desktopScreenshots ? JSON.stringify(desktopScreenshots) : null, loggedDurationMinutes || 0]
       );
       saved = true;
@@ -1629,9 +1653,17 @@ app.put("/api/requests/:id", async (req, res) => {
 
   // Retrieve prev request details
   const pool = await getMySQLPool();
+  let techIdCol = 'assigned_to_id';
+  let techNameCol = 'assigned_to_name';
+
   if (pool) {
     try {
-      const [rows] = await pool.query("SELECT `status`, `assigned_to_name`, `created_by` FROM `requests` WHERE `id`=?", [id]);
+      const cols = await getRequestsTableColumns(pool);
+      const isAssignedToIdColExistent = cols.includes('assigned_to_id');
+      techIdCol = isAssignedToIdColExistent ? 'assigned_to_id' : 'technician_id';
+      techNameCol = isAssignedToIdColExistent ? 'assigned_to_name' : 'technician_name';
+
+      const [rows] = await pool.query(`SELECT \`status\`, \`${techNameCol}\` as \`assigned_to_name\`, \`created_by\` FROM \`requests\` WHERE \`id\`=?`, [id]);
       if (rows && (rows as any[]).length > 0) {
         prevStatus = (rows as any[])[0].status;
         prevTechName = (rows as any[])[0].assigned_to_name;
@@ -1671,7 +1703,7 @@ app.put("/api/requests/:id", async (req, res) => {
         }
       }
       await pool.query(
-        "UPDATE `requests` SET `full_name`=?, `phone`=?, `service_type`=?, `description`=?, `status`=?, `priority`=?, `admin_notes`=?, `scheduled_date`=?, `assigned_to_id`=?, `assigned_to_name`=?, `is_approved`=?, `approved_at`=?, `assigned_at`=?, `updated_date`=?, `rating`=?, `rating_comment`=?, `rated_at`=?, `desktop_screenshots`=?, `logged_duration_minutes`=? WHERE `id`=?",
+        `UPDATE \`requests\` SET \`full_name\`=?, \`phone\`=?, \`service_type\`=?, \`description\`=?, \`status\`=?, \`priority\`=?, \`admin_notes\`=?, \`scheduled_date\`=?, \`${techIdCol}\`=?, \`${techNameCol}\`=?, \`is_approved\`=?, \`approved_at\`=?, \`assigned_at\`=?, \`updated_date\`=?, \`rating\`=?, \`rating_comment\`=?, \`rated_at\`=?, \`desktop_screenshots\`=?, \`logged_duration_minutes\`=? WHERE \`id\`=?`,
         [fullName, phone, serviceType, description, finalStatus, priority, adminNotes || null, scheduledDate || null, assignedToId || null, assignedToName || null, finalIsApproved ? 1 : 0, approvedAt || null, assignedAt || null, updatedDate, rating || null, ratingComment || null, ratedAt || null, desktopScreenshots ? JSON.stringify(desktopScreenshots) : null, loggedDurationMinutes || 0, id]
       );
     } catch (err) {
