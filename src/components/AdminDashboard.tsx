@@ -1139,20 +1139,42 @@ export const AdminDashboard: React.FC = () => {
                                   </button>
                                 </div>
 
-                                <div className="space-y-1 my-3 bg-white p-2.5 border border-slate-150 rounded-xl">
-                                  <label className="text-[9px] font-black text-slate-400 block mb-1">تغییر مستقیم وضعیت پرونده:</label>
-                                  <select
-                                    id={`status-mod-${req.id}`}
-                                    defaultValue={req.status}
-                                    className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg outline-none font-bold text-[10px] cursor-pointer"
-                                  >
-                                    {(Object.keys(STATUS_LABELS) as RequestStatus[]).map((sta) => (
-                                      <option key={sta} value={sta}>{STATUS_LABELS[sta]}</option>
-                                    ))}
-                                  </select>
+                                <div className="space-y-2.5 my-3 bg-white p-3 border border-slate-150 rounded-xl">
+                                  <label className="text-[10px] font-black text-slate-500 block mb-1">تغییر مستقیم وضعیت پرونده (ثبت آنی و لحظه‌ای):</label>
+                                  <div className="flex flex-wrap gap-1 font-sans">
+                                    {(Object.keys(STATUS_LABELS) as RequestStatus[]).map((sta) => {
+                                      const isCurrent = req.status === sta;
+                                      let colorClasses = "bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200";
+                                      if (isCurrent) {
+                                        if (sta === 'pending') colorClasses = "bg-amber-600 text-white border border-amber-700 shadow-sm ring-1 ring-amber-600/30 font-black";
+                                        else if (sta === 'approved') colorClasses = "bg-blue-600 text-white border border-blue-700 shadow-sm ring-1 ring-blue-600/30 font-black";
+                                        else if (sta === 'assigned') colorClasses = "bg-purple-600 text-white border border-purple-700 shadow-sm ring-1 ring-purple-600/30 font-black";
+                                        else if (sta === 'in_progress') colorClasses = "bg-indigo-600 text-white border border-indigo-700 shadow-sm ring-1 ring-indigo-600/30 font-black";
+                                        else if (sta === 'completed') colorClasses = "bg-emerald-600 text-white border border-emerald-700 shadow-sm ring-1 ring-emerald-600/30 font-black";
+                                        else if (sta === 'cancelled') colorClasses = "bg-rose-600 text-white border border-rose-700 shadow-sm ring-1 ring-rose-600/30 font-black";
+                                      }
+                                      return (
+                                        <button
+                                          key={sta}
+                                          type="button"
+                                          onClick={() => {
+                                            const updatedReq: Request = {
+                                              ...req,
+                                              status: sta,
+                                              updatedDate: new Date().toISOString()
+                                            };
+                                            updateRequest(updatedReq);
+                                          }}
+                                          className={`px-2 py-1.5 text-[10px] font-bold rounded-lg cursor-pointer transition-all flex-1 min-w-[75px] text-center active:scale-95 ${colorClasses}`}
+                                        >
+                                          {STATUS_LABELS[sta]}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
                                 </div>
 
-                                <div className="p-2 bg-slate-50 border border-slate-100 rounded-lg text-[9px] text-slate-500 flex items-center justify-between">
+                                <div className="p-2.5 bg-slate-50 border border-slate-100 rounded-lg text-[9px] text-slate-500 flex items-center justify-between">
                                   <span>وضعیت سیستمی فعلی پرونده:</span>
                                   <span className="font-bold"><StatusBadge status={req.status} id={`indicator-${req.id}`} /></span>
                                 </div>
@@ -1160,23 +1182,89 @@ export const AdminDashboard: React.FC = () => {
 
                               {/* 2. Technician assignment block */}
                               <div className="space-y-3">
-                                <h4 className="font-bold text-slate-800 border-b border-slate-100 pb-1.5">ارجاع مستقیم تکنسین</h4>
+                                <h4 className="font-extrabold text-[#111] border-b border-slate-100 pb-1.5 text-xs">ارجاع مستقیم تکنسین (کلیک جهت ثبت آنی ارجاع)</h4>
                                 
-                                <div className="space-y-1">
-                                  <label className="text-[10px] font-bold text-slate-400 block">انتخاب کارشناس فنی:</label>
-                                  <select
-                                    id={`tech-assign-${req.id}`}
-                                    value={assignedTechOverride[req.id] !== undefined ? assignedTechOverride[req.id] : (req.assignedToId || '')}
-                                    onChange={(e) => setAssignedTechOverride(prev => ({ ...prev, [req.id]: e.target.value }))}
-                                    className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-lg outline-none font-bold text-[11px] cursor-pointer focus:border-indigo-400"
-                                  >
-                                    <option value="">بدون تکنسین ارجاع‌یافته (در انتظار)</option>
-                                    {technicians.map((tech) => (
-                                      <option key={tech.id} value={tech.id}>
-                                        {tech.fullName} ({SPECIALTY_LABELS[tech.specialty]}) | {tech.isActive ? '🟢 فعال' : '🔴 غیرفعال (آفلاین)'}
-                                      </option>
-                                    ))}
-                                  </select>
+                                <div className="space-y-2">
+                                  <label className="text-[10px] font-bold text-slate-400 block mb-1">انتخاب کارشناس فنی:</label>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-sans">
+                                    {/* Option: Unassigned */}
+                                    {(() => {
+                                      const currentTechId = assignedTechOverride[req.id] !== undefined 
+                                        ? assignedTechOverride[req.id] 
+                                        : (req.assignedToId || '');
+                                      const isUnassigned = currentTechId === '';
+                                      return (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setAssignedTechOverride(prev => ({ ...prev, [req.id]: '' }));
+                                            const updatedReq: Request = {
+                                              ...req,
+                                              assignedToId: undefined,
+                                              assignedToName: undefined,
+                                              updatedDate: new Date().toISOString()
+                                            };
+                                            updateRequest(updatedReq);
+                                          }}
+                                          className={`px-3 py-2 text-[10px] font-bold rounded-xl border text-right transition-all flex items-center justify-between cursor-pointer active:scale-[0.98] ${
+                                            isUnassigned
+                                              ? "bg-slate-800 text-white border-slate-900 shadow-md ring-1 ring-slate-800/30 font-black"
+                                              : "bg-slate-50 hover:bg-slate-100 text-slate-500 border-slate-200"
+                                          }`}
+                                        >
+                                          <span>بدون تکنسین ارجاع‌یافته (در انتظار)</span>
+                                          {isUnassigned && <span className="text-[8px] bg-slate-700 text-white px-1.5 py-0.5 rounded font-black">فعال</span>}
+                                        </button>
+                                      );
+                                    })()}
+
+                                    {technicians.map((tech) => {
+                                      const currentTechId = assignedTechOverride[req.id] !== undefined 
+                                        ? assignedTechOverride[req.id] 
+                                        : (req.assignedToId || '');
+                                      const isCurrentlyAssigned = currentTechId === tech.id;
+                                      return (
+                                        <button
+                                          key={tech.id}
+                                          type="button"
+                                          onClick={() => {
+                                            setAssignedTechOverride(prev => ({ ...prev, [req.id]: tech.id }));
+                                            const updatedReq: Request = {
+                                              ...req,
+                                              assignedToId: tech.id,
+                                              assignedToName: tech.fullName,
+                                              status: 'assigned', // Auto transition to 'assigned' status upon tech assignment
+                                              assignedAt: new Date().toISOString(),
+                                              updatedDate: new Date().toISOString()
+                                            };
+                                            // Auto-approve if not already approved
+                                            if (!req.isApproved) {
+                                              updatedReq.isApproved = true;
+                                              updatedReq.approvedAt = new Date().toISOString();
+                                            }
+                                            updateRequest(updatedReq);
+                                          }}
+                                          className={`px-3 py-2 text-[10px] font-bold rounded-xl border transition-all flex items-center justify-between cursor-pointer text-right active:scale-[0.98] ${
+                                            isCurrentlyAssigned
+                                              ? "bg-indigo-600 text-white border-indigo-700 shadow-md ring-1 ring-indigo-500/30 font-black"
+                                              : "bg-white hover:bg-slate-50 text-slate-700 border-slate-200"
+                                          }`}
+                                        >
+                                          <div className="flex items-center gap-1.5 min-w-0">
+                                            <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${tech.isActive ? 'bg-emerald-500 animate-pulse' : 'bg-slate-350'}`} />
+                                            <span className="truncate">{tech.fullName}</span>
+                                          </div>
+                                          <span className={`text-[8px] shrink-0 font-medium px-1.5 py-0.5 rounded ${
+                                            isCurrentlyAssigned
+                                              ? "bg-indigo-500 text-white"
+                                              : (tech.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500")
+                                          }`}>
+                                            ({SPECIALTY_LABELS[tech.specialty]}) | {tech.isActive ? '🟢 فعال' : '🔴 آفلاین'}
+                                          </span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
 
                                   <button
                                     type="button"
@@ -1421,18 +1509,15 @@ export const AdminDashboard: React.FC = () => {
                               </button>
 
                               <button
-                                        onClick={() => {
-                                          const selectStatusEl = document.getElementById(`status-mod-${req.id}`) as HTMLSelectElement;
-                                          const selectStatus = selectStatusEl ? (selectStatusEl.value as RequestStatus) : req.status;
-                                          
-                                          const selectTechId = assignedTechOverride[req.id] !== undefined 
-                                            ? assignedTechOverride[req.id] 
-                                            : (req.assignedToId || '');
-                                          
-                                          const selectScheduleEl = document.getElementById(`scheduled-date-${req.id}`) as HTMLInputElement;
-                                          const selectSchedule = selectScheduleEl ? selectScheduleEl.value : (req.scheduledDate || '');
+                                onClick={() => {
+                                  const selectTechId = assignedTechOverride[req.id] !== undefined 
+                                    ? assignedTechOverride[req.id] 
+                                    : (req.assignedToId || '');
                                   
-                                  let finalStatus = selectStatus;
+                                  const selectScheduleEl = document.getElementById(`scheduled-date-${req.id}`) as HTMLInputElement;
+                                  const selectSchedule = selectScheduleEl ? selectScheduleEl.value : (req.scheduledDate || '');
+                                  
+                                  let finalStatus = req.status;
                                   let finalIsApproved = req.isApproved;
                                   let finalApprovedAt = req.approvedAt;
                                   let finalAssignedAt = req.assignedAt;
@@ -3929,25 +4014,39 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto text-[10px] font-black">
-              {/* Batch Status Dropdown */}
-              <div className="flex items-center bg-slate-850 rounded-lg px-2 border border-slate-700 h-9">
-                <span className="text-slate-400 pl-1 shrink-0 text-[9px] font-bold">تغییر وضعیت به:</span>
-                <select
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      handleBulkStatusUpdate(e.target.value as any);
-                      e.target.value = '';
-                    }
-                  }}
-                  className="bg-transparent text-white outline-none border-none py-1.5 px-1 font-bold text-[10px] cursor-pointer"
-                  defaultValue=""
-                >
-                  <option value="" disabled className="bg-slate-900">انتخاب کنید...</option>
-                  <option value="pending" className="bg-slate-900">در انتظار</option>
-                  <option value="in_progress" className="bg-slate-900">در دست اقدام</option>
-                  <option value="completed" className="bg-slate-900">تکمیل شده</option>
-                  <option value="cancelled" className="bg-slate-900">لغو شده</option>
-                </select>
+              {/* Batch Status Buttons */}
+              <div className="flex items-center bg-slate-850 rounded-lg p-1.5 border border-slate-700">
+                <span className="text-slate-400 px-1 shrink-0 text-[10px] font-extrabold">وضعیت گروهی:</span>
+                <div className="flex items-center gap-1 font-sans">
+                  <button
+                    onClick={() => handleBulkStatusUpdate("pending")}
+                    className="px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-[9px] font-bold cursor-pointer transition-all active:scale-95"
+                    title="در انتظار"
+                  >
+                    در انتظار
+                  </button>
+                  <button
+                    onClick={() => handleBulkStatusUpdate("in_progress")}
+                    className="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-[9px] font-bold cursor-pointer transition-all active:scale-95"
+                    title="در دست اقدام"
+                  >
+                    در اقدام
+                  </button>
+                  <button
+                    onClick={() => handleBulkStatusUpdate("completed")}
+                    className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-[9px] font-bold cursor-pointer transition-all active:scale-95"
+                    title="تکمیل شده"
+                  >
+                    تکمیل
+                  </button>
+                  <button
+                    onClick={() => handleBulkStatusUpdate("cancelled")}
+                    className="px-2 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-md text-[9px] font-bold cursor-pointer transition-all active:scale-95"
+                    title="لغو شده"
+                  >
+                    لغو
+                  </button>
+                </div>
               </div>
 
               {/* Print Report */}
