@@ -1531,9 +1531,9 @@ app.get("/api/requests", async (req, res) => {
       // Map database snake_case columns to TS camelCase
       const formatted = (rows as any[]).map(row => {
         const rowStatus = row.status || 'pending';
-        // Auto-detect columns (technician_id vs assigned_to_id)
-        const assignedToId = row.assigned_to_id !== undefined ? row.assigned_to_id : (row.technician_id || null);
-        const assignedToName = row.assigned_to_name !== undefined ? row.assigned_to_name : (row.technician_name || null);
+        // Prioritize non-null values from either column to support both schemas
+        const assignedToId = row.assigned_to_id || row.technician_id || null;
+        const assignedToName = row.assigned_to_name || row.technician_name || null;
         
         return {
           id: row.id,
@@ -1547,6 +1547,8 @@ app.get("/api/requests", async (req, res) => {
           scheduledDate: row.scheduled_date,
           assignedToId: assignedToId,
           assignedToName: assignedToName,
+          technicianId: assignedToId,
+          technicianName: assignedToName,
           isApproved: rowStatus === 'pending' ? false : parseMySQLBoolean(row.is_approved),
           approvedAt: row.approved_at,
           assignedAt: row.assigned_at,
@@ -1583,6 +1585,16 @@ app.post("/api/requests", async (req, res) => {
   const { id, fullName, phone, serviceType, description, status, priority, adminNotes, scheduledDate, assignedToId, assignedToName, isApproved, approvedAt, assignedAt, createdDate, updatedDate, createdBy, desktopScreenshots, loggedDurationMinutes } = req.body;
   const pool = await getMySQLPool();
   let saved = false;
+
+  const finalAssignedToId = assignedToId !== undefined ? assignedToId 
+    : (req.body.technicianId !== undefined ? req.body.technicianId 
+    : (req.body.assigned_to_id !== undefined ? req.body.assigned_to_id 
+    : (req.body.technician_id !== undefined ? req.body.technician_id : null)));
+
+  const finalAssignedToName = assignedToName !== undefined ? assignedToName 
+    : (req.body.technicianName !== undefined ? req.body.technicianName 
+    : (req.body.assigned_to_name !== undefined ? req.body.assigned_to_name 
+    : (req.body.technician_name !== undefined ? req.body.technician_name : null)));
 
   const finalStatus = status || 'pending';
   const finalIsApproved = finalStatus === 'pending' ? false : (isApproved === true || isApproved === 1 || String(isApproved) === 'true');
@@ -1622,10 +1634,10 @@ app.post("/api/requests", async (req, res) => {
       addFieldForInsert('scheduled_date', scheduledDate || null);
       
       // Update BOTH technician columns to sync with all schemas
-      addFieldForInsert('assigned_to_id', assignedToId || null);
-      addFieldForInsert('technician_id', assignedToId || null);
-      addFieldForInsert('assigned_to_name', assignedToName || null);
-      addFieldForInsert('technician_name', assignedToName || null);
+      addFieldForInsert('assigned_to_id', finalAssignedToId || null);
+      addFieldForInsert('technician_id', finalAssignedToId || null);
+      addFieldForInsert('assigned_to_name', finalAssignedToName || null);
+      addFieldForInsert('technician_name', finalAssignedToName || null);
       
       addFieldForInsert('is_approved', finalIsApproved ? 1 : 0);
       addFieldForInsert('approved_at', approvedAt || null);
@@ -1675,6 +1687,16 @@ app.post("/api/requests", async (req, res) => {
 app.put("/api/requests/:id", async (req, res) => {
   const { id } = req.params;
   const { fullName, phone, serviceType, description, status, priority, adminNotes, scheduledDate, assignedToId, assignedToName, isApproved, approvedAt, assignedAt, updatedDate, rating, ratingComment, ratedAt, createdBy, desktopScreenshots, loggedDurationMinutes } = req.body;
+
+  const finalAssignedToId = assignedToId !== undefined ? assignedToId 
+    : (req.body.technicianId !== undefined ? req.body.technicianId 
+    : (req.body.assigned_to_id !== undefined ? req.body.assigned_to_id 
+    : (req.body.technician_id !== undefined ? req.body.technician_id : null)));
+
+  const finalAssignedToName = assignedToName !== undefined ? assignedToName 
+    : (req.body.technicianName !== undefined ? req.body.technicianName 
+    : (req.body.assigned_to_name !== undefined ? req.body.assigned_to_name 
+    : (req.body.technician_name !== undefined ? req.body.technician_name : null)));
 
   const finalStatus = status || 'pending';
   const finalIsApproved = finalStatus === 'pending' ? false : (isApproved === true || isApproved === 1 || String(isApproved) === 'true');
@@ -1758,10 +1780,10 @@ app.put("/api/requests/:id", async (req, res) => {
       addFieldForUpdate('scheduled_date', scheduledDate || null);
       
       // Update both technician columns if present
-      addFieldForUpdate('assigned_to_id', assignedToId || null);
-      addFieldForUpdate('technician_id', assignedToId || null);
-      addFieldForUpdate('assigned_to_name', assignedToName || null);
-      addFieldForUpdate('technician_name', assignedToName || null);
+      addFieldForUpdate('assigned_to_id', finalAssignedToId || null);
+      addFieldForUpdate('technician_id', finalAssignedToId || null);
+      addFieldForUpdate('assigned_to_name', finalAssignedToName || null);
+      addFieldForUpdate('technician_name', finalAssignedToName || null);
       
       addFieldForUpdate('is_approved', finalIsApproved ? 1 : 0);
       addFieldForUpdate('approved_at', approvedAt || null);
