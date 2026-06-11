@@ -1137,6 +1137,19 @@ export const AdminDashboard: React.FC = () => {
                                   </button>
                                 </div>
 
+                                <div className="space-y-1 my-3 bg-white p-2.5 border border-slate-150 rounded-xl">
+                                  <label className="text-[9px] font-black text-slate-400 block mb-1">تغییر مستقیم وضعیت پرونده:</label>
+                                  <select
+                                    id={`status-mod-${req.id}`}
+                                    defaultValue={req.status}
+                                    className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg outline-none font-bold text-[10px] cursor-pointer"
+                                  >
+                                    {(Object.keys(STATUS_LABELS) as RequestStatus[]).map((sta) => (
+                                      <option key={sta} value={sta}>{STATUS_LABELS[sta]}</option>
+                                    ))}
+                                  </select>
+                                </div>
+
                                 <div className="p-2 bg-slate-50 border border-slate-100 rounded-lg text-[9px] text-slate-500 flex items-center justify-between">
                                   <span>وضعیت سیستمی فعلی پرونده:</span>
                                   <span className="font-bold"><StatusBadge status={req.status} id={`indicator-${req.id}`} /></span>
@@ -1409,8 +1422,12 @@ export const AdminDashboard: React.FC = () => {
                                 onClick={() => {
                                   const selectStatusEl = document.getElementById(`status-mod-${req.id}`) as HTMLSelectElement;
                                   const selectStatus = selectStatusEl ? (selectStatusEl.value as RequestStatus) : req.status;
-                                  const selectTechId = (document.getElementById(`tech-assign-${req.id}`) as HTMLSelectElement).value;
-                                  const selectSchedule = (document.getElementById(`scheduled-date-${req.id}`) as HTMLInputElement).value;
+                                  
+                                  const selectTechIdEl = document.getElementById(`tech-assign-${req.id}`) as HTMLSelectElement;
+                                  const selectTechId = selectTechIdEl ? selectTechIdEl.value : (assignedTechOverride[req.id] !== undefined ? assignedTechOverride[req.id] : (req.assignedToId || ''));
+                                  
+                                  const selectScheduleEl = document.getElementById(`scheduled-date-${req.id}`) as HTMLInputElement;
+                                  const selectSchedule = selectScheduleEl ? selectScheduleEl.value : (req.scheduledDate || '');
                                   
                                   let finalStatus = selectStatus;
                                   let finalIsApproved = req.isApproved;
@@ -1438,6 +1455,7 @@ export const AdminDashboard: React.FC = () => {
                                     assignedToId: selectTechId || undefined,
                                     assignedToName: technicians.find(t => t.id === selectTechId)?.fullName || undefined,
                                     scheduledDate: selectSchedule || undefined,
+                                    adminNotes: adminNotesInput ? adminNotesInput.trim() : undefined,
                                     updatedDate: new Date().toISOString()
                                   };
                                   updateRequest(updatedReq);
