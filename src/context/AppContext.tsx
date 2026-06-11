@@ -30,6 +30,10 @@ interface AppContextProps {
   markAllNotificationsAsRead: () => void;
   closeToast: (id: string) => void;
   loadFreshData: () => void;
+  users: User[];
+  addUser: (userInput: Omit<User, 'id'> & { password?: string, isActive?: boolean }) => Promise<boolean>;
+  updateUser: (updated: User & { password?: string, isActive?: boolean }) => Promise<boolean>;
+  deleteUser: (id: string) => Promise<boolean>;
 }
 
 const AppContext = createContext<AppContextProps | undefined>(undefined);
@@ -93,6 +97,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [toasts, setToasts] = useState<any[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const wsRef = useRef<any>(null);
   
   // Ref to track if fresh server data has already loaded, avoiding cache overwrite race condition
@@ -200,11 +205,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch("/api/users")
       .then(r => r.json())
       .then(data => {
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           const sanitizedUsers = data.map((u: any) => ({
-            ...u,
+            id: u.id,
+            fullName: u.fullName || u.full_name || '',
+            email: u.email || '',
+            phone: u.phone || '',
+            role: (u.role || 'customer') as UserRole,
+            avatarUrl: u.avatarUrl || u.avatar_url || '',
+            password: u.password || '123',
             isActive: u.isActive === true || u.isActive === 1 || u.isActive === '1' || u.isActive === 'true'
           }));
+          setUsers(sanitizedUsers);
           localStorage.setItem('ed_registered_users', JSON.stringify(sanitizedUsers));
         }
       })
@@ -747,6 +759,94 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     .catch(err => console.error("Delete technician sync err:", err));
   };
 
+  const addUser = async (userInput: Omit<User, 'id'> & { password?: string, isActive?: boolean }): Promise<boolean> => {
+    const rawId = userInput.role === 'technician' ? `tech_${Date.now()}` : `user_${Date.now()}`;
+    const payload = {
+      id: rawId,
+      fullName: userInput.fullName,
+      email: userInput.email,
+      phone: userInput.phone,
+      role: userInput.role,
+      password: userInput.password || '123',
+      avatarUrl: userInput.avatarUrl || `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80`,
+      isActive: userInput.isActive !== false
+    };
+
+    try {
+      const response = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      if (data.success) {
+        if (payload.role === 'technician') {
+          // Trigger companion technician registration
+          await fetch("/api/technicians", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: payload.id,
+              fullName: payload.fullName,
+              phone: payload.phone,
+              email: payload.email,
+              specialty: "all",
+              isActive: true,
+              createdBy: currentUser?.id || "admin-1"
+            })
+          });
+        }
+        loadFreshData();
+        return true;
+      } else {
+        alert(data.error || "خطایی در ثبت نام صورت گرفت.");
+        return false;
+      }
+    } catch (err) {
+      console.error("Error adding user:", err);
+      return false;
+    }
+  };
+
+  const updateUser = async (updated: User & { password?: string, isActive?: boolean }): Promise<boolean> => {
+    try {
+      const response = await fetch(`/api/users/${updated.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updated)
+      });
+      const data = await response.json();
+      if (data.success) {
+        loadFreshData();
+        return true;
+      } else {
+        alert(data.error || "خطایی در بروزرسانی اطلاعات کاربر رخ داد.");
+        return false;
+      }
+    } catch (err) {
+      console.error("Error updating user:", err);
+      return false;
+    }
+  };
+
+  const deleteUser = async (id: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`/api/users/${id}`, {
+        method: "DELETE"
+      });
+      const data = await response.json();
+      if (data.success) {
+        loadFreshData();
+        return true;
+      } else {
+        return false;
+      }
+    } catch (err) {
+      console.error("Error deleting user:", err);
+      return false;
+    }
+  };
+
   return (
     <AppContext.Provider value={{
       currentUser,
@@ -775,6 +875,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       markAllNotificationsAsRead,
       closeToast,
       loadFreshData,
+      users,
+      addUser,
+      updateUser,
+      deleteUser,
     }}>
       {children}
     </AppContext.Provider>

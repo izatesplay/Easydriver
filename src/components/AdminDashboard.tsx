@@ -26,11 +26,15 @@ export const AdminDashboard: React.FC = () => {
     addTechnician,
     updateTechnician,
     deleteTechnician,
-    loadFreshData
+    loadFreshData,
+    users,
+    addUser,
+    updateUser,
+    deleteUser
   } = useApp();
 
   // Active admin tab selection
-  const [adminTab, setAdminTab] = useState<'overview' | 'requests' | 'technicians' | 'tickets' | 'reviews' | 'db' | 'reports' | 'profile'>('overview');
+  const [adminTab, setAdminTab] = useState<'overview' | 'requests' | 'technicians' | 'tickets' | 'reviews' | 'db' | 'reports' | 'profile' | 'users'>('overview');
 
   // Report filters state
   const [reportReqStatus, setReportReqStatus] = useState<'all' | 'pending' | 'in_progress' | 'completed' | 'cancelled'>('all');
@@ -97,6 +101,17 @@ export const AdminDashboard: React.FC = () => {
   const [techIsActive, setTechIsActive] = useState(true);
   const [techCertificationLevel, setTechCertificationLevel] = useState<'Junior' | 'Senior' | 'Expert'>('Junior');
   const [techPassword, setTechPassword] = useState('');
+
+  // User tab states
+  const [showAddUserForm, setShowAddUserForm] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [uName, setUName] = useState('');
+  const [uEmail, setUEmail] = useState('');
+  const [uPhone, setUPhone] = useState('');
+  const [uRole, setURole] = useState<'customer' | 'technician' | 'admin'>('customer');
+  const [uPassword, setUPassword] = useState('');
+  const [uIsActive, setUIsActive] = useState(true);
+  const [userSearchText, setUserSearchText] = useState('');
 
   // Expanded editor states for requests, tickets
   const [selectedRequestIds, setSelectedRequestIds] = useState<string[]>([]);
@@ -753,11 +768,12 @@ export const AdminDashboard: React.FC = () => {
         </div>
 
         {/* Core Admin Navigation Grid tabs */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8 gap-2.5 mb-8">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-9 gap-2.5 mb-8">
           {[
             { id: 'overview', label: 'داشبورد خلاصه آمار', icon: Grid },
             { id: 'requests', label: 'مدیریت درخواست‌ها', icon: Clipboard, badge: pendingRequests },
             { id: 'technicians', label: 'تعریف تکنسین‌ها (CRUD)', icon: Users },
+            { id: 'users', label: 'مدیریت کاربران', icon: UserPlus },
             { id: 'tickets', label: 'تیکت‌های باز پشتیبانی', icon: MessageSquare, badge: openTicketsCount },
             { id: 'reviews', label: 'تایید نظرات کاربران', icon: Star, badge: pendingReviewsCount },
             { id: 'db', label: 'پایگاه داده (MySQL)', icon: Database, badge: dbInfo?.connected ? 0 : 0 },
@@ -1716,6 +1732,342 @@ export const AdminDashboard: React.FC = () => {
                 })}
               </div>
 
+            </div>
+          )}
+
+          {/* TAB 3.5: USERS CRUD */}
+          {adminTab === 'users' && (
+            <div className="space-y-4 text-right">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-2 border-b border-slate-200 font-sans">
+                <div>
+                  <h3 className="font-extrabold text-sm sm:text-base text-slate-850">مدیریت تام و جامع کاربران دیتابیس</h3>
+                  <p className="text-xs text-slate-500 mt-1">ویرایش نقش‌ها، تعلیق و فعال‌سازی حساب‌های کاربری مشتریان و تکنسین‌ها به طور مستقیم در MySQL</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setEditingUserId(null);
+                    setUName('');
+                    setUEmail('');
+                    setUPhone('');
+                    setURole('customer');
+                    setUPassword('');
+                    setUIsActive(true);
+                    setShowAddUserForm(!showAddUserForm);
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-4 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  <span>{showAddUserForm ? 'بستن فرم ثبت‌نام' : 'ثبت کاربر جدید'}</span>
+                </button>
+              </div>
+
+              {/* Statistics Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                <div className="bg-slate-50 border border-slate-100 p-3.5 rounded-2xl">
+                  <div className="text-slate-450 text-[10px] uppercase font-bold tracking-wider">کل کاربران سیستم</div>
+                  <div className="text-slate-850 font-black text-xl mt-1 font-mono">{users.length} نفر</div>
+                </div>
+                <div className="bg-blue-50 border border-blue-100 p-3.5 rounded-2xl">
+                  <div className="text-blue-600 text-[10px] uppercase font-bold tracking-wider">مشتریان عادی</div>
+                  <div className="text-blue-800 font-black text-xl mt-1 font-mono">{users.filter(u => u.role === 'customer').length} نفر</div>
+                </div>
+                <div className="bg-indigo-50 border border-indigo-100 p-3.5 rounded-2xl">
+                  <div className="text-indigo-600 text-[10px] uppercase font-bold tracking-wider">تکنسین‌های فعال</div>
+                  <div className="text-indigo-800 font-black text-xl mt-1 font-mono">{users.filter(u => u.role === 'technician').length} نفر</div>
+                </div>
+                <div className="bg-amber-50 border border-amber-100 p-3.5 rounded-2xl">
+                  <div className="text-amber-600 text-[10px] uppercase font-bold tracking-wider">مدیران و ناظرین</div>
+                  <div className="text-amber-800 font-black text-xl mt-1 font-mono">{users.filter(u => u.role === 'admin').length} نفر</div>
+                </div>
+              </div>
+
+              {/* Add/Edit Form Box */}
+              <AnimatePresence>
+                {showAddUserForm && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <form
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        if (!uName || !uPhone) {
+                          alert('لطفاً نام کامل و شماره همراه کاربر را وارد نمایید.');
+                          return;
+                        }
+
+                        if (editingUserId) {
+                          const res = await updateUser({
+                            id: editingUserId,
+                            fullName: uName,
+                            email: uEmail,
+                            phone: uPhone,
+                            role: uRole,
+                            avatarUrl: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80`,
+                            isActive: uIsActive,
+                            ...(uPassword ? { password: uPassword } : {})
+                          });
+                          if (res) {
+                            setShowAddUserForm(false);
+                            setEditingUserId(null);
+                          }
+                        } else {
+                          const res = await addUser({
+                            fullName: uName,
+                            email: uEmail,
+                            phone: uPhone,
+                            role: uRole,
+                            avatarUrl: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80`,
+                            isActive: uIsActive,
+                            password: uPassword
+                          });
+                          if (res) {
+                            setShowAddUserForm(false);
+                          }
+                        }
+                      }}
+                      className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-3 gap-4"
+                    >
+                      <h4 className="col-span-1 sm:col-span-3 font-bold text-xs text-slate-800 flex items-center gap-1.5 pb-2 border-b border-slate-200">
+                        <Plus className="h-4 w-4 text-emerald-600" />
+                        <span>{editingUserId ? 'ویرایش مشخصات کاربر' : 'تعریف کاربر جدید با اتصال مستقیم به پایگاه داده'}</span>
+                      </h4>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1.5">نام و نام خانوادگی <span className="text-red-500">*</span></label>
+                        <input
+                          type="text"
+                          value={uName}
+                          onChange={(e) => setUName(e.target.value)}
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-right focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 font-sans"
+                          placeholder="سعید رستمی"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1.5">شماره همراه تماس <span className="text-red-500">*</span></label>
+                        <input
+                          type="text"
+                          value={uPhone}
+                          onChange={(e) => setUPhone(e.target.value)}
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-right focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 font-sans font-mono"
+                          placeholder="09121234567"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1.5">نشانی ایمیل</label>
+                        <input
+                          type="email"
+                          value={uEmail}
+                          onChange={(e) => setUEmail(e.target.value)}
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-left focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 font-sans"
+                          placeholder="saeed@customer.ir"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1.5">نقش کاربری در سامانه</label>
+                        <select
+                          value={uRole}
+                          onChange={(e) => setURole(e.target.value as any)}
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 font-sans"
+                        >
+                          <option value="customer">مشتری عادی (کاربر سیستم)</option>
+                          <option value="technician">تکنسین فنی ارشد</option>
+                          <option value="admin">مدیر سیستم (ادمین)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1.5">کلمه عبور {editingUserId && <span className="text-slate-400">(خالی بماند تغییر نمی‌کند)</span>}</label>
+                        <input
+                          type="password"
+                          value={uPassword}
+                          onChange={(e) => setUPassword(e.target.value)}
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-left focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 font-sans"
+                          placeholder="••••••••"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-6">
+                        <input
+                          type="checkbox"
+                          id="uIsActive"
+                          checked={uIsActive}
+                          onChange={(e) => setUIsActive(e.target.checked)}
+                          className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                        />
+                        <label htmlFor="uIsActive" className="text-xs font-bold text-slate-700 cursor-pointer select-none">وضعیت حساب: فعال و مجاز به ورود</label>
+                      </div>
+
+                      <div className="col-span-1 sm:col-span-3 flex justify-end gap-2.5 pt-2 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowAddUserForm(false);
+                            setEditingUserId(null);
+                          }}
+                          className="bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold py-2 px-5.5 rounded-xl transition-colors cursor-pointer"
+                        >
+                          انصراف
+                        </button>
+                        <button
+                          type="submit"
+                          className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold py-2 px-6 rounded-xl shadow-sm transition-colors flex items-center gap-1 cursor-pointer"
+                        >
+                          <Save className="h-4 w-4" />
+                          <span>{editingUserId ? 'ذخیره تغییرات افزوده' : 'ثبت نهایی در دیتابیس'}</span>
+                        </button>
+                      </div>
+                    </form>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Dynamic Filtering Frame */}
+              <div className="bg-white p-3.5 border border-slate-200 rounded-2xl flex items-center justify-between gap-4 font-sans">
+                <div className="w-full sm:max-w-md relative">
+                  <input
+                    type="text"
+                    value={userSearchText}
+                    onChange={(e) => setUserSearchText(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 focus:border-slate-300 rounded-xl text-xs text-right focus:outline-none font-sans"
+                    placeholder="جستجو بر اساس نام، ایمیل، شماره تلفن..."
+                  />
+                  <div className="absolute left-3 top-2.5 text-slate-400">
+                    <Users className="h-4 w-4" />
+                  </div>
+                </div>
+                <div className="text-xs text-slate-500 font-medium">
+                  یافت شده: <strong className="text-slate-800 font-mono font-bold">{
+                    users.filter(u => {
+                      const text = userSearchText.toLowerCase();
+                      return u.fullName.toLowerCase().includes(text) || u.email.toLowerCase().includes(text) || u.phone.includes(text);
+                    }).length
+                  }</strong> کاربر
+                </div>
+              </div>
+
+              {/* Users Live Table List */}
+              <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm font-sans">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-right border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-100">
+                        <th className="p-3.5 pr-4">شناسه و تصویر</th>
+                        <th className="p-3.5">نام کامل و نقش</th>
+                        <th className="p-3.5">اطلاعات تماس</th>
+                        <th className="p-3.5">رمز عبور (BCrypt)</th>
+                        <th className="p-3.5">وضعیت کاربری</th>
+                        <th className="p-3.5 text-left pl-4">عملیات مدیریت</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-sans">
+                      {users.filter(u => {
+                        const text = userSearchText.toLowerCase();
+                        return u.fullName.toLowerCase().includes(text) || u.email.toLowerCase().includes(text) || u.phone.includes(text);
+                      }).map((user) => {
+                        let roleLabel = 'مشتری عادی';
+                        let roleColor = 'text-blue-700 bg-blue-50 border border-blue-100';
+                        if (user.role === 'technician') {
+                          roleLabel = 'تکنسین فنی ارشد';
+                          roleColor = 'text-indigo-700 bg-indigo-50 border border-indigo-100';
+                        } else if (user.role === 'admin') {
+                          roleLabel = 'ادمین کل';
+                          roleColor = 'text-rose-700 bg-rose-50 border border-rose-100';
+                        }
+
+                        return (
+                          <tr key={user.id} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="p-3.5 pr-4 font-mono text-[10px] text-slate-400">
+                              <div className="flex items-center gap-2">
+                                <img
+                                  src={user.avatarUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80"}
+                                  alt=""
+                                  className="h-8 w-8 rounded-full border border-slate-200 shadow-inner"
+                                  referrerPolicy="no-referrer"
+                                />
+                                <span>{user.id}</span>
+                              </div>
+                            </td>
+                            <td className="p-3.5 font-sans">
+                              <div className="font-extrabold text-slate-800 text-xs">{user.fullName}</div>
+                              <span className={`inline-block mt-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold ${roleColor}`}>
+                                {roleLabel}
+                              </span>
+                            </td>
+                            <td className="p-3.5">
+                              <div className="font-mono text-xs font-bold text-slate-700">{user.phone}</div>
+                              <div className="text-[10px] text-slate-400 font-sans mt-0.5">{user.email || 'ایمیل تعریف نشده'}</div>
+                            </td>
+                            <td className="p-3.5 font-mono text-[9px] text-slate-400 max-w-[120px] truncate" title={user.password || 'امن شده'}>
+                              {user.password || '••••••••'}
+                            </td>
+                            <td className="p-3.5">
+                              <button
+                                onClick={async () => {
+                                  const updatedUser = { ...user, isActive: !user.isActive };
+                                  await updateUser(updatedUser);
+                                }}
+                                className={`px-2 py-1 rounded-full text-[9px] font-extrabold flex items-center justify-center gap-1 cursor-pointer transition-all border ${
+                                  user.isActive
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                    : 'bg-red-50 text-red-600 border-red-150 hover:bg-red-100'
+                                }`}
+                              >
+                                <span className={`h-1.5 w-1.5 rounded-full ${user.isActive ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
+                                <span>{user.isActive ? 'فعال / آزاد' : 'غیرفعال / بلاک'}</span>
+                              </button>
+                            </td>
+                            <td className="p-3.5 text-left pl-4">
+                              <div className="inline-flex gap-1.5">
+                                <button
+                                  onClick={() => {
+                                    setEditingUserId(user.id);
+                                    setUName(user.fullName);
+                                    setUEmail(user.email || '');
+                                    setUPhone(user.phone);
+                                    setURole(user.role);
+                                    setUIsActive(user.isActive);
+                                    setUPassword('');
+                                    setShowAddUserForm(true);
+                                  }}
+                                  className="p-1 px-2.5 bg-slate-50 border border-slate-200 text-slate-500 hover:text-slate-800 rounded-md transition-colors flex items-center gap-1 cursor-pointer"
+                                  title="ویرایش اطلاعات"
+                                >
+                                  <Edit2 className="h-3.3 w-3.3" />
+                                  <span>ویرایش</span>
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    if (user.id === currentUser?.id) {
+                                      alert("شما نمی‌توانید حساب کاربری شخصی خودتان را به دلایل امنیتی حذف کنید.");
+                                      return;
+                                    }
+                                    if (window.confirm('آیا مطمئن هستید که می‌خواهید این کاربر به‌طور دائمی از سیستم حذف شود؟')) {
+                                      await deleteUser(user.id);
+                                    }
+                                  }}
+                                  className="p-1 px-2.5 bg-rose-50 border border-rose-100 text-rose-600 hover:text-rose-800 rounded-md transition-colors flex items-center gap-1 cursor-pointer"
+                                  title="حذف دائمی"
+                                >
+                                  <Trash2 className="h-3.3 w-3.3" />
+                                  <span>حذف</span>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           )}
 

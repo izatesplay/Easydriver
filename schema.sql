@@ -127,6 +127,38 @@ CREATE TABLE IF NOT EXISTS `ticket_messages` (
   FOREIGN KEY (`ticket_id`) REFERENCES `tickets` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- -------------------------------------------------------------
+-- Table Structure for `orders` (Driver licenses/install payments)
+-- -------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `orders` (
+  `id` VARCHAR(50) NOT NULL,
+  `user_id` VARCHAR(50) NOT NULL,
+  `driver_details` TEXT NOT NULL,
+  `amount` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  `payment_status` ENUM('pending', 'paid', 'failed', 'refunded') NOT NULL DEFAULT 'pending',
+  `transaction_id` VARCHAR(100) NULL,
+  `created_date` VARCHAR(100) NOT NULL,
+  `updated_date` VARCHAR(100) NOT NULL,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -------------------------------------------------------------
+-- Table Structure for `chat_messages` (Live chat widget support backup log)
+-- -------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `chat_messages` (
+  `id` VARCHAR(50) NOT NULL,
+  `chat_id` VARCHAR(50) NOT NULL,
+  `sender_id` VARCHAR(50) NOT NULL,
+  `sender_name` VARCHAR(100) NOT NULL,
+  `sender_role` ENUM('customer', 'technician', 'admin') NOT NULL,
+  `message` TEXT NOT NULL,
+  `timestamp` VARCHAR(100) NOT NULL,
+  `file_url` TEXT NULL,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`sender_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 
 -- -------------------------------------------------------------
 -- Seed Initial User & Technician Data

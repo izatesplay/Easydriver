@@ -187,6 +187,30 @@ class Database {
                 `target_role` VARCHAR(50) NULL,
                 `reference_id` VARCHAR(50) NULL
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+
+            // 8. Orders Table
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `orders` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `user_id` VARCHAR(50) NOT NULL,
+                `driver_details` TEXT NOT NULL,
+                `amount` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+                `payment_status` VARCHAR(20) NOT NULL DEFAULT 'pending',
+                `transaction_id` VARCHAR(100) NULL,
+                `created_date` VARCHAR(50) NOT NULL,
+                `updated_date` VARCHAR(50) NOT NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+
+            // 9. Chat Messages Table
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `chat_messages` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `chat_id` VARCHAR(50) NOT NULL,
+                `sender_id` VARCHAR(50) NOT NULL,
+                `sender_name` VARCHAR(100) NOT NULL,
+                `sender_role` VARCHAR(20) NOT NULL,
+                `message` TEXT NOT NULL,
+                `timestamp` VARCHAR(50) NOT NULL,
+                `file_url` TEXT NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
             
             // Seed a default admin if none exists
             $stmt = $pdo->prepare("SELECT COUNT(*) FROM `users` WHERE `role` = 'admin'");
