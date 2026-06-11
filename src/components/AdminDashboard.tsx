@@ -141,7 +141,7 @@ export const AdminDashboard: React.FC = () => {
   // System Diagnostics Calculations
   const mismatchedRequests = (requests || []).filter(r => {
     if (r.status !== 'assigned' && r.status !== 'in_progress') return false;
-    if (!r.assignedToId) return true;
+    if (!r.assignedToId) return false;
     const associatedUser = (users || []).find(u => String(u.id).trim().toLowerCase() === String(r.assignedToId).trim().toLowerCase());
     return !associatedUser;
   });
@@ -1083,7 +1083,9 @@ export const AdminDashboard: React.FC = () => {
                                   {/* BUTTON 1: Approved */}
                                   <button
                                     onClick={async () => {
-                                      const selectTechId = (document.getElementById(`tech-assign-${req.id}`) as HTMLSelectElement)?.value || '';
+                                      const selectTechId = assignedTechOverride[req.id] !== undefined
+                                        ? assignedTechOverride[req.id]
+                                        : (req.assignedToId || '');
                                       const assignedTech = (technicians || []).find(t => t.id === selectTechId);
                                       
                                       const updatedReq: Request = {
@@ -1419,15 +1421,16 @@ export const AdminDashboard: React.FC = () => {
                               </button>
 
                               <button
-                                onClick={() => {
-                                  const selectStatusEl = document.getElementById(`status-mod-${req.id}`) as HTMLSelectElement;
-                                  const selectStatus = selectStatusEl ? (selectStatusEl.value as RequestStatus) : req.status;
-                                  
-                                  const selectTechIdEl = document.getElementById(`tech-assign-${req.id}`) as HTMLSelectElement;
-                                  const selectTechId = selectTechIdEl ? selectTechIdEl.value : (assignedTechOverride[req.id] !== undefined ? assignedTechOverride[req.id] : (req.assignedToId || ''));
-                                  
-                                  const selectScheduleEl = document.getElementById(`scheduled-date-${req.id}`) as HTMLInputElement;
-                                  const selectSchedule = selectScheduleEl ? selectScheduleEl.value : (req.scheduledDate || '');
+                                        onClick={() => {
+                                          const selectStatusEl = document.getElementById(`status-mod-${req.id}`) as HTMLSelectElement;
+                                          const selectStatus = selectStatusEl ? (selectStatusEl.value as RequestStatus) : req.status;
+                                          
+                                          const selectTechId = assignedTechOverride[req.id] !== undefined 
+                                            ? assignedTechOverride[req.id] 
+                                            : (req.assignedToId || '');
+                                          
+                                          const selectScheduleEl = document.getElementById(`scheduled-date-${req.id}`) as HTMLInputElement;
+                                          const selectSchedule = selectScheduleEl ? selectScheduleEl.value : (req.scheduledDate || '');
                                   
                                   let finalStatus = selectStatus;
                                   let finalIsApproved = req.isApproved;
