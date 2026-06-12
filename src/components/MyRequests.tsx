@@ -53,8 +53,8 @@ export const MyRequests: React.FC<MyRequestsProps> = ({ onNavigateToAuth }) => {
       rating: stars,
       comment: comment.trim(),
       serviceType: SERVICE_LABELS[req.serviceType],
-      technicianId: req.assignedToId,
-      technicianName: req.assignedToName,
+      technicianId: req.assignedToId || req.technicianId,
+      technicianName: req.assignedToName || req.technicianName,
       isApproved: true, // Autoapprove verified customer rating!
     });
 
@@ -633,14 +633,14 @@ export const MyRequests: React.FC<MyRequestsProps> = ({ onNavigateToAuth }) => {
                       <div className="md:col-span-5 bg-slate-50/40 border border-slate-100 p-4 rounded-2xl space-y-3 shrink-0">
                         <h4 className="text-xs font-bold text-slate-800 border-b border-slate-100 pb-2">هماهنگی تکنسین</h4>
 
-                        {req.assignedToName ? (
+                        { (req.assignedToName || req.technicianName) ? (
                           <div className="space-y-2.5 text-xs text-slate-600">
                             
                             <div className="flex items-center gap-2">
                               <div className="p-1 bg-indigo-50 text-indigo-600 rounded-lg">
                                 <User className="h-3.5 w-3.5" />
                               </div>
-                              <span className="font-bold">{req.assignedToName}</span>
+                              <span className="font-bold">{req.assignedToName || req.technicianName}</span>
                             </div>
 
                             {req.scheduledDate && (
@@ -885,10 +885,10 @@ export const MyRequests: React.FC<MyRequestsProps> = ({ onNavigateToAuth }) => {
                         <span className="text-indigo-950 font-extrabold">{new Date(quickViewRequest.scheduledDate).toLocaleString('fa-IR')}</span>
                       </div>
                     )}
-                    {quickViewRequest.assignedToName && (
+                    {(quickViewRequest.assignedToName || quickViewRequest.technicianName) && (
                       <div className="flex justify-between items-center bg-emerald-50/20 p-2.5 rounded-xl border border-emerald-100/50">
                         <span>🛠️ تکنسین فنی مسئول:</span>
-                        <span className="text-emerald-800 font-extrabold">{quickViewRequest.assignedToName}</span>
+                        <span className="text-emerald-800 font-extrabold">{quickViewRequest.assignedToName || quickViewRequest.technicianName}</span>
                       </div>
                     )}
                   </div>

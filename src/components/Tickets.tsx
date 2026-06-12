@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { TicketCategory, TicketPriority, TICKET_CATEGORY_LABELS, TICKET_PRIORITY_LABELS, TICKET_STATUS_LABELS, TICKET_STATUS_COLORS, Ticket } from '../types';
+import { TicketCategory, TicketPriority, TICKET_CATEGORY_LABELS, TICKET_PRIORITY_LABELS, TICKET_STATUS_LABELS, TICKET_STATUS_COLORS, Ticket, getFullFileUrl } from '../types';
 import { Send, Plus, Inbox, Clipboard, MessageSquare, ShieldAlert, Key, MessageCircle, AlertCircle, Clock, ChevronDown, ChevronUp, Upload, X, File, Trash2, Image, Check, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useRenderTracker } from '../utils/indexedDB';
@@ -523,7 +523,7 @@ export const Tickets: React.FC<TicketsProps> = ({ setActiveTab, setSelectedTicke
                               <div className="mt-2.5 p-3.5 bg-white border border-slate-200 rounded-xl flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                   {tick.attachedFile ? (
-                                    <img src={tick.attachedFile} className="h-10 w-10 object-cover rounded border border-slate-200" alt="attachment" />
+                                    <img src={getFullFileUrl(tick.attachedFile)} className="h-10 w-10 object-cover rounded border border-slate-200" alt="attachment" />
                                   ) : (
                                     <File className="h-5 w-5 text-indigo-500" />
                                   )}

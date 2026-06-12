@@ -109,6 +109,18 @@ class OtherController {
     public function listRequests(array $params, array $body): void {
         $stmt = $this->db->query("SELECT * FROM `requests` ORDER BY `created_date` DESC");
         $reqs = $stmt->fetchAll() ?: [];
+        
+        // Ensure child objects have compatible field aliases
+        foreach ($reqs as &$r) {
+            $techId = isset($r['technician_id']) ? $r['technician_id'] : (isset($r['assigned_to_id']) ? $r['assigned_to_id'] : null);
+            $techName = isset($r['technician_name']) ? $r['technician_name'] : (isset($r['assigned_to_name']) ? $r['assigned_to_name'] : null);
+            
+            $r['technician_id'] = $techId;
+            $r['assigned_to_id'] = $techId;
+            $r['technician_name'] = $techName;
+            $r['assigned_to_name'] = $techName;
+        }
+
         echo json_encode(Utils::keysConvert($reqs, 'camel'), JSON_UNESCAPED_UNICODE);
         exit();
     }
@@ -193,7 +205,8 @@ class OtherController {
         $fields = [
             'full_name', 'phone', 'service_type', 'description', 'status', 'priority',
             'admin_notes', 'technician_id', 'technician_name', 'anydesk_id', 'anydesk_password',
-            'is_approved', 'price', 'updated_date'
+            'is_approved', 'price', 'updated_date', 'rating', 'rating_comment', 'rated_at',
+            'assigned_to_id', 'assigned_to_name'
         ];
 
         $sets = [];

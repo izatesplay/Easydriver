@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Request, Review, Ticket, Technician, SERVICE_LABELS, STATUS_LABELS, STATUS_COLORS, PRIORITY_LABELS, PRIORITY_COLORS, SPECIALTY_LABELS, TechnicianSpecialty, RequestStatus, RequestPriority, TICKET_CATEGORY_LABELS, TICKET_STATUS_LABELS, TICKET_STATUS_COLORS } from '../types';
+import { Request, Review, Ticket, Technician, SERVICE_LABELS, STATUS_LABELS, STATUS_COLORS, PRIORITY_LABELS, PRIORITY_COLORS, SPECIALTY_LABELS, TechnicianSpecialty, RequestStatus, RequestPriority, TICKET_CATEGORY_LABELS, TICKET_STATUS_LABELS, TICKET_STATUS_COLORS, getFullFileUrl } from '../types';
 import { ShieldAlert, Key, Grid, Clipboard, Users, Star, MessageSquare, Plus, Edit2, Trash2, CheckCircle2, UserPlus, Info, Save, Clock, X, ChevronDown, ChevronUp, Reply, Sparkles, Database, Server, Globe, FileCode as FileCodeIcon, Trophy, Medal, Printer, FileSpreadsheet as FileDown, UserCheck, UserX, UserMinus, Camera, Monitor, Timer, BarChart3, RefreshCw, Play, Activity, Paperclip, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { calculateTechnicianStats } from '../utils/pointsCalculator';
@@ -698,7 +698,7 @@ export const AdminDashboard: React.FC = () => {
     const match = msgText.match(uploadRegex);
     
     if (match) {
-      const fileUrl = match[0];
+      const fileUrl = getFullFileUrl(match[0]);
       let displayName = "فایل ضمیمه شده";
       const nameMatch = msgText.match(/ATTACHMENT_FILE:([^\s]+)/);
       if (nameMatch) {
@@ -1467,17 +1467,20 @@ export const AdminDashboard: React.FC = () => {
                                     <p className="text-[10px] text-slate-400 py-4 text-center">عکسی توسط تکنسین در حین کار ثبت نشده است.</p>
                                   ) : (
                                     <div className="grid grid-cols-3 gap-2">
-                                      {req.desktopScreenshots.map((scr, sIdx) => (
-                                        <div key={sIdx} className="group relative border border-slate-200 rounded-lg overflow-hidden h-14 bg-slate-50">
-                                          <img
-                                            src={scr}
-                                            alt="Desktop screenshot"
-                                            className="w-full h-full object-cover cursor-pointer hover:scale-110 transition-transform duration-300"
-                                            onClick={() => setSelectedFullScreenImage(scr)}
-                                          />
-                                          <span className="absolute bottom-0 inset-x-0 bg-slate-900/60 text-[8px] text-white text-center font-mono py-0.5">#{sIdx + 1}</span>
-                                        </div>
-                                      ))}
+                                      {req.desktopScreenshots.map((scr, sIdx) => {
+                                        const finalUrl = getFullFileUrl(scr);
+                                        return (
+                                          <div key={sIdx} className="group relative border border-slate-200 rounded-lg overflow-hidden h-14 bg-slate-50">
+                                            <img
+                                              src={finalUrl}
+                                              alt="Desktop screenshot"
+                                              className="w-full h-full object-cover cursor-pointer hover:scale-110 transition-transform duration-300"
+                                              onClick={() => setSelectedFullScreenImage(finalUrl)}
+                                            />
+                                            <span className="absolute bottom-0 inset-x-0 bg-slate-900/60 text-[8px] text-white text-center font-mono py-0.5">#{sIdx + 1}</span>
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                   )}
                                 </div>

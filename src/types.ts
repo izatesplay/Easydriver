@@ -206,3 +206,14 @@ export interface Notification {
   createdDate: string;
   read: boolean;
 }
+
+export const getFullFileUrl = (url: string | undefined | null): string => {
+  if (!url) return '';
+  if (url.startsWith('/uploads/')) {
+    return `https://easydriver.shop${url}`;
+  }
+  if (url.startsWith('uploads/')) {
+    return `https://easydriver.shop/${url}`;
+  }
+  return url;
+};

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { Ticket, ChatMessage } from '../types';
+import { Ticket, ChatMessage, getFullFileUrl } from '../types';
 import { ShieldAlert, Key, Send, Inbox, MessageSquare, Laptop, Headset, CornerDownLeft, Sparkles, Smile, RefreshCw, Plus, Paperclip, Loader2, Mic, MicOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -248,7 +248,7 @@ export const SupportChat: React.FC<SupportChatProps> = ({ selectedTicketId, setS
     const match = msgText.match(uploadRegex);
     
     if (match) {
-      const fileUrl = match[0];
+      const fileUrl = getFullFileUrl(match[0]);
       let displayName = "فایل ضمیمه شده";
       const nameMatch = msgText.match(/ATTACHMENT_FILE:([^\s]+)/);
       if (nameMatch) {

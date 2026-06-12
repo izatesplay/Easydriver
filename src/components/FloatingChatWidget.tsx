@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { Headset, MessageSquare, Send, Paperclip, ArrowLeft, Loader2, Sparkles, AlertCircle, RefreshCw, X, ShieldAlert, CheckCircle, FilePlus, Inbox, Check } from 'lucide-react';
+import { getFullFileUrl } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 
 export const FloatingChatWidget: React.FC<{ activeTabState?: string; setActiveTab?: (tab: string) => void }> = ({ activeTabState, setActiveTab }) => {
@@ -172,7 +173,7 @@ export const FloatingChatWidget: React.FC<{ activeTabState?: string; setActiveTa
       const uploadRegex = /\/uploads\/[^\s)"]+/i;
       const match = msg.match(uploadRegex);
       if (match) {
-        const fileUrl = match[0];
+        const fileUrl = getFullFileUrl(match[0]);
         let displayName = "فایل ضمیمه شده";
         const nameMatch = msg.match(/ATTACHMENT_FILE:([^\s\n]+)/);
         if (nameMatch) {

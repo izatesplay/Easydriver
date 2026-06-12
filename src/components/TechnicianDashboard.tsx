@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { Request, RequestStatus, STATUS_LABELS, SERVICE_LABELS, PRIORITY_LABELS, PRIORITY_COLORS, Ticket, User } from '../types';
+import { Request, RequestStatus, STATUS_LABELS, SERVICE_LABELS, PRIORITY_LABELS, PRIORITY_COLORS, Ticket, User, getFullFileUrl } from '../types';
 import { 
   User as UserIcon, Phone, Clipboard, Laptop, Star, Clock, Play, CheckCircle2, XCircle, 
   AlertTriangle, Terminal, Save, HelpCircle, ChevronRight, MessageSquare, Reply, 
@@ -658,7 +658,7 @@ export const TechnicianDashboard: React.FC = () => {
                                   <div className="flex gap-2 overflow-x-auto py-1 border-t border-slate-100 pt-2 shrink-0">
                                     {task.desktopScreenshots.map((scrUrl, preIdx) => (
                                       <div key={preIdx} className="relative w-12 h-12 border border-slate-200 rounded-xl overflow-hidden shadow-xxs shrink-0 group">
-                                        <img src={scrUrl} alt="Screenshot preview" className="w-full h-full object-cover" />
+                                        <img src={getFullFileUrl(scrUrl)} alt="Screenshot preview" className="w-full h-full object-cover" />
                                         <button
                                           type="button"
                                           onClick={() => {

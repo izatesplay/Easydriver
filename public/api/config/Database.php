@@ -123,6 +123,12 @@ class Database {
                 `created_by` VARCHAR(50) NULL
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
 
+            $this->safeAddColumn($pdo, 'requests', 'assigned_to_id', "VARCHAR(50) NULL");
+            $this->safeAddColumn($pdo, 'requests', 'assigned_to_name', "VARCHAR(100) NULL");
+            $this->safeAddColumn($pdo, 'requests', 'rating', "INT NULL");
+            $this->safeAddColumn($pdo, 'requests', 'rating_comment', "TEXT NULL");
+            $this->safeAddColumn($pdo, 'requests', 'rated_at', "VARCHAR(100) NULL");
+
             // 4. Reviews Table
             $pdo->exec("CREATE TABLE IF NOT EXISTS `reviews` (
                 `id` VARCHAR(50) NOT NULL PRIMARY KEY,
