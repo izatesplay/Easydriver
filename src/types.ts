@@ -210,10 +210,17 @@ export interface Notification {
 export const getFullFileUrl = (url: string | undefined | null): string => {
   if (!url) return '';
   if (url.startsWith('/uploads/')) {
-    return `https://easydriver.shop${url}`;
+    return `https://easydriver.shop/public${url}`;
   }
   if (url.startsWith('uploads/')) {
-    return `https://easydriver.shop/${url}`;
+    return `https://easydriver.shop/public/${url}`;
+  }
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    // Check if it's easydriver.shop/uploads/... and insert /public if missing
+    if (url.includes('easydriver.shop/uploads/') && !url.includes('easydriver.shop/public/uploads/')) {
+      return url.replace('easydriver.shop/uploads/', 'easydriver.shop/public/uploads/');
+    }
+    return url;
   }
   return url;
 };

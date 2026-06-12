@@ -536,8 +536,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const sender = currentUser || { id: 'anonymous', fullName: 'ناشناس', role: 'customer' as UserRole, email: '', phone: '' };
 
-    const roleToSend = senderRole || sender.role;
-    const nameToSend = roleToSend === 'admin' ? 'مدیریت پشتیبانی (تکنسین)' : (sender.fullName || ticket.userName || 'کاربر');
+    const roleToSend = senderRole || sender.role || 'customer';
+    
+    // Intelligently detect actual sender's name depending strictly on context role
+    let nameToSend = sender.fullName || 'پشتیبان سیستم';
+    if (roleToSend === 'admin') {
+      nameToSend = sender.role === 'admin' ? (sender.fullName || 'مدیر کل ایزی‌درایور') : 'مدیریت پشتیبانی ایزی‌درایور';
+    } else if (roleToSend === 'technician') {
+      nameToSend = sender.role === 'technician' ? (sender.fullName || 'کارشناس پشتیبانی فنی') : 'کارشناس پشتیبانی فنی';
+    } else if (roleToSend === 'customer') {
+      nameToSend = sender.fullName || ticket.userName || 'کاربر متقاضی';
+    }
 
     const newMessageId = `msg-${Date.now()}`;
     const newMessage: ChatMessage = {

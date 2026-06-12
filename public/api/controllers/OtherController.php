@@ -112,8 +112,8 @@ class OtherController {
         
         // Ensure child objects have compatible field aliases
         foreach ($reqs as &$r) {
-            $techId = isset($r['technician_id']) ? $r['technician_id'] : (isset($r['assigned_to_id']) ? $r['assigned_to_id'] : null);
-            $techName = isset($r['technician_name']) ? $r['technician_name'] : (isset($r['assigned_to_name']) ? $r['assigned_to_name'] : null);
+            $techId = !empty($r['assigned_to_id']) ? $r['assigned_to_id'] : (!empty($r['technician_id']) ? $r['technician_id'] : null);
+            $techName = !empty($r['assigned_to_name']) ? $r['assigned_to_name'] : (!empty($r['technician_name']) ? $r['technician_name'] : null);
             
             $r['technician_id'] = $techId;
             $r['assigned_to_id'] = $techId;

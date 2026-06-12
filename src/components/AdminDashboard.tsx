@@ -2164,7 +2164,7 @@ export const AdminDashboard: React.FC = () => {
                             <td className="p-3.5 pr-4 font-mono text-[10px] text-slate-400">
                               <div className="flex items-center gap-2">
                                 <img
-                                  src={user.avatarUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80"}
+                                  src={getFullFileUrl(user.avatarUrl) || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80"}
                                   alt=""
                                   className="h-8 w-8 rounded-full border border-slate-200 shadow-inner"
                                   referrerPolicy="no-referrer"

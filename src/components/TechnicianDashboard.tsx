@@ -268,7 +268,7 @@ export const TechnicianDashboard: React.FC = () => {
             <div className="flex items-center gap-4.5">
               <div className="w-16 h-16 bg-slate-800 rounded-2xl border border-white/10 overflow-hidden shrink-0 flex items-center justify-center">
                 {currentUser?.avatarUrl ? (
-                  <img src={currentUser.avatarUrl} alt={currentTech.fullName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  <img src={getFullFileUrl(currentUser.avatarUrl)} alt={currentTech.fullName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                 ) : (
                   <UserIcon className="h-8 w-8 text-indigo-400" />
                 )}

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { User } from '../types';
+import { User, getFullFileUrl } from '../types';
 import { Eye, EyeOff, Save, Key, Mail, User as UserIcon, Camera, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 
 export const Profile: React.FC = () => {
@@ -139,7 +139,7 @@ export const Profile: React.FC = () => {
           <div className="relative group">
             <div className="w-20 h-20 bg-slate-800 rounded-2xl border-2 border-white/20 overflow-hidden shadow flex items-center justify-center">
               {avatarUrl ? (
-                <img src={avatarUrl} alt={fullName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                <img src={getFullFileUrl(avatarUrl)} alt={fullName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
               ) : (
                 <UserIcon className="h-10 w-10 text-slate-400" />
               )}

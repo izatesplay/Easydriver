@@ -4,6 +4,7 @@ import { Layers, ShieldCheck, LogOut, Menu, X, Laptop, UserCheck, MessageSquare,
 import { motion, AnimatePresence } from 'motion/react';
 import { NotificationBell } from './NotificationBell';
 import { useRenderTracker } from '../utils/indexedDB';
+import { getFullFileUrl } from '../types';
 
 interface HeaderProps {
   activeTab: string;
@@ -206,7 +207,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
                 </div>
                 <div className="h-9 w-9 rounded-full bg-slate-100 border border-slate-200 overflow-hidden shrink-0">
                   <img
-                    src={currentUser.avatarUrl || `https://api.dicebear.com/7.x/adventurer/svg?seed=${currentUser.fullName}`}
+                    src={getFullFileUrl(currentUser.avatarUrl) || `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(currentUser.fullName)}`}
                     alt={currentUser.fullName}
                     className="h-full w-full object-cover"
                     referrerPolicy="no-referrer"
