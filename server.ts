@@ -81,6 +81,17 @@ import bcrypt from "bcryptjs";
 const app = express();
 const PORT = 3000;
 
+function logDebug(msg: string) {
+  try {
+    const logPath = path.join(process.cwd(), "src", "debug_log.txt");
+    const timestamp = new Date().toISOString();
+    fs.appendFileSync(logPath, `[${timestamp}] ${msg}\n`, "utf-8");
+    console.log(`[DEBUG_LOG] ${msg}`);
+  } catch (err) {
+    console.error("Failed to write to debug_log.txt:", err);
+  }
+}
+
 app.use(express.json({ limit: "15mb" }));
 
 // -------------------------------------------------------------
@@ -1688,6 +1699,8 @@ app.put("/api/requests/:id", async (req, res) => {
   const { id } = req.params;
   const { fullName, phone, serviceType, description, status, priority, adminNotes, scheduledDate, assignedToId, assignedToName, isApproved, approvedAt, assignedAt, updatedDate, rating, ratingComment, ratedAt, createdBy, desktopScreenshots, loggedDurationMinutes } = req.body;
 
+  logDebug(`PUT /api/requests/${id} - Incoming request block. status="${status}", isApproved="${isApproved}", assignedToId="${assignedToId}", assignedToName="${assignedToName}"`);
+
   const finalAssignedToId = assignedToId !== undefined ? assignedToId 
     : (req.body.technicianId !== undefined ? req.body.technicianId 
     : (req.body.assigned_to_id !== undefined ? req.body.assigned_to_id 
@@ -1803,9 +1816,14 @@ app.put("/api/requests/:id", async (req, res) => {
       if (updateFields.length > 0) {
         queryValues.push(id);
         const queryStr = `UPDATE \`requests\` SET ${updateFields.join(', ')} WHERE \`id\` = ?`;
-        await pool.query(queryStr, queryValues);
+        logDebug(`MySQL Executing query: ${queryStr} with values: ${JSON.stringify(queryValues)}`);
+        const [result] = await pool.query(queryStr, queryValues);
+        logDebug(`MySQL Query Result: ${JSON.stringify(result)}`);
+      } else {
+        logDebug(`MySQL No fields to update for ID ${id}`);
       }
-    } catch (err) {
+    } catch (err: any) {
+      logDebug(`MySQL update request failed: ${err.message}. Stack: ${err.stack}`);
       console.error("MySQL update request failed, trying safe fallback update (excluding constraints):", err);
       try {
         const cols = await getRequestsTableColumns(pool);
@@ -1838,10 +1856,13 @@ app.put("/api/requests/:id", async (req, res) => {
         if (updateFields.length > 0) {
           queryValues.push(id);
           const queryStr = `UPDATE \`requests\` SET ${updateFields.join(', ')} WHERE \`id\` = ?`;
-          await pool.query(queryStr, queryValues);
+          logDebug(`MySQL Executing Safe Fallback query: ${queryStr} with values: ${JSON.stringify(queryValues)}`);
+          const [result] = await pool.query(queryStr, queryValues);
+          logDebug(`MySQL Safe Fallback Query Result: ${JSON.stringify(result)}`);
           console.log("✅ Safe fallback update completed successfully for requests Table.");
         }
-      } catch (fallbackErr) {
+      } catch (fallbackErr: any) {
+        logDebug(`🚫 MySQL fallback update failed as well: ${fallbackErr.message}`);
         console.error("🚫 MySQL fallback update failed as well:", fallbackErr);
       }
     }
@@ -1849,6 +1870,7 @@ app.put("/api/requests/:id", async (req, res) => {
 
   const local = readLocalJSON();
   const index = local.requests.findIndex(r => r.id === id);
+  logDebug(`Local JSON check - Found matching request at index: ${index} (length was ${local.requests ? local.requests.length : 0})`);
   let justCompleted = false;
   let oldRequest: any = null;
   const reqObj = {
@@ -1871,6 +1893,9 @@ app.put("/api/requests/:id", async (req, res) => {
         local.technicians[techIdx].updatedDate = new Date().toISOString();
       }
     }
+    writeLocalJSON(local);
+  } else {
+    local.requests.unshift({ ...reqObj, id });
     writeLocalJSON(local);
   }
 
@@ -2104,6 +2129,9 @@ app.put("/api/tickets/:id", async (req, res) => {
   if (index >= 0) {
     oldTicket = { ...local.tickets[index] };
     local.tickets[index] = { ...local.tickets[index], ...req.body };
+    writeLocalJSON(local);
+  } else {
+    local.tickets.unshift({ ...req.body, id });
     writeLocalJSON(local);
   }
 
@@ -2432,6 +2460,9 @@ app.put("/api/technicians/:id", async (req, res) => {
   if (index >= 0) {
     local.technicians[index] = { ...local.technicians[index], ...req.body };
     writeLocalJSON(local);
+  } else {
+    local.technicians.push({ ...req.body, id });
+    writeLocalJSON(local);
   }
   res.json({ success: true });
 });
@@ -2733,17 +2764,27 @@ initializeVite();
 
 // Trigger initial connection test 1 second after server boot
 setTimeout(async () => {
-  console.log("🚀 Testing initial MySQL connection on start...");
+  logDebug(`🚀 Testing initial MySQL connection on start. process.cwd="${process.cwd()}" BACKUP_FILE_PATH="${BACKUP_FILE_PATH}"`);
   try {
     const pool = await getMySQLPool(true); // Bypass normal lazy load rate-limit
     if (!pool) {
-      console.warn("🚫 Initial database connection failed. Schedulud background retry loop.");
+      logDebug(`🚫 Initial database connection failed (err details in console or dbStatus.error: "${dbStatus.error}"). Scheduling background retry loop.`);
       scheduleBackgroundRetry();
     } else {
-      console.log("✅ Database initialized successfully on server start.");
+      logDebug("✅ Database initialized successfully on server start.");
+      try {
+        const [rows] = await pool.query("SELECT * FROM `requests` ORDER BY `created_date` DESC LIMIT 10");
+        logDebug(`Recent requests from DB (Count: ${(rows as any[]).length}): ${JSON.stringify(rows)}`);
+        
+        // Also check columns
+        const [cols] = await pool.query("SHOW COLUMNS FROM `requests`");
+        logDebug(`Requests columns: ${JSON.stringify(cols)}`);
+      } catch (queryErr: any) {
+        logDebug(`Error querying on startup: ${queryErr.message}`);
+      }
     }
-  } catch (err) {
-    console.error("🚫 Connection error on start:", err);
+  } catch (err: any) {
+    logDebug(`🚫 Connection error on start: ${err.message}`);
     scheduleBackgroundRetry();
   }
 }, 1000);

@@ -447,7 +447,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setRequests(prev => prev.map(r => r.id === updated.id ? nextRequestObj : r));
 
     // DB PUT
-    fetch(`/api/requests/${updated.id}`, {
+    return fetch(`/api/requests/${updated.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(nextRequestObj)
@@ -461,7 +461,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setRequests(prev => prev.filter(r => r.id !== id));
 
     // DB DELETE
-    fetch(`/api/requests/${id}`, {
+    return fetch(`/api/requests/${id}`, {
       method: "DELETE"
     })
     .then(() => loadFreshData())
@@ -521,7 +521,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTickets(prev => prev.map(t => t.id === updated.id ? nextTicketObj : t));
 
     // DB PUT
-    fetch(`/api/tickets/${updated.id}`, {
+    return fetch(`/api/tickets/${updated.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(nextTicketObj)
