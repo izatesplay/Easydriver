@@ -1631,9 +1631,58 @@ function parseMySQLBoolean(val: any): boolean {
   return !!val;
 }
 
+async function ensureUserExistsInMySQL(pool: any, userId: string, userName?: string) {
+  if (!userId || userId === 'anonymous' || userId === 'user-customer') return;
+  try {
+    const [rows] = await pool.query("SELECT * FROM `users` WHERE `id` = ?", [userId]);
+    if (!rows || (rows as any[]).length === 0) {
+      const name = userName || `کاربر ${userId}`;
+      const email = `${userId}@customer.ir`;
+      await pool.query(
+        "INSERT INTO `users` (`id`, `username`, `password_hash`, `full_name`, `email`, `phone`, `role`, `password`, `avatar_url`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [userId, email, "$2y$10$vY35zS1FvG72e39X1.L2zOpUjIdqB.6hVv.yly7eYpUfHhXFieGmu", name, email, "09120000000", "customer", "123", `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(name)}`]
+      );
+      console.log(`[MySQL defensive auto-provision] Created user for ID "${userId}"`);
+    }
+  } catch (err: any) {
+    console.error(`Error auto-provisioning user ${userId}:`, err);
+  }
+}
+
+async function ensureTechnicianExistsInMySQL(pool: any, techId: string, techName?: string) {
+  if (!techId) return;
+  try {
+    // 1. Check/create user record
+    const [userRows] = await pool.query("SELECT * FROM `users` WHERE `id` = ?", [techId]);
+    if (!userRows || (userRows as any[]).length === 0) {
+      const name = techName || `تکنسین ${techId}`;
+      const email = `${techId}@easydriver.ir`;
+      await pool.query(
+        "INSERT INTO `users` (`id`, `username`, `password_hash`, `full_name`, `email`, `phone`, `role`, `password`, `avatar_url`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [techId, email, "$2y$10$vY35zS1FvG72e39X1.L2zOpUjIdqB.6hVv.yly7eYpUfHhXFieGmu", name, email, "09120000000", "technician", "123", `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(name)}`]
+      );
+      console.log(`[MySQL defensive auto-provision] Created user for technician ID "${techId}"`);
+    }
+
+    // 2. Check/create technician record
+    const [techRows] = await pool.query("SELECT * FROM `technicians` WHERE `id` = ?", [techId]);
+    if (!techRows || (techRows as any[]).length === 0) {
+      const name = techName || `تکنسین ${techId}`;
+      const email = `${techId}@easydriver.ir`;
+      await pool.query(
+        "INSERT INTO `technicians` (`id`, `full_name`, `phone`, `email`, `specialty`, `is_active`, `completed_tasks`, `created_date`, `updated_date`, `created_by`, `certification_level`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [techId, name, "09120000000", email, "all", 1, 0, new Date().toISOString(), new Date().toISOString(), "admin-1", "Junior"]
+      );
+      console.log(`[MySQL defensive auto-provision] Created technician for ID "${techId}"`);
+    }
+  } catch (err: any) {
+    console.error(`Error auto-provisioning technician ${techId}:`, err);
+  }
+}
+
 let requestsColumnsCached: string[] | null = null;
 async function getRequestsTableColumns(pool: any): Promise<string[]> {
-  if (requestsColumnsCached) return requestsColumnsCached;
+  if (requestsColumnsCached && requestsColumnsCached.length > 0) return requestsColumnsCached;
   try {
     const [rows] = await pool.query("SHOW COLUMNS FROM `requests`");
     const names = (rows as any[]).map(r => r.Field);
@@ -1666,34 +1715,35 @@ app.get("/api/requests", async (req, res) => {
       const formatted = (rows as any[]).map(row => {
         const rowStatus = row.status || 'pending';
         // Prioritize non-null values from either column to support both schemas
-        const assignedToId = row.assigned_to_id || row.technician_id || null;
-        const assignedToName = row.assigned_to_name || row.technician_name || null;
+        const assignedToId = row.assigned_to_id || row.assignedToId || row.technician_id || row.technicianId || null;
+        const assignedToName = row.assigned_to_name || row.assignedToName || row.technician_name || row.technicianName || null;
+        const isApprovedVal = row.is_approved !== undefined ? row.is_approved : row.isApproved;
         
         return {
           id: row.id,
-          fullName: row.full_name,
+          fullName: row.full_name || row.fullName,
           phone: row.phone,
-          serviceType: row.service_type,
+          serviceType: row.service_type || row.serviceType,
           description: row.description,
           status: rowStatus,
           priority: row.priority,
-          adminNotes: row.admin_notes,
-          scheduledDate: row.scheduled_date,
+          adminNotes: row.admin_notes || row.adminNotes,
+          scheduledDate: row.scheduled_date || row.scheduledDate,
           assignedToId: assignedToId,
           assignedToName: assignedToName,
           technicianId: assignedToId,
           technicianName: assignedToName,
-          isApproved: rowStatus === 'pending' ? false : parseMySQLBoolean(row.is_approved),
-          approvedAt: row.approved_at,
-          assignedAt: row.assigned_at,
-          createdDate: row.created_date,
-          updatedDate: row.updated_date,
-          createdBy: row.created_by,
+          isApproved: rowStatus === 'pending' ? false : parseMySQLBoolean(isApprovedVal),
+          approvedAt: row.approved_at || row.approvedAt,
+          assignedAt: row.assigned_at || row.assignedAt,
+          createdDate: row.created_date || row.createdDate,
+          updatedDate: row.updated_date || row.updatedDate,
+          createdBy: row.created_by || row.createdBy,
           rating: row.rating,
-          ratingComment: row.rating_comment,
-          ratedAt: row.rated_at,
-          desktopScreenshots: row.desktop_screenshots ? JSON.parse(row.desktop_screenshots) : [],
-          loggedDurationMinutes: row.logged_duration_minutes || 0,
+          ratingComment: row.rating_comment || row.ratingComment,
+          ratedAt: row.rated_at || row.ratedAt,
+          desktopScreenshots: row.desktop_screenshots ? JSON.parse(row.desktop_screenshots) : (row.desktopScreenshots ? (typeof row.desktopScreenshots === 'string' ? JSON.parse(row.desktopScreenshots) : row.desktopScreenshots) : []),
+          loggedDurationMinutes: row.logged_duration_minutes !== undefined ? row.logged_duration_minutes : (row.loggedDurationMinutes !== undefined ? row.loggedDurationMinutes : 0),
         };
       });
       return res.json(formatted);
@@ -1742,6 +1792,14 @@ app.post("/api/requests", async (req, res) => {
         await pool.query("ALTER TABLE `requests` ADD COLUMN `logged_duration_minutes` INT NOT NULL DEFAULT 0");
       } catch (e) {}
 
+      // Defensive auto-provision of user & technician prior to inserting request
+      if (createdBy && createdBy !== 'anonymous' && createdBy !== 'user-customer') {
+        await ensureUserExistsInMySQL(pool, createdBy, fullName || undefined);
+      }
+      if (finalAssignedToId) {
+        await ensureTechnicianExistsInMySQL(pool, finalAssignedToId, finalAssignedToName || undefined);
+      }
+
       // Get exact column names dynamically
       const cols = await getRequestsTableColumns(pool);
 
@@ -1759,28 +1817,44 @@ app.post("/api/requests", async (req, res) => {
       
       addFieldForInsert('id', id);
       addFieldForInsert('full_name', fullName);
+      addFieldForInsert('fullName', fullName);
       addFieldForInsert('phone', phone);
       addFieldForInsert('service_type', serviceType);
+      addFieldForInsert('serviceType', serviceType);
       addFieldForInsert('description', description);
       addFieldForInsert('status', finalStatus);
       addFieldForInsert('priority', priority);
       addFieldForInsert('admin_notes', adminNotes || null);
+      addFieldForInsert('adminNotes', adminNotes || null);
       addFieldForInsert('scheduled_date', scheduledDate || null);
+      addFieldForInsert('scheduledDate', scheduledDate || null);
       
       // Update BOTH technician columns to sync with all schemas
       addFieldForInsert('assigned_to_id', finalAssignedToId || null);
+      addFieldForInsert('assignedToId', finalAssignedToId || null);
       addFieldForInsert('technician_id', finalAssignedToId || null);
+      addFieldForInsert('technicianId', finalAssignedToId || null);
       addFieldForInsert('assigned_to_name', finalAssignedToName || null);
+      addFieldForInsert('assignedToName', finalAssignedToName || null);
       addFieldForInsert('technician_name', finalAssignedToName || null);
+      addFieldForInsert('technicianName', finalAssignedToName || null);
       
       addFieldForInsert('is_approved', finalIsApproved ? 1 : 0);
+      addFieldForInsert('isApproved', finalIsApproved ? 1 : 0);
       addFieldForInsert('approved_at', approvedAt || null);
+      addFieldForInsert('approvedAt', approvedAt || null);
       addFieldForInsert('assigned_at', assignedAt || null);
+      addFieldForInsert('assignedAt', assignedAt || null);
       addFieldForInsert('created_date', createdDate);
+      addFieldForInsert('createdDate', createdDate);
       addFieldForInsert('updated_date', updatedDate);
+      addFieldForInsert('updatedDate', updatedDate);
       addFieldForInsert('created_by', createdBy);
+      addFieldForInsert('createdBy', createdBy);
       addFieldForInsert('desktop_screenshots', desktopScreenshots ? JSON.stringify(desktopScreenshots) : null);
+      addFieldForInsert('desktopScreenshots', desktopScreenshots ? JSON.stringify(desktopScreenshots) : null);
       addFieldForInsert('logged_duration_minutes', loggedDurationMinutes || 0);
+      addFieldForInsert('loggedDurationMinutes', loggedDurationMinutes || 0);
 
       const queryStr = `INSERT INTO \`requests\` (${insertKeys.join(', ')}) VALUES (${insertPlaceholders.join(', ')})`;
       await pool.query(queryStr, queryValues);
@@ -1886,6 +1960,14 @@ app.put("/api/requests/:id", async (req, res) => {
         await pool.query("ALTER TABLE `requests` ADD COLUMN `logged_duration_minutes` INT NOT NULL DEFAULT 0");
       } catch (e) {}
 
+      // Defensive auto-provision of user & technician on PUT
+      if (finalCreatedBy && finalCreatedBy !== 'anonymous' && finalCreatedBy !== 'user-customer') {
+        await ensureUserExistsInMySQL(pool, finalCreatedBy, fullName || undefined);
+      }
+      if (finalAssignedToId) {
+        await ensureTechnicianExistsInMySQL(pool, finalAssignedToId, finalAssignedToName || undefined);
+      }
+
       if (finalStatus === "completed") {
         const [oldReq] = await pool.query("SELECT `status` FROM `requests` WHERE `id`=?", [id]);
         if (oldReq && (oldReq as any[]).length > 0 && (oldReq as any[])[0].status !== "completed") {
@@ -1912,29 +1994,47 @@ app.put("/api/requests/:id", async (req, res) => {
       };
 
       addFieldForUpdate('full_name', fullName);
+      addFieldForUpdate('fullName', fullName);
       addFieldForUpdate('phone', phone);
       addFieldForUpdate('service_type', serviceType);
+      addFieldForUpdate('serviceType', serviceType);
       addFieldForUpdate('description', description);
       addFieldForUpdate('status', finalStatus);
       addFieldForUpdate('priority', priority);
       addFieldForUpdate('admin_notes', adminNotes || null);
+      addFieldForUpdate('adminNotes', adminNotes || null);
       addFieldForUpdate('scheduled_date', scheduledDate || null);
+      addFieldForUpdate('scheduledDate', scheduledDate || null);
       
       // Update both technician columns if present
       addFieldForUpdate('assigned_to_id', finalAssignedToId || null);
+      addFieldForUpdate('assignedToId', finalAssignedToId || null);
       addFieldForUpdate('technician_id', finalAssignedToId || null);
+      addFieldForUpdate('technicianId', finalAssignedToId || null);
       addFieldForUpdate('assigned_to_name', finalAssignedToName || null);
+      addFieldForUpdate('assignedToName', finalAssignedToName || null);
       addFieldForUpdate('technician_name', finalAssignedToName || null);
+      addFieldForUpdate('technicianName', finalAssignedToName || null);
       
       addFieldForUpdate('is_approved', finalIsApproved ? 1 : 0);
+      addFieldForUpdate('isApproved', finalIsApproved ? 1 : 0);
       addFieldForUpdate('approved_at', approvedAt || null);
+      addFieldForUpdate('approvedAt', approvedAt || null);
       addFieldForUpdate('assigned_at', assignedAt || null);
+      addFieldForUpdate('assignedAt', assignedAt || null);
       addFieldForUpdate('updated_date', updatedDate);
+      addFieldForUpdate('updatedDate', updatedDate);
+      addFieldForUpdate('updated_at', updatedDate);
+      addFieldForUpdate('updatedAt', updatedDate);
       addFieldForUpdate('rating', rating || null);
       addFieldForUpdate('rating_comment', ratingComment || null);
+      addFieldForUpdate('ratingComment', ratingComment || null);
       addFieldForUpdate('rated_at', ratedAt || null);
+      addFieldForUpdate('ratedAt', ratedAt || null);
       addFieldForUpdate('desktop_screenshots', desktopScreenshots ? JSON.stringify(desktopScreenshots) : null);
+      addFieldForUpdate('desktopScreenshots', desktopScreenshots ? JSON.stringify(desktopScreenshots) : null);
       addFieldForUpdate('logged_duration_minutes', loggedDurationMinutes || 0);
+      addFieldForUpdate('loggedDurationMinutes', loggedDurationMinutes || 0);
 
       if (updateFields.length > 0) {
         queryValues.push(id);
