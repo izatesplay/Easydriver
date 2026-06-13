@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Layers, ShieldCheck, LogOut, Menu, X, Laptop, UserCheck, MessageSquare, AlertCircle, Sun, Moon } from 'lucide-react';
+import { Layers, ShieldCheck, LogOut, Menu, X, Laptop, UserCheck, MessageSquare, AlertCircle, Sun, Moon, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { NotificationBell } from './NotificationBell';
 import { useRenderTracker } from '../utils/indexedDB';
@@ -9,9 +9,10 @@ import { getFullFileUrl } from '../types';
 interface HeaderProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  onShowIntro?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
+export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, onShowIntro }) => {
   useRenderTracker("هدر اصلی (Header)");
   const { currentUser, logout, requests, tickets } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -131,6 +132,17 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
                 </button>
               );
             })}
+
+            {onShowIntro && (
+              <button
+                onClick={onShowIntro}
+                className="px-3 py-2 rounded-lg text-xs font-black text-[#5046e5] bg-[#5046e5]/5 hover:bg-[#5046e5]/10 hover:text-[#4338ca] transition-all duration-200 flex items-center gap-1 cursor-pointer border border-[#5046e5]/15 ml-1"
+                title="مشاهده روایت ۳بعدی"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-[#5046e5] animate-pulse" />
+                <span>داستان ۳بعدی</span>
+              </button>
+            )}
 
             {/* Admin panel tab (only visible if admin role active) */}
             {currentUser?.role === 'admin' && (
@@ -276,6 +288,19 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
                   </button>
                 );
               })}
+
+              {onShowIntro && (
+                <button
+                  onClick={() => {
+                    onShowIntro();
+                    setMobileMenuOpen(false);
+                  }}
+                  className="w-full text-right flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-black text-[#5046e5] bg-[#5046e5]/5 hover:bg-[#5046e5]/10 mt-1.5 border border-[#5046e5]/10 cursor-pointer"
+                >
+                  <Sparkles className="h-4 w-4 text-[#5046e5] animate-pulse" />
+                  <span>داستان تعاملی ۳بعدی</span>
+                </button>
+              )}
 
               {/* Mobile Admin panel link */}
               {currentUser?.role === 'admin' && (

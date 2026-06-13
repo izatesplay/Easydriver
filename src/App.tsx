@@ -14,6 +14,7 @@ import { Auth } from './components/Auth';
 import { TechnicianDashboard } from './components/TechnicianDashboard';
 import { NotificationToasts } from './components/NotificationToasts';
 import { Preloader } from './components/Preloader';
+import { CinematicIntro3D } from './components/CinematicIntro3D';
 import { motion, AnimatePresence } from 'motion/react';
 import { useRenderTracker } from './utils/indexedDB';
 
@@ -22,6 +23,12 @@ function AppContent() {
   const [activeTab, setActiveTab] = useState<string>('home');
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [isAppLoading, setIsAppLoading] = useState<boolean>(true);
+  const [isExplored, setIsExplored] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('hasEnteredSite') === 'true';
+    }
+    return false;
+  });
 
   const getActiveView = () => {
     switch (activeTab) {
@@ -59,6 +66,13 @@ function AppContent() {
     }
   };
 
+  const handleShowIntro = () => {
+    setIsExplored(false);
+    sessionStorage.setItem('hasEnteredSite', 'false');
+    setActiveTab('home');
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  };
+
   return (
     <>
       <AnimatePresence>
@@ -75,37 +89,47 @@ function AppContent() {
         )}
       </AnimatePresence>
 
-      <div className="flex flex-col min-h-screen font-sans bg-slate-50 antialiased" dir="rtl">
-        
-        {/* 1. Header Navigation elements */}
-        <Header activeTab={activeTab} setActiveTab={setActiveTab} />
+      {!isExplored && !isAppLoading ? (
+        <CinematicIntro3D
+          onEnterSite={() => {
+            sessionStorage.setItem('hasEnteredSite', 'true');
+            setIsExplored(true);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        />
+      ) : (
+        <div className="flex flex-col min-h-screen font-sans bg-slate-50 antialiased" dir="rtl">
+          
+          {/* 1. Header Navigation elements */}
+          <Header activeTab={activeTab} setActiveTab={setActiveTab} onShowIntro={handleShowIntro} />
 
-        {/* 2. Transitioning Core Contents */}
-        <main className="grow flex flex-col">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activeTab}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.18 }}
-              className="grow flex flex-col"
-            >
-              {getActiveView()}
-            </motion.div>
-          </AnimatePresence>
-        </main>
+          {/* 2. Transitioning Core Contents */}
+          <main className="grow flex flex-col">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.18 }}
+                className="grow flex flex-col"
+              >
+                {getActiveView()}
+              </motion.div>
+            </AnimatePresence>
+          </main>
 
-        {/* 3. Footer Segment */}
-        <Footer setActiveTab={setActiveTab} />
+          {/* 3. Footer Segment */}
+          <Footer setActiveTab={setActiveTab} />
 
-        {/* 5. Floating real-time slide-in toasts notification stack */}
-        <NotificationToasts />
+          {/* 5. Floating real-time slide-in toasts notification stack */}
+          <NotificationToasts />
 
-        {/* Global Floating Support Chat Widget accessible from any page */}
-        <FloatingChatWidget activeTabState={activeTab} setActiveTab={setActiveTab} />
+          {/* Global Floating Support Chat Widget accessible from any page */}
+          <FloatingChatWidget activeTabState={activeTab} setActiveTab={setActiveTab} />
 
-      </div>
+        </div>
+      )}
     </>
   );
 }
