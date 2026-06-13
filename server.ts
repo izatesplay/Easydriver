@@ -262,9 +262,14 @@ function scheduleBackgroundRetry() {
 }
 
 // -------------------------------------------------------------
-// Backup File Engine for local-out-of-the-box execution
+// Backup File Engine for local-out-of-the-box execution (Robust & Writable Fallback Layer)
 // -------------------------------------------------------------
-const BACKUP_FILE_PATH = path.join(process.cwd(), "local_db.json");
+// We prioritize writing to /tmp/local_db.json since /tmp is always writable in container hosts like Cloud Run,
+// unlike process.cwd() which can be read-only depending on deployment settings.
+// We also maintain an in-memory fallback cache to ensure state is never lost during execution.
+const BACKUP_FILE_PATH = path.join("/tmp", "local_db.json");
+const PROJECT_DIR_BACKUP_PATH = path.join(process.cwd(), "local_db.json");
+let memoryDbState: any = null;
 
 // Define initial dataset in case local_db.json is missing
 const INITIAL_DATASET = {
@@ -606,32 +611,71 @@ interface Notification {
 
 // Ensure JSON backup exists
 function ensureLocalJSON() {
-  if (!fs.existsSync(BACKUP_FILE_PATH)) {
-    fs.writeFileSync(BACKUP_FILE_PATH, JSON.stringify(INITIAL_DATASET, null, 2), "utf-8");
+  if (memoryDbState) return;
+
+  // 1. Try to load from always-writable /tmp directory first
+  if (fs.existsSync(BACKUP_FILE_PATH)) {
+    try {
+      const raw = fs.readFileSync(BACKUP_FILE_PATH, "utf-8");
+      memoryDbState = JSON.parse(raw);
+      console.log("📂 Successfully initialized local database in-memory state from /tmp/local_db.json");
+      return;
+    } catch (e) {
+      console.warn("Could not parse /tmp/local_db.json, checking project directory seed...");
+    }
+  }
+
+  // 2. Try to load from project root workspace directory seed
+  if (fs.existsSync(PROJECT_DIR_BACKUP_PATH)) {
+    try {
+      const raw = fs.readFileSync(PROJECT_DIR_BACKUP_PATH, "utf-8");
+      memoryDbState = JSON.parse(raw);
+      console.log("📂 Successfully initialized local database in-memory state from workspace project seed.");
+      // Synchronize back to always-writable /tmp
+      try {
+        fs.writeFileSync(BACKUP_FILE_PATH, JSON.stringify(memoryDbState, null, 2), "utf-8");
+      } catch (err) {}
+      return;
+    } catch (e) {
+      console.warn("Could not parse seeded project local_db.json, falling back to INITIAL_DATASET...");
+    }
+  }
+
+  // 3. Fallback to constant INITIAL_DATASET
+  memoryDbState = JSON.parse(JSON.stringify(INITIAL_DATASET));
+  console.log("📂 Local database initialized with fresh INITIAL_DATASET inside memory.");
+  try {
+    fs.writeFileSync(BACKUP_FILE_PATH, JSON.stringify(memoryDbState, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Warning: Failed to seed /tmp/local_db.json. Running with in-memory database only:", err);
   }
 }
 
 function readLocalJSON(): any {
   ensureLocalJSON();
-  try {
-    const raw = fs.readFileSync(BACKUP_FILE_PATH, "utf-8");
-    const data = JSON.parse(raw);
-    if (!data.notifications) {
-      data.notifications = [];
-    }
-    if (!data.users) {
-      data.users = INITIAL_DATASET.users;
-      // Write it back to persist users in the local db file
-      fs.writeFileSync(BACKUP_FILE_PATH, JSON.stringify(data, null, 2), "utf-8");
-    }
-    return data;
-  } catch (e) {
-    return { ...INITIAL_DATASET, notifications: [], users: INITIAL_DATASET.users };
+  if (!memoryDbState) {
+    memoryDbState = JSON.parse(JSON.stringify(INITIAL_DATASET));
   }
+  if (!memoryDbState.notifications) {
+    memoryDbState.notifications = [];
+  }
+  if (!memoryDbState.users) {
+    memoryDbState.users = INITIAL_DATASET.users;
+    // Attempt to write-back to persist immediately
+    try {
+      fs.writeFileSync(BACKUP_FILE_PATH, JSON.stringify(memoryDbState, null, 2), "utf-8");
+    } catch (e) {}
+  }
+  return memoryDbState;
 }
 
 function writeLocalJSON(data: any) {
-  fs.writeFileSync(BACKUP_FILE_PATH, JSON.stringify(data, null, 2), "utf-8");
+  memoryDbState = data;
+  try {
+    fs.writeFileSync(BACKUP_FILE_PATH, JSON.stringify(data, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Warning: Failed to write to robust /tmp/local_db.json. State remains fully updated in-memory:", err);
+  }
 }
 
 function getNotificationsFromDb(): Notification[] {
