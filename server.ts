@@ -95,6 +95,85 @@ function logDebug(msg: string) {
 app.use(express.json({ limit: "15mb" }));
 
 // -------------------------------------------------------------
+// Database Connection Verification & Navigation Path Validation
+// -------------------------------------------------------------
+app.use(async (req, res, next) => {
+  // 1. Bypass asset paths immediately so styling, scripts, fonts, and uploads render successfully
+  const isAsset = /\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)$/i.test(req.path) || req.path.startsWith('/uploads/');
+  if (isAsset) {
+    return next();
+  }
+
+  // 2. Allow checking the raw DB status block (essential for frontend diagnostics screen to load status check)
+  if (req.path === '/api/db-status') {
+    return next();
+  }
+
+  // 3. Attempt database connection lookup. If connection fails or is offline, block and output the designed 404.html
+  const pool = await getMySQLPool();
+
+  if (!pool || !dbStatus.connected) {
+    console.warn(`[DATABASE OFFLINE] Intercepted request to "${req.path}". Showing 404 block page.`);
+
+    // If API, return a clean JSON error
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({
+        success: false,
+        error: "ارتباط با پایگاه داده اصلی قطع است. سیستم در وضعیت آفلاین قرار دارد.",
+        details: dbStatus.error
+      });
+    }
+
+    // If web page, serve the designed 404.html page directly with the error message
+    res.status(404);
+    const custom404Path = path.join(process.cwd(), 'public', '404.html');
+    if (fs.existsSync(custom404Path)) {
+      let htmlContent = fs.readFileSync(custom404Path, 'utf-8');
+      const friendlyDetails = `ناموفق در اتصال به سرور میزبان دیتابیس:\n${dbStatus.error}`;
+      htmlContent = htmlContent
+        .replace("STATUS: DATABASE_DISCONNECTED_OR_ROUTE_NOT_FOUND", `🚨 خطای اتصال به پایگاه اطلاعات اصلی`)
+        .replace("DB_HOST: Not Connected or Rejected", `وضعیت اتصال دیتابیس: آفلاین | جزئیات خطا:\n${dbStatus.error}`);
+      return res.send(htmlContent);
+    }
+    return res.status(404).send("خطای سیستم: دیتابیس متصل نیست و صفحه پشتیبان بارگذاری ۴۰۴ یافت نشد.");
+  }
+
+  // 4. If database is connected, we check if the requested path is a valid SPA navigation page
+  // This satisfies the criteria: "هر لینکی پیدا نشد و نتونست مسیر رو پیدا کنه به ۴۰۴ ببره"
+  const ALLOWED_SPA_PATHS = [
+    '/',
+    '/index.html',
+    '/home',
+    '/new-request',
+    '/my-requests',
+    '/reviews',
+    '/tickets',
+    '/support-chat',
+    '/admin-dashboard',
+    '/tech-dashboard',
+    '/auth'
+  ];
+
+  const normalizedPath = req.path.replace(/\/$/, '') || '/';
+
+  // If request is not an API call and doesn't match allowed pages, return 404 page
+  if (!req.path.startsWith('/api/') && !ALLOWED_SPA_PATHS.includes(normalizedPath)) {
+    res.status(404);
+    const custom404Path = path.join(process.cwd(), 'public', '404.html');
+    if (fs.existsSync(custom404Path)) {
+      let htmlContent = fs.readFileSync(custom404Path, 'utf-8');
+      htmlContent = htmlContent
+        .replace("STATUS: DATABASE_DISCONNECTED_OR_ROUTE_NOT_FOUND", `⚠️ مسیر درخواستی پیدا نشد (صفحه نامعتبر)`)
+        .replace("DB_HOST: Not Connected or Rejected", `مسیر فراخوانی شده در آدرس‌بار مرورگر شما وجود ندارد:\n${req.originalUrl}`);
+      return res.send(htmlContent);
+    }
+    return res.status(404).send("خطای ۴۰۴: مسیر انتخابی یافت نشد.");
+  }
+
+  next();
+});
+
+// -------------------------------------------------------------
 // Database Connection Layer (MySQL / phpMyAdmin) with Fallback
 // -------------------------------------------------------------
 let mysqlPool: mysql.Pool | null = null;
@@ -2772,6 +2851,15 @@ wss.on("connection", (ws: any) => {
 
 // Vite Server Configuration
 async function initializeVite() {
+  // Capture any unmatched /api/* requests and return JSON 404
+  app.all('/api/*', (req, res) => {
+    res.status(404).json({
+      success: false,
+      error: "آدرس لایه داده (API) یافت نشد - مسیر اشتباه است",
+      path: req.originalUrl
+    });
+  });
+
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
