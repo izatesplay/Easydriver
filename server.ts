@@ -1619,7 +1619,7 @@ app.post("/api/requests", async (req, res) => {
         if (cols.includes(colName)) {
           insertKeys.push(`\`${colName}\``);
           insertPlaceholders.push('?');
-          queryValues.push(value);
+          queryValues.push(value !== undefined ? value : null);
         }
       };
       
@@ -1698,11 +1698,9 @@ app.put("/api/requests/:id", async (req, res) => {
     : (req.body.assigned_to_name !== undefined ? req.body.assigned_to_name 
     : (req.body.technician_name !== undefined ? req.body.technician_name : null)));
 
-  const finalStatus = status || 'pending';
-  const finalIsApproved = finalStatus === 'pending' ? false : (isApproved === true || isApproved === 1 || String(isApproved) === 'true');
-
   let prevStatus = "";
   let prevTechName = "";
+  let prevIsApproved = false;
   let finalCreatedBy = createdBy;
 
   // Retrieve prev request details
@@ -1717,9 +1715,10 @@ app.put("/api/requests/:id", async (req, res) => {
       techIdCol = isAssignedToIdColExistent ? 'assigned_to_id' : 'technician_id';
       techNameCol = isAssignedToIdColExistent ? 'assigned_to_name' : 'technician_name';
 
-      const [rows] = await pool.query(`SELECT \`status\`, \`${techNameCol}\` as \`assigned_to_name\`, \`created_by\` FROM \`requests\` WHERE \`id\`=?`, [id]);
+      const [rows] = await pool.query(`SELECT \`status\`, \`is_approved\`, \`${techNameCol}\` as \`assigned_to_name\`, \`created_by\` FROM \`requests\` WHERE \`id\`=?`, [id]);
       if (rows && (rows as any[]).length > 0) {
         prevStatus = (rows as any[])[0].status;
+        prevIsApproved = parseMySQLBoolean((rows as any[])[0].is_approved);
         prevTechName = (rows as any[])[0].assigned_to_name;
         if (!finalCreatedBy) finalCreatedBy = (rows as any[])[0].created_by;
       }
@@ -1731,10 +1730,16 @@ app.put("/api/requests/:id", async (req, res) => {
     const found = localCheck.requests?.find(r => r.id === id);
     if (found) {
       prevStatus = found.status;
+      prevIsApproved = !!found.isApproved;
       prevTechName = found.assignedToName;
       if (!finalCreatedBy) finalCreatedBy = found.createdBy;
     }
   }
+
+  const finalStatus = status || 'pending';
+  const finalIsApproved = isApproved !== undefined 
+    ? (isApproved === true || isApproved === 1 || String(isApproved) === 'true')
+    : (finalStatus === 'pending' ? false : prevIsApproved);
 
   if (pool) {
     try {
@@ -1764,7 +1769,7 @@ app.put("/api/requests/:id", async (req, res) => {
       const queryValues: any[] = [];
       
       const addFieldForUpdate = (colName: string, value: any) => {
-        if (cols.includes(colName)) {
+        if (cols.includes(colName) && value !== undefined) {
           updateFields.push(`\`${colName}\` = ?`);
           queryValues.push(value);
         }
@@ -1801,7 +1806,44 @@ app.put("/api/requests/:id", async (req, res) => {
         await pool.query(queryStr, queryValues);
       }
     } catch (err) {
-      console.error("MySQL update request failed:", err);
+      console.error("MySQL update request failed, trying safe fallback update (excluding constraints):", err);
+      try {
+        const cols = await getRequestsTableColumns(pool);
+        const updateFields: string[] = [];
+        const queryValues: any[] = [];
+        
+        const addFieldForUpdateSafe = (colName: string, value: any) => {
+          if (cols.includes(colName) && value !== undefined && colName !== 'assigned_to_id' && colName !== 'technician_id') {
+            updateFields.push(`\`${colName}\` = ?`);
+            queryValues.push(value);
+          }
+        };
+
+        addFieldForUpdateSafe('full_name', fullName);
+        addFieldForUpdateSafe('phone', phone);
+        addFieldForUpdateSafe('service_type', serviceType);
+        addFieldForUpdateSafe('description', description);
+        addFieldForUpdateSafe('status', finalStatus);
+        addFieldForUpdateSafe('priority', priority);
+        addFieldForUpdateSafe('admin_notes', adminNotes || null);
+        addFieldForUpdateSafe('scheduled_date', scheduledDate || null);
+        addFieldForUpdateSafe('is_approved', finalIsApproved ? 1 : 0);
+        addFieldForUpdateSafe('approved_at', approvedAt || null);
+        addFieldForUpdateSafe('assigned_at', assignedAt || null);
+        addFieldForUpdateSafe('updated_date', updatedDate);
+        addFieldForUpdateSafe('rating', rating || null);
+        addFieldForUpdateSafe('rating_comment', ratingComment || null);
+        addFieldForUpdateSafe('rated_at', ratedAt || null);
+
+        if (updateFields.length > 0) {
+          queryValues.push(id);
+          const queryStr = `UPDATE \`requests\` SET ${updateFields.join(', ')} WHERE \`id\` = ?`;
+          await pool.query(queryStr, queryValues);
+          console.log("✅ Safe fallback update completed successfully for requests Table.");
+        }
+      } catch (fallbackErr) {
+        console.error("🚫 MySQL fallback update failed as well:", fallbackErr);
+      }
     }
   }
 

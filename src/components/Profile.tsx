@@ -81,8 +81,15 @@ export const Profile: React.FC = () => {
           });
           const uploadData = await uploadRes.json();
           if (uploadRes.ok && uploadData.success) {
-            finalAvatarUrl = uploadData.url;
-            setAvatarUrl(uploadData.url); // update state preview/url to point to static URL
+            let relativeUrl = uploadData.url;
+            if (relativeUrl.startsWith('/uploads/')) {
+              finalAvatarUrl = `https://easydriver.shop/public${relativeUrl}`;
+            } else if (relativeUrl.startsWith('uploads/')) {
+              finalAvatarUrl = `https://easydriver.shop/public/${relativeUrl}`;
+            } else {
+              finalAvatarUrl = relativeUrl;
+            }
+            setAvatarUrl(finalAvatarUrl); // update state preview/url to point to static URL
           }
         } catch (uploadErr) {
           console.error('Failed to upload avatar image, falling back to base64:', uploadErr);

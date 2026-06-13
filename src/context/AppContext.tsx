@@ -530,14 +530,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     .catch(err => console.error("Put ticket sync err:", err));
   };
 
+  const processedMessageHashesRef = useRef<Set<string>>(new Set());
+
   const addTicketMessage = (ticketId: string, messageText: string, senderRole?: UserRole) => {
     const ticket = tickets.find(t => t.id === ticketId);
     if (!ticket) return;
 
     const sender = currentUser || { id: 'anonymous', fullName: 'ناشناس', role: 'customer' as UserRole, email: '', phone: '' };
 
-    const roleToSend = senderRole || sender.role || 'customer';
+    // Smart role detection: Use the active currentUser role if logged in to prevent double-sends or conflicting role transmissions
+    const roleToSend = (sender && sender.id !== 'anonymous' && sender.role) ? sender.role : (senderRole || 'customer');
     
+    // De-duplication mechanism: prevent exact same message sent within 1.5 seconds
+    const msgHash = `${ticketId}-${messageText.trim()}-${roleToSend}`;
+    if (processedMessageHashesRef.current.has(msgHash)) {
+      console.warn("🚫 Debounced duplicate ticket message transmission:", msgHash);
+      return;
+    }
+    processedMessageHashesRef.current.add(msgHash);
+    setTimeout(() => {
+      processedMessageHashesRef.current.delete(msgHash);
+    }, 1500);
+
     // Intelligently detect actual sender's name depending strictly on context role
     let nameToSend = sender.fullName || 'پشتیبان سیستم';
     if (roleToSend === 'admin') {
