@@ -7,6 +7,7 @@ import {
   Users, 
   ArrowLeft, 
   ArrowRight, 
+  ArrowDown, 
   Zap, 
   RefreshCw, 
   Cpu, 
@@ -23,10 +24,14 @@ import {
   ChevronDown,
   ChevronUp,
   Plus,
-  Minus
+  Minus,
+  Terminal,
+  MousePointerClick,
+  Monitor
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { motion, AnimatePresence, useScroll, useTransform, useMotionValue, useSpring } from 'motion/react';
+import { RobotLandingCanvas } from './RobotLandingCanvas';
 
 interface HeroProps {
   setActiveTab: (tab: string) => void;
@@ -43,6 +48,10 @@ export const Hero: React.FC<HeroProps> = ({ setActiveTab }) => {
   const [detectedDrivers, setDetectedDrivers] = useState<{ name: string; status: 'outdated' | 'optimal'; version: string; type: string }[]>([]);
   const [activeDiagnosticTab, setActiveDiagnosticTab] = useState<'gpu' | 'audio' | 'chipset'>('gpu');
 
+  // Unified Scroll Tracking state
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [scrollProgress, setScrollProgress] = useState(0);
+
   // Load approved reviews
   const approvedReviews = reviews.filter(r => r.isApproved);
 
@@ -54,13 +63,43 @@ export const Hero: React.FC<HeroProps> = ({ setActiveTab }) => {
     return () => clearInterval(interval);
   }, [approvedReviews.length]);
 
-  // Card Mouse Parallax Effect hook-like setup
+  // Handle local scrolling inside the main Hero container
+  useEffect(() => {
+    const handleScroll = () => {
+      if (!containerRef.current) return;
+      
+      const rect = containerRef.current.getBoundingClientRect();
+      const currentScroll = -rect.top;
+      const maxScroll = rect.height - window.innerHeight;
+      
+      if (maxScroll > 0) {
+        // Calculate precise 0 to 1 scroll position
+        const progress = Math.max(0, Math.min(1, currentScroll / maxScroll));
+        setScrollProgress(progress);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleScroll);
+    
+    // Initial execution trace
+    setTimeout(() => {
+      handleScroll();
+    }, 150);
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
+    };
+  }, []);
+
+  // Card Mouse Parallax Effect for details card
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
 
   const springConfig = { damping: 25, stiffness: 120 };
-  const rotateX = useSpring(useTransform(mouseY, [-300, 300], [15, -15]), springConfig);
-  const rotateY = useSpring(useTransform(mouseX, [-300, 300], [-15, 15]), springConfig);
+  const rotateX = useSpring(useTransform(mouseY, [-300, 300], [10, -10]), springConfig);
+  const rotateY = useSpring(useTransform(mouseX, [-300, 300], [-10, 10]), springConfig);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -77,7 +116,7 @@ export const Hero: React.FC<HeroProps> = ({ setActiveTab }) => {
     mouseY.set(0);
   };
 
-  // Run a real-time smart browser hardware diagnostic scanning sequence
+  // Run real-time diagnostic scanning sequence
   const startSimulation = () => {
     if (scanStep === 'scanning' || scanStep === 'analyzing') return;
     
@@ -95,713 +134,639 @@ export const Hero: React.FC<HeroProps> = ({ setActiveTab }) => {
           if (debugInfo) {
             const rawGpu = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
             if (rawGpu) {
-              // Extract a readable name
               if (rawGpu.includes("NVIDIA")) return rawGpu.split("/")[0].trim();
-              if (rawGpu.includes("AMD") || rawGpu.includes("Radeon")) return "AMD Radeon Series Accelerator";
-              if (rawGpu.includes("Apple")) return "Apple Silicon Integrated GPU";
+              if (rawGpu.includes("AMD") || rawGpu.includes("Radeon")) return "AMD Radeon XT Accelerator";
+              if (rawGpu.includes("Apple")) return "Apple Silicon Graphics core";
               return rawGpu;
             }
           }
         }
       } catch (e) {}
-      return 'NVIDIA GeForce Graphics Driver';
+      return 'NVIDIA GeForce RTX Engine';
     };
 
     const getRealOS = () => {
       const ua = navigator.userAgent;
       if (ua.includes("Windows NT 10.0")) {
-        return ua.includes("Windows NT 10.0; Win64") ? "Windows 11 Professional (64-bit)" : "Windows 10 System";
+        return ua.includes("Windows NT 10.0; Win64") ? "Windows 11 (64-bit)" : "Windows 10 Operating System";
       }
-      if (ua.includes("Macintosh")) return "Apple macOS Desktop";
-      if (ua.includes("Linux")) return "GNU/Linux Kernel OS";
-      return "Windows Core operating System";
+      if (ua.includes("Macintosh")) return "macOS Intel Desktop";
+      if (ua.includes("Linux")) return "Linux Kernel OS";
+      return "Windows OS";
     };
 
     const cores = navigator.hardwareConcurrency || 8;
     const memory = (navigator as any).deviceMemory || 16;
     const isOnlineState = navigator.onLine ? "اتصال اینترنت پایدار" : "عدم اتصال محلی";
 
-    // Progressive scanning increment
     let progress = 0;
     const interval = setInterval(() => {
-      progress += Math.floor(Math.random() * 12) + 6;
+      progress += Math.floor(Math.random() * 15) + 8;
       if (progress >= 100) {
         progress = 100;
         clearInterval(interval);
         
-        // Transition to analyzing
         setScanStep('analyzing');
         setTimeout(() => {
           setDetectedDrivers([
-            { name: getRealGPU(), status: 'outdated', version: 'v528.24 (قدیمی)', type: 'شتاب‌دهنده گرافیک' },
-            { name: `${cores} Cores System CPU Handler`, status: 'optimal', version: 'پایدار و هوشمند', type: 'پردازشگر مرکزی' },
-            { name: `DDR System RAM (${memory} GB Verified)`, status: 'optimal', version: 'سرعت تراکنش عالی', type: 'ماژول حافظه موقت' },
+            { name: getRealGPU(), status: 'outdated', version: 'v528.24 (نیازمند آپدیت ریموت)', type: 'شتاب‌دهنده گرافیک' },
+            { name: `${cores} Cores CPU System Logic`, status: 'optimal', version: 'پایدار و معتبر', type: 'پردازشگر مرکزی' },
+            { name: `DDR Volatile RAM (${memory} GB Verified)`, status: 'optimal', version: 'سرعت تراکنش عالی', type: 'حافظه موقت' },
             { name: `${getRealOS()}`, status: 'outdated', version: `${isOnlineState}`, type: 'سیستم‌عامل فرعی' }
           ]);
           setScanStep('complete');
-        }, 1200);
+        }, 1100);
       }
       setScanProgress(Math.min(progress, 100));
-    }, 100);
+    }, 80);
   };
 
   const stats = [
-    { value: '۴,۸۰۰+', label: 'خدمت نصب موفق ریموت', icon: Zap, color: 'text-amber-500 bg-amber-500/10' },
-    { value: '۱۰۰٪', label: 'رضایت خریداران', icon: Star, color: 'text-emerald-500 bg-emerald-500/10' },
-    { value: '۱۲ک+', label: 'کاربر فعال ثبتی', icon: Users, color: 'text-blue-500 bg-blue-500/10' },
+    { value: '۴,۸۰۰+', label: 'خدمت نصب موفق ریموت', icon: Zap, color: 'text-amber-400 bg-amber-400/10' },
+    { value: '۱۰۰٪', label: 'رضایت خریداران', icon: Star, color: 'text-emerald-400 bg-emerald-400/10' },
+    { value: '۱۲ک+', label: 'کاربر فعال ثبتی', icon: Users, color: 'text-blue-400 bg-blue-400/10' },
   ];
 
   const services = [
     {
-      title: 'نصب هوشمند درایورهای سخت‌افزار',
-      description: 'شناسایی خودکار و تزریق باکیفیت‌ترین بسته‌های درایور اورجینال سازگار با مدل دقیق لپ‌تاپ یا مادربورد بدون ریسک صفحه آبی مرگ (BSOD).',
+      title: 'نصب خودکار درایورهای مادربرد و گرافیک',
+      description: 'شناسایی و تزریق اورجینال‌ترین بسته‌های درایور سازگار با مدل دقیق لپ‌تاپ یا سیستم دسکتاپ از راه دور بدون ریسک صفحه آبی مرگ (BSOD).',
       icon: Cpu,
-      gradient: 'from-blue-600 via-cyan-550 to-teal-500 border-cyan-100',
+      gradient: 'from-blue-600 to-indigo-650',
       badge: 'پرطرفدار ترین',
     },
     {
-      title: 'حل عیوب و فعال‌سازی دائمی لایسنس',
-      description: 'نصب برنامه‌های سنگین، نرم‌افزارهای مهندسی عمران، معماری، گرافیک و اداری با فعال‌سازی اصولی و دائم به دور از بدافزارها.',
+      title: 'نصب و معتبرسازی دائم برنامه‌ها',
+      description: 'نصب تمامی ابزارهای مهندسی عمران، متلب، مهندسی مکانیک، معماری، گرافیکی نظیر اتوکد و ادوبی به همراه فعال‌سازی آفلاین اصولی.',
       icon: Laptop,
-      gradient: 'from-purple-650 via-purple-600 to-pink-600 border-purple-150',
-      badge: 'تضمینی ویژه',
+      gradient: 'from-purple-650 to-pink-600',
+      badge: 'پشتیبانی ویژه',
     },
     {
-      title: 'اتصال ریموت محافظت‌شده AnyDesk',
-      description: 'ارائه راهکار در قالب کانال امن و اختصاصی، نظارت کامل صفر تا صد شما روی نمایشگر، همراه با چت زنده و فاکتور شفاف سیستمی.',
+      title: 'ریموت اختصاصی و فوق‌امن AnyDesk',
+      description: 'فرآیند اتصال محافظت‌شده؛ شما بر روی مانیتور خود به صورت ۱۰۰٪ نظارت داشته و هر زمان که اراده کنید اتصال قطع می‌گردد.',
       icon: Headphones,
-      gradient: 'from-emerald-500 via-teal-500 to-blue-500 border-emerald-100',
-      badge: 'پشتیبانی زنده',
+      gradient: 'from-emerald-500 to-teal-500',
+      badge: 'پشتیبانی فوری',
     },
   ];
 
   return (
-    <div className="font-sans min-h-screen bg-slate-950 text-white relative overflow-hidden" dir="rtl">
+    <div ref={containerRef} className="font-sans min-h-screen bg-slate-950 text-white relative selection:bg-indigo-500/30" dir="rtl">
       
-      {/* 3D background elements with extreme premium feeling */}
-      <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-gradient-to-tr from-purple-600/15 to-blue-600/10 blur-[130px] rounded-full -z-10 animate-pulse duration-1000" />
-      <div className="absolute bottom-[-5%] left-[-10%] w-[500px] h-[500px] bg-gradient-to-tr from-blue-500/10 to-teal-400/15 blur-[120px] rounded-full -z-10" />
-      <div className="absolute top-[30%] left-[20%] w-[300px] h-[300px] bg-indigo-505/10 blur-[140px] rounded-full -z-10" />
-
-      {/* Decorative Grid Patterns for subtle tech feel */}
-      <div className="absolute inset-0 bg-[radial-gradient(#ffffff0a_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none opacity-60" />
-
-      {/* Hero Section Container */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-20 md:pt-20 md:pb-28 relative z-10">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+      {/* Dynamic 3D Immersive Split-Screen Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-0 min-h-screen">
+        
+        {/* ==========================================
+            LEFT SIDE: STICKY 3D ROBOT LANDING CANVAS
+            ========================================== */}
+        <div className="lg:col-span-5 h-[340px] sm:h-[420px] lg:h-screen lg:sticky lg:top-0 w-full bg-slate-950 border-b lg:border-b-0 lg:border-l border-slate-900 overflow-hidden relative z-20 shadow-[0_4px_30px_rgba(0,0,0,0.4)] md:shadow-none">
           
-          {/* Left Side: Dynamic Text Elements */}
-          <div className="lg:col-span-6 space-y-8 text-right">
+          {/* Subtle Cyber Grid Backdrops inside sticky column */}
+          <div className="absolute inset-0 bg-[radial-gradient(#ffffff04_1.5px,transparent_1.5px)] [background-size:20px_20px] pointer-events-none opacity-80" />
+          
+          <RobotLandingCanvas scrollProgress={scrollProgress} setActiveTab={setActiveTab} />
+
+          {/* Scrolling Helper Badge overlay */}
+          <div className="absolute top-4 right-4 bg-slate-900/95 border border-slate-800/80 rounded-xl px-3 py-1.5 backdrop-blur-md flex items-center gap-1.5 pointer-events-none shadow-lg">
+            <span className="flex h-2 w-2 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+            </span>
+            <span className="text-[10px] text-slate-300 font-extrabold">ارتباط زنده ۳ بعدی: روشن</span>
+          </div>
+
+          {/* Mouse hover cue on mobile */}
+          <div className="absolute bottom-4 left-4 block lg:hidden bg-slate-900/90 border border-slate-850 rounded-xl px-2.5 py-1 text-[9px] text-slate-400 font-bold backdrop-blur-sm shadow-md">
+            🔽 اسکرول کنید تا انیمیشن تغییر کند
+          </div>
+        </div>
+
+        {/* ==========================================
+            RIGHT SIDE: SCROLLABLE CORE COPY & FLOW PANELS
+            ========================================== */}
+        <div className="lg:col-span-7 relative z-10 bg-slate-950 px-4 sm:px-8 lg:px-14 py-10 lg:py-16 space-y-24">
+          
+          {/* Neon cosmic blurs */}
+          <div className="absolute top-[10%] right-[-10%] w-[450px] h-[450px] bg-gradient-to-tr from-purple-600/10 to-indigo-600/5 blur-[120px] rounded-full -z-10 pointer-events-none" />
+          <div className="absolute top-[50%] left-[-10%] w-[380px] h-[380px] bg-gradient-to-tr from-cyan-500/5 to-teal-400/8 blur-[110px] rounded-full -z-10 pointer-events-none" />
+
+          {/* 1. INTRODUCTION HERO PANEL */}
+          <section className="space-y-8 pt-4">
             
-            {/* Super creative premium floating badge */}
+            {/* Super premium floating badge with motion bounce */}
             <motion.div 
-              initial={{ opacity: 0, y: -20 }}
+              initial={{ opacity: 0, y: -15 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900/85 border border-slate-800 rounded-full shadow-[0_0_15px_rgba(139,92,246,0.15)] text-slate-205 text-xs font-semibold backdrop-blur-md"
+              transition={{ duration: 0.5 }}
+              className="inline-flex items-center gap-2 px-3.5 py-2 bg-slate-900/85 border border-slate-800 rounded-full shadow-[0_0_15px_rgba(99,102,241,0.12)] text-xs backdrop-blur-md"
             >
-              <span className="flex h-2 w-2 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
-              </span>
-              <Sparkles className="h-3.5 w-3.5 text-indigo-400 animate-spin duration-3000" />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-slate-200 to-indigo-350">اولین سامانه‌ هوشمند اورژانسی درایورها از راه دور</span>
+              <Sparkles className="h-3.5 w-3.5 text-indigo-400 animate-spin duration-3000 shrink-0" />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-slate-200 to-indigo-300 font-bold">سامانه‌ یکپارچه و هوشمند خدمات ریموت رایانه‌ای</span>
             </motion.div>
 
-            {/* Glowing Main Heading */}
             <div className="space-y-4">
-              <motion.h1 
-                initial={{ opacity: 0, x: 30 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.7, delay: 0.1 }}
-                className="text-4xl sm:text-5xl xl:text-6xl font-black tracking-tight leading-[1.25] text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-100 to-slate-350"
-              >
+              <h1 className="text-3.5xl sm:text-5xl xl:text-5.5xl font-black tracking-tight leading-[1.25] text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-100 to-slate-350">
                 سلامت سیستم شما، <br />
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400 drop-shadow-[0_2px_15px_rgba(99,102,241,0.2)]">
-                  در ۳ فاز کاملاً آنلاین!
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400 drop-shadow-[0_2px_15px_rgba(99,102,241,0.15)]">
+                  هماهنگ با اسکرول زمان!
                 </span>
-              </motion.h1>
+              </h1>
 
-              <motion.p 
-                initial={{ opacity: 0, x: 30 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.7, delay: 0.2 }}
-                className="text-sm sm:text-base text-slate-400 leading-relaxed max-w-xl font-medium"
-              >
-                دیگر نیاز به جدا کردن سیم‌کشی‌های کیس یا حمل پر دردسر لپ‌تاپ به بازار ندارید! با ایزی‌درایور، مهندسان فوق‌ارشد ما با امن‌ترین پروتکل ریموت متصل شده، سخت‌ترین درایورها و نقص‌های سیستمی را فوری برایتان شاداب و هموار می‌کنند.
-              </motion.p>
+              <p className="text-xs sm:text-sm text-slate-400 leading-relaxed font-normal max-w-xl">
+                دیگر نیازی به کابل‌کشی مجدد کیس یا جابجایی لپ‌تاپ به مراکز سنتی بازار ندارید. تکنسین‌های ارشد ما به کمک پروتکل‌های AnyDesk، روان‌ترین بسته‌ها و پایداری لایسنس‌ها را با مانیتورینگ زنده شخص شما نهایی می‌کنند.
+              </p>
             </div>
 
-            {/* Futuristic Magnetic Action Buttons */}
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, delay: 0.3 }}
-              className="flex flex-wrap gap-4 pt-2"
-            >
+            {/* Scrolling Trigger Cue */}
+            <div className="p-4 bg-slate-900/40 border border-slate-850/80 rounded-2xl max-w-xl text-right space-y-1.5 flex items-start gap-3">
+              <div className="p-2 bg-indigo-500/10 rounded-xl text-indigo-400 shrink-0 mt-0.5 animate-bounce">
+                <ArrowDown className="h-4 w-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-black text-slate-100">جهت بیدار کردن ربات اسکرول کنید!</h4>
+                <p className="text-[10px] text-slate-400">انیمیشن ربات سمت چپ دقیقا همزمان با اسکرول صفحه تغییر حالت داده و فرآیند عیب‌یابی را شبیه‌سازی می‌کند.</p>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-wrap gap-4 pt-2">
               <button
                 onClick={() => setActiveTab('new-request')}
-                className="relative px-8 py-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-750 hover:to-purple-750 text-white rounded-2xl text-xs sm:text-sm font-black shadow-[0_4px_25px_rgba(99,102,241,0.4)] hover:shadow-[0_4px_35px_rgba(99,102,241,0.6)] transition-all flex items-center gap-2.5 group cursor-pointer overflow-hidden border border-white/10"
+                className="relative px-7 py-3.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-750 hover:to-purple-750 text-white rounded-2xl text-[11px] sm:text-xs font-black shadow-[0_4px_25px_rgba(99,102,241,0.35)] hover:shadow-[0_4px_35px_rgba(99,102,241,0.5)] transition-all flex items-center gap-2 group cursor-pointer overflow-hidden border border-white/5"
               >
-                <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(255,255,255,0.15)_50%,transparent_75%)] bg-[length:250%_250%] animate-[shimmer_3s_infinite]" />
-                <span>شروع و سفارش درایور ریموت</span>
-                <ArrowLeft className="h-4.5 w-4.5 group-hover:-translate-x-1.5 transition-transform" />
+                <span>شروع و ارسال فوری سفارش ریموت</span>
+                <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />
               </button>
               
               <button
                 onClick={() => setActiveTab('tickets')}
-                className="px-8 py-4 bg-slate-900 hover:bg-slate-850 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-700 rounded-2xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer shadow-inner"
+                className="px-7 py-3.5 bg-slate-900 hover:bg-slate-855 text-slate-350 hover:text-white border border-slate-800/80 hover:border-slate-700/80 rounded-2xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer shadow-inner"
               >
-                <span>مشاوره و پشتیبانی چت زنده</span>
+                <span>مکالمه با واحد مهندسی</span>
               </button>
-            </motion.div>
+            </div>
 
-            {/* Staggered Stats row */}
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.8, delay: 0.4 }}
-              className="grid grid-cols-3 gap-4 pt-8 border-t border-slate-900/90"
-            >
+            {/* Quick Metrics */}
+            <div className="grid grid-cols-3 gap-3.5 pt-6 border-t border-slate-900/80 max-w-xl">
               {stats.map((s, idx) => {
                 const Icon = s.icon;
                 return (
-                  <div key={idx} className="space-y-1.5 p-3.5 bg-slate-900/40 rounded-2xl border border-slate-900/60 backdrop-blur-sm">
-                    <div className="flex items-center gap-2">
-                      <div className={`p-1.5 rounded-lg ${s.color}`}>
-                        <Icon className="h-4 w-4" />
+                  <div key={idx} className="p-3 bg-slate-900/30 rounded-2xl border border-slate-900/60 backdrop-blur-sm space-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <div className={`p-1 rounded-md ${s.color}`}>
+                        <Icon className="h-3.5 w-3.5" />
                       </div>
-                      <span className="text-base sm:text-lg font-black text-slate-100">{s.value}</span>
+                      <span className="text-sm font-black text-slate-200">{s.value}</span>
                     </div>
-                    <span className="text-[10px] text-slate-400 font-semibold block">{s.label}</span>
+                    <span className="text-[9px] text-slate-450 font-semibold block">{s.label}</span>
                   </div>
                 );
               })}
-            </motion.div>
+            </div>
 
-          </div>
+          </section>
 
-          {/* Right Side: The Interactive 3D Hologram Diagnostic Station */}
-          <div className="lg:col-span-6 flex justify-center items-center">
+          {/* 2. CORE SERVICES PANELS */}
+          <section className="space-y-8 border-t border-slate-900/80 pt-12">
             
+            <div className="space-y-2">
+              <span className="text-[10px] text-indigo-400 font-extrabold uppercase tracking-widest block">کاتالوگ خدمات تخصصی</span>
+              <h2 className="text-xl sm:text-2.5xl font-black text-slate-100">سرویس‌های قابل واگذاری ریموت</h2>
+              <p className="text-[11px] text-slate-400 leading-relaxed font-normal">
+                ما بستری جامع برای حل عیوب گرافیک، پورت کام و نصب برنامه‌های تخصصی به دور از بدافزارها داریم.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {services.map((srv, idx) => {
+                const SrvIcon = srv.icon;
+                return (
+                  <motion.div
+                    key={idx}
+                    initial={{ opacity: 0, y: 15 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.4, delay: idx * 0.1 }}
+                    className="p-5.5 bg-slate-900/40 rounded-2.5xl border border-slate-850/60 hover:border-slate-800 hover:bg-slate-900/70 transition-all duration-300 flex flex-col justify-between items-start text-right space-y-4 relative group"
+                  >
+                    <span className="absolute top-4 left-4 text-[8px] bg-slate-850 text-indigo-300 font-extrabold px-1.5 py-0.5 rounded">
+                      {srv.badge}
+                    </span>
+
+                    <div className="space-y-3 pt-2">
+                      <div className={`p-2.5 bg-gradient-to-br ${srv.gradient} text-white rounded-xl shadow-md w-fit`}>
+                        <SrvIcon className="h-4.5 w-4.5" />
+                      </div>
+                      
+                      <h3 className="text-xs sm:text-sm font-black text-slate-150 group-hover:text-white transition-colors">
+                        {srv.title}
+                      </h3>
+                      
+                      <p className="text-[10px] text-slate-400 leading-relaxed font-normal line-clamp-3">
+                        {srv.description}
+                      </p>
+                    </div>
+                    
+                    <button
+                      onClick={() => setActiveTab('new-request')}
+                      className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 group-hover:translate-x-1 transition-transform cursor-pointer pt-1"
+                    >
+                      <span>ثبت درخواست</span>
+                      <ArrowLeft className="h-3.5 w-3.5" />
+                    </button>
+                  </motion.div>
+                );
+              })}
+            </div>
+
+          </section>
+
+          {/* 3. INTERACTIVE BROWSER HARDWARE DIAGNOSTIC STATION */}
+          <section className="space-y-8 border-t border-slate-900/80 pt-12">
+            
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="p-1 px-2.5 bg-rose-500/10 border border-rose-500/20 rounded-md text-[9px] text-rose-400 font-bold uppercase tracking-wider">شبیه‌سازی زنده</span>
+                <span className="text-[10px] text-slate-400 font-extrabold uppercase block">ابزار عیب‌یابی آزمایشی مرورگر</span>
+              </div>
+              <h2 className="text-xl sm:text-2.5xl font-black text-slate-100">تحلیل فنی و عیب‌یابی آنی سیستم شما</h2>
+              <p className="text-[11px] text-slate-400 font-normal">
+                برقراری ارتباط دوطرفه سخت‌افزاری! با اجرای تست زیر، دیتای گرافیکی فعلی شما استخراج شده و همزمان ربات ۳بعدی سمت چپ با بیشترین دور سرعت شروع به بهینه‌سازی می‌کند.
+              </p>
+            </div>
+
             <motion.div
               style={{ rotateX, rotateY, transformStyle: 'preserve-3d' }}
               onMouseMove={handleMouseMove}
               onMouseLeave={handleMouseLeave}
-              whileHover={{ scale: 1.02 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-              className="w-full max-w-lg bg-slate-900/60 border border-slate-800 rounded-[35px] p-6 sm:p-7 shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-lg relative overflow-hidden group/card text-right"
+              whileHover={{ scale: 1.01 }}
+              transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+              className="w-full bg-slate-900/60 border border-slate-800 rounded-[28px] p-5 sm:p-6 shadow-xl relative overflow-hidden text-right"
             >
-              {/* Outer neon scanner ring */}
-              <div className="absolute inset-0 bg-gradient-to-tr from-purple-500/5 via-transparent to-blue-500/5 pointer-events-none rounded-[35px]" />
-              
-              {/* Animated corner decorations */}
-              <div className="absolute top-5 left-5 w-4 h-4 border-t-2 border-l-2 border-indigo-500/40 pointer-events-none" />
-              <div className="absolute top-5 right-5 w-4 h-4 border-t-2 border-r-2 border-indigo-500/40 pointer-events-none" />
-              <div className="absolute bottom-5 left-5 w-4 h-4 border-b-2 border-l-2 border-indigo-500/40 pointer-events-none" />
-              <div className="absolute bottom-5 right-5 w-4 h-4 border-b-2 border-r-2 border-indigo-500/40 pointer-events-none" />
+              {/* Corner decorations */}
+              <div className="absolute top-4 left-4 w-3.5 h-3.5 border-t border-l border-indigo-500/40 pointer-events-none" />
+              <div className="absolute top-4 right-4 w-3.5 h-3.5 border-t border-r border-indigo-500/40 pointer-events-none" />
+              <div className="absolute bottom-4 left-4 w-3.5 h-3.5 border-b border-l border-indigo-500/40 pointer-events-none" />
+              <div className="absolute bottom-4 right-4 w-3.5 h-3.5 border-b border-r border-indigo-500/40 pointer-events-none" />
 
-              {/* Holographic scanner laser line when active */}
               {scanStep === 'scanning' && (
-                <motion.div 
-                  initial={{ y: -20 }}
-                  animate={{ y: '280px' }}
-                  transition={{ repeat: Infinity, duration: 1.8, ease: 'linear' }}
-                  className="absolute left-0 right-0 h-1 bg-gradient-to-r from-transparent via-blue-400 to-transparent shadow-[0_0_15px_#22d3ee] z-20"
-                />
+                <div className="absolute left-0 right-0 h-0.5 bg-cyan-400 shadow-[0_0_12px_#22d3ee] z-20 animate-pulse" style={{ top: `${scanProgress}%` }} />
               )}
 
-              {/* Station header layout */}
-              <div className="flex items-center justify-between border-b border-slate-850 pb-4 mb-5">
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-slate-850 pb-3 mb-4">
                 <div className="flex items-center gap-2">
-                  <div className="p-2 bg-indigo-500/10 text-indigo-400 rounded-xl">
-                    <Gauge className="h-5 w-5 animate-pulse" />
+                  <div className="p-2 bg-indigo-500/10 text-indigo-400 rounded-lg">
+                    <Monitor className="h-4.5 w-4.5 animate-pulse" />
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 font-bold block">عیب‌یاب هوشمند آنلاین</span>
-                    <h3 className="text-xs sm:text-sm font-black text-slate-100">تحلیل سازگاری و سلامت سخت‌افزار مـحیطی</h3>
+                    <h3 className="text-xs font-black text-slate-150">بررسی پورت مانیتورینگ محلی</h3>
+                    <span className="text-[9px] text-indigo-400 font-mono">PCI-NODE CONTROLLER v3.8</span>
                   </div>
                 </div>
-                
-                <span className="text-[9px] bg-slate-800 px-2 py-1 rounded-lg text-slate-400 font-mono">
-                  EASY-STATION v4
-                </span>
               </div>
 
-              {/* Simulation Content Body */}
-              <div className="space-y-5 min-h-[220px] flex flex-col justify-between">
+              {/* Station Body */}
+              <div className="min-h-[170px] flex flex-col justify-between">
                 
                 {scanStep === 'idle' && (
-                  <div className="text-center py-6 space-y-4">
-                    <p className="text-[11px] text-slate-400 max-w-xs mx-auto leading-relaxed">
-                      شخصاً سخت‌افزار کامپیوتر خود را تست کنید! دکمه اسکن زیر را بـزنید تا ابزار هوشمند ما، درایورهای نیازمند آپدیت را نشان دهد.
+                  <div className="text-center py-4 space-y-4">
+                    <p className="text-[11px] text-slate-400 max-w-md mx-auto leading-relaxed">
+                      بخش مورد نظر را انتخاب و دکمه عیب‌یابی را فشار دهید تا تداخل سیستم به شما نشان داده شود.
                     </p>
-                    <div className="flex justify-center gap-3">
-                      <button
-                        onClick={() => setActiveDiagnosticTab('gpu')}
-                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
-                          activeDiagnosticTab === 'gpu' ? 'bg-indigo-500 text-white shadow-md' : 'bg-slate-850 text-slate-400 hover:text-slate-250'
-                        }`}
-                      >
-                        کارت گرافیک
-                      </button>
-                      <button
-                        onClick={() => setActiveDiagnosticTab('audio')}
-                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
-                          activeDiagnosticTab === 'audio' ? 'bg-indigo-500 text-white shadow-md' : 'bg-slate-850 text-slate-400 hover:text-slate-250'
-                        }`}
-                      >
-                        کارت صدا
-                      </button>
-                      <button
-                        onClick={() => setActiveDiagnosticTab('chipset')}
-                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
-                          activeDiagnosticTab === 'chipset' ? 'bg-indigo-500 text-white shadow-md' : 'bg-slate-850 text-slate-400 hover:text-slate-250'
-                        }`}
-                      >
-                        مادربورد
-                      </button>
+
+                    <div className="flex justify-center gap-2">
+                      {(['gpu', 'audio', 'chipset'] as const).map((tab) => (
+                        <button
+                          key={tab}
+                          onClick={() => setActiveDiagnosticTab(tab)}
+                          className={`px-3 py-1.5 rounded-lg text-[10px] font-black transition-all cursor-pointer ${
+                            activeDiagnosticTab === tab ? 'bg-indigo-600 text-white shadow' : 'bg-slate-850/85 text-slate-400 hover:text-slate-205'
+                          }`}
+                        >
+                          {tab === 'gpu' ? 'شتاب‌دهنده گرافیک' : tab === 'audio' ? 'کارت صدای مادربرد' : 'باس چیپست اصلی'}
+                        </button>
+                      ))}
                     </div>
 
-                    <div className="pt-2">
-                      <button
-                        onClick={startSimulation}
-                        className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(99,102,241,0.25)] flex items-center gap-2 mx-auto cursor-pointer"
-                      >
-                        <Search className="h-3.5 w-3.5" />
-                        <span>اسکن و عیب‌یابی کارت {activeDiagnosticTab === 'gpu' ? 'گرافیـک' : activeDiagnosticTab === 'audio' ? 'صـدا' : 'مادربـورد'}</span>
-                      </button>
-                    </div>
+                    <button
+                      onClick={startSimulation}
+                      className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black rounded-lg transition-all shadow-md hover:scale-103 mx-auto flex items-center gap-2 cursor-pointer"
+                    >
+                      <Search className="h-3.5 w-3.5" />
+                      <span>کنکاش و عیب‌یابی آنلاین {activeDiagnosticTab === 'gpu' ? 'کارت گرافیک' : activeDiagnosticTab === 'audio' ? 'کارت صدا' : 'چیپست اصلی'}</span>
+                    </button>
                   </div>
                 )}
 
                 {scanStep === 'scanning' && (
-                  <div className="py-6 space-y-4 text-center">
-                    <div className="relative w-16 h-16 mx-auto">
-                      <div className="absolute inset-0 rounded-full border-2 border-indigo-500/20" />
-                      <div className="absolute inset-0 rounded-full border-t-2 border-indigo-400 animate-spin" />
-                      <div className="absolute inset-0 flex items-center justify-center font-mono text-[11px] font-bold text-indigo-400">
+                  <div className="py-4 space-y-3 text-center">
+                    <div className="relative w-12 h-12 mx-auto">
+                      <div className="absolute inset-0 rounded-full border border-indigo-500/20" />
+                      <div className="absolute inset-0 rounded-full border-t border-indigo-400 animate-spin" />
+                      <div className="absolute inset-0 flex items-center justify-center font-mono text-[9px] font-bold text-indigo-400">
                         {scanProgress}%
                       </div>
                     </div>
-                    <p className="text-xs text-indigo-200 font-bold tracking-wide animate-pulse">
-                      ... در حال دریافت و شناسایی کدهای سخت‌افزاری PCI/VEN ...
-                    </p>
-                    <p className="text-[10px] text-slate-400 font-normal">
-                      سیستم هوشمند ایزی‌درایور در حال بازیابی دیتابیس درایورهای معتبر است.
+                    <p className="text-[11px] text-indigo-300 font-bold animate-pulse">
+                      در حال دریافت کدهای سخت‌افزاری PCI/VEN ...
                     </p>
                   </div>
                 )}
 
                 {scanStep === 'analyzing' && (
-                  <div className="py-8 space-y-3 text-center">
-                    <div className="flex justify-center gap-1.5 mb-1.5">
-                      <span className="h-2.5 w-2.5 bg-blue-500 rounded-full animate-bounce" />
-                      <span className="h-2.5 w-2.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:0.2s]" />
-                      <span className="h-2.5 w-2.5 bg-purple-500 rounded-full animate-bounce [animation-delay:0.4s]" />
-                    </div>
-                    <p className="text-xs text-blue-300 font-bold">
-                      ... یافتن تداخل نسخه‌های قدیمی در سیستم‌عامل ...
-                    </p>
-                    <p className="text-[10px] text-slate-400 font-normal max-w-xs mx-auto leading-relaxed">
-                      نسخه‌های معتبر جدید با لایسنس دائم در حال پردازش هستند.
+                  <div className="py-6 space-y-2 text-center">
+                    <RefreshCw className="h-6 w-6 text-indigo-400 animate-spin mx-auto mb-1" />
+                    <p className="text-[11px] text-blue-300 font-bold">
+                      یافتن همپوشانی و خطاهای رجیستری مادربرد...
                     </p>
                   </div>
                 )}
 
                 {scanStep === 'complete' && (
                   <div className="space-y-3">
-                    <p className="text-[11px] bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 p-2.5 rounded-xl font-bold flex items-center gap-1.5">
-                      <Check className="h-4 w-4 shrink-0 text-emerald-400" />
-                      <span>تحلیل موفق! فایلهای نصب قدیمی و معیوب شناسایی شدند</span>
-                    </p>
+                    <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 rounded-xl text-[10px] flex items-center gap-2 font-bold justify-center">
+                      <Check className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                      <span>تحلیل موفقیت‌آمیز! فایل‌های ناسازگار با موفقیت رهگیری شدند</span>
+                    </div>
 
-                    <div className="space-y-2 bg-slate-950/80 p-3 rounded-xl border border-slate-850 text-[10px] leading-relaxed max-h-[140px] overflow-y-auto font-mono text-slate-300 antialiased">
+                    <div className="space-y-1.5 bg-slate-950 p-2.5 rounded-lg border border-slate-850 max-h-[120px] overflow-y-auto font-mono text-[9px] text-slate-300">
                       {detectedDrivers.map((driver, idx) => (
-                        <div key={idx} className="flex items-center justify-between border-b border-slate-900/40 pb-1.5">
-                          <div className="flex flex-col text-right">
-                            <span className="font-sans font-semibold text-slate-100">{driver.name}</span>
-                            <span className="text-[8px] text-slate-405 font-sans">بخش: {driver.type} • ورژن فعلی: {driver.version}</span>
-                          </div>
-                          <span className={`px-2 py-0.5 rounded font-sans font-bold text-[8px] ${
-                            driver.status === 'outdated' ? 'bg-rose-500/10 text-rose-450 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-450'
+                        <div key={idx} className="flex items-center justify-between border-b border-white/5 pb-1 select-text">
+                          <span className="font-semibold text-slate-200">{driver.name}</span>
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-sans ${
+                            driver.status === 'outdated' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-400'
                           }`}>
-                            {driver.status === 'outdated' ? 'نیازمند بهینه‌سازی ریموت' : 'کاملاً بهینه'}
+                            {driver.status === 'outdated' ? 'درایور معیوب/قدیمی' : 'پایدار اورجینال'}
                           </span>
                         </div>
                       ))}
                     </div>
 
-                    <div className="flex gap-2 pt-2">
+                    <div className="flex gap-2 pt-1">
                       <button
                         onClick={startSimulation}
-                        className="py-2.5 bg-transparent border border-slate-800 hover:bg-slate-850 text-slate-300 rounded-xl text-[10px] font-bold w-1/3 transition-all cursor-pointer"
+                        className="py-2 bg-transparent border border-slate-800 hover:bg-slate-850 text-slate-400 hover:text-white rounded-lg text-[9px] w-1/3 transition-all cursor-pointer font-bold"
                       >
-                        اسکن مجدد
+                        تست مجدد
                       </button>
                       <button
                         onClick={() => setActiveTab('new-request')}
-                        className="py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 font-bold text-white rounded-xl text-[10px] w-2/3 shadow-md flex items-center justify-center gap-1 transition-all cursor-pointer"
+                        className="py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 font-black text-slate-950 rounded-lg text-[10px] w-2/3 shadow flex items-center justify-center gap-1 transition-all cursor-pointer"
                       >
                         <Wrench className="h-3.5 w-3.5" />
-                        <span>اکنون واگذار به تکنسین ریموت کنید</span>
+                        <span>تحویل پرونده به مهندس از راه دور</span>
                       </button>
                     </div>
                   </div>
                 )}
 
               </div>
-
-              {/* Glowing Interactive Badge */}
-              <div className="pt-4 border-t border-slate-850 mt-4 flex items-center justify-between text-[10px] text-slate-400 font-bold">
-                <span className="flex items-center gap-1">
-                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-                  <span>انتقال داده‌ها کامپکت و امن</span>
-                </span>
-                <span className="text-indigo-400">تایم‌لاین عیب‌یابی: کمتر از ۳ ثانیه</span>
-              </div>
             </motion.div>
 
-          </div>
+          </section>
 
-        </div>
-      </section>
+          {/* 4. STANDARDS & BENTO GRID ADVANTAGES */}
+          <section className="space-y-8 border-t border-slate-900/80 pt-12">
+            
+            <div className="space-y-2">
+              <span className="text-[10px] text-cyan-400 font-extrabold uppercase tracking-widest block">مزیت رقابتی ما (standards)</span>
+              <h2 className="text-xl sm:text-2.5xl font-black text-slate-100">چرا هزاران کاربر به خدمات ما تکیه دارند؟</h2>
+              <p className="text-[11px] text-slate-400 leading-relaxed font-normal">
+                امنیت، سرعت و دسترسی بدون محدودیت مزیتی است که به صورت تضمینی برای شما فراهم کرده‌ایم.
+              </p>
+            </div>
 
-      {/* 2. Core Services Grid (Dark Premium Aesthetic) */}
-      <section className="bg-slate-950/90 border-y border-slate-900 py-18 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
-          
-          <div className="text-center max-w-2xl mx-auto space-y-3 mb-14">
-            <span className="text-xs text-indigo-400 font-black tracking-widest uppercase block">کاتالوگ خدمات تخصصی</span>
-            <h2 className="text-2xl sm:text-3.5xl font-black text-slate-100">سرویس‌های قابل واگذاری ریموت</h2>
-            <p className="text-xs text-slate-450 leading-relaxed font-normal">
-              ما بستری جامع برای برون‌سپاری نصب درایورهای مبهم مادربرد، گرافیک، لپ‌تاپ و رفع تمامی خطاهای مضحک سیستم‌عامل ارائه داده‌ایم.
-            </p>
-          </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              
+              <div className="p-5 bg-slate-900/30 rounded-2xl border border-slate-900/80 hover:border-slate-800/80 space-y-2 text-right">
+                <div className="h-8 w-8 bg-blue-500/15 text-blue-400 rounded-xl flex items-center justify-center">
+                  <Shield className="h-4.5 w-4.5" />
+                </div>
+                <h4 className="font-extrabold text-xs text-slate-150">بدون نیاز به خروج از منزل</h4>
+                <p className="text-[10px] text-slate-450 leading-relaxed font-normal">
+                  سیستم خود را در خانه بگذارید. با امن‌ترین استاندارد ریموت بدون کوچکترین دغدغه ترافیک خدمات بگیرید.
+                </p>
+              </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {services.map((srv, idx) => {
-              const SrvIcon = srv.icon;
-              return (
-                <motion.div
-                  key={idx}
-                  initial={{ opacity: 0, y: 30 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 0.5, delay: idx * 0.15 }}
-                  className="p-7 bg-slate-900/50 rounded-3xl border border-slate-850/60 hover:border-slate-800 hover:bg-slate-900 transition-all duration-300 shadow-sm flex flex-col justify-between items-start text-right space-y-6 relative group"
-                >
-                  {/* Floating badge inside cards */}
-                  <span className="absolute top-5 left-5 text-[9px] bg-slate-800 text-indigo-300 font-bold px-2 py-0.5 rounded-md">
-                    {srv.badge}
-                  </span>
+              <div className="p-5 bg-slate-900/30 rounded-2xl border border-slate-900/80 hover:border-slate-800/80 space-y-2 text-right">
+                <div className="h-8 w-8 bg-emerald-500/15 text-emerald-400 rounded-xl flex items-center justify-center">
+                  <CheckCircle2 className="h-4.5 w-4.5" />
+                </div>
+                <h4 className="font-extrabold text-xs text-slate-150">ضمانت فایل و پایداری ویندوز</h4>
+                <p className="text-[10px] text-slate-450 leading-relaxed font-normal">
+                  سورس برنامه‌ها کاملا هماهنگ، تست‌شده و عاری از هرگونه ویروس یا تروجان استخراج و بر سیستم شما فعال می‌شوند.
+                </p>
+              </div>
 
-                  <div className="space-y-4">
-                    <div className={`p-3.5 bg-gradient-to-br ${srv.gradient} text-white rounded-2xl shadow-lg w-fit`}>
-                      <SrvIcon className="h-5.5 w-5.5" />
-                    </div>
-                    
-                    <h3 className="text-base font-extrabold text-slate-100 group-hover:text-white transition-colors">
-                      {srv.title}
-                    </h3>
-                    
-                    <p className="text-xs text-slate-400 leading-relaxed font-medium">
-                      {srv.description}
-                    </p>
-                  </div>
-                  
-                  <button
-                    onClick={() => setActiveTab('new-request')}
-                    className="text-[11px] font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 group-hover:translate-x-1 transition-transform cursor-pointer pt-2"
+              <div className="p-5 bg-slate-900/30 rounded-2xl border border-slate-900/80 hover:border-slate-800/80 space-y-2 text-right">
+                <div className="h-8 w-8 bg-purple-500/15 text-purple-400 rounded-xl flex items-center justify-center">
+                  <Activity className="h-4.5 w-4.5" />
+                </div>
+                <h4 className="font-extrabold text-xs text-slate-150">تحویل آنی و سریع ریموت</h4>
+                <p className="text-[10px] text-slate-450 leading-relaxed font-normal">
+                  تکنسین متخصص بلافاصله بعد از بررسی اولیه ادمین با شما هماهنگ شده و اقدامات لایسنسینگ را نهایی می‌کند.
+                </p>
+              </div>
+
+              <div className="p-5 bg-slate-900/30 rounded-2xl border border-slate-900/80 hover:border-slate-800/80 space-y-2 text-right">
+                <div className="h-8 w-8 bg-amber-500/15 text-amber-400 rounded-xl flex items-center justify-center">
+                  <Star className="h-4.5 w-4.5" />
+                </div>
+                <h4 className="font-extrabold text-xs text-slate-150">پرداخت امن به همراه پشتیبانی مکرر</h4>
+                <p className="text-[10px] text-slate-450 leading-relaxed font-normal">
+                  در صورت حل نشدن مشکل مبالغ تحت نظر شما عودت داده شده و تیکت‌ها مکررا بازبینی می‌گردند.
+                </p>
+              </div>
+
+            </div>
+
+          </section>
+
+          {/* 5. CUSTOMER TESTIMONIALS CAROUSEL */}
+          {approvedReviews.length > 0 && (
+            <section className="space-y-6 border-t border-slate-900/80 pt-12">
+              
+              <div className="space-y-1">
+                <span className="text-[9px] bg-slate-900 text-indigo-300 font-extrabold px-2.5 py-1 rounded mb-2 block w-fit">
+                  تاییدهای نهایی مشتریان (Testimonials)
+                </span>
+                <h2 className="text-xl font-black text-slate-200">صدا و اعتماد کاربران ما</h2>
+              </div>
+
+              <div className="bg-gradient-to-tr from-slate-900 to-slate-850 border border-slate-800 rounded-2.5xl p-6 relative overflow-hidden shadow-lg">
+                <div className="absolute top-2 left-4 text-slate-850 font-serif text-7xl select-none leading-none opacity-40">
+                  ”
+                </div>
+
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={currentReviewIndex}
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.3 }}
+                    className="space-y-3"
                   >
-                    <span>سفارش نصب درایور</span>
+                    <div className="flex gap-0.5">
+                      {[...Array(approvedReviews[currentReviewIndex].rating)].map((_, i) => (
+                        <Star key={i} className="h-4 w-4 text-amber-400 fill-amber-400" />
+                      ))}
+                    </div>
+
+                    <p className="text-[11px] sm:text-xs text-slate-300 leading-relaxed font-normal italic select-text">
+                      « {approvedReviews[currentReviewIndex].comment} »
+                    </p>
+
+                    <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
+                      <div>
+                        <h4 className="text-[11px] font-black text-white">
+                          {approvedReviews[currentReviewIndex].customerName}
+                        </h4>
+                        {approvedReviews[currentReviewIndex].serviceType && (
+                          <p className="text-[9px] text-slate-500 mt-0.5">
+                            سرویس: {approvedReviews[currentReviewIndex].serviceType === 'driver_install' ? 'نصب درایور سخت‌افزار' : 'برنامه‌های کاربردی'}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                </AnimatePresence>
+
+                {/* Arrow slide keys */}
+                <div className="flex justify-end gap-1.5 mt-4">
+                  <button
+                    onClick={() =>
+                      setCurrentReviewIndex(
+                        (prev) => (prev === 0 ? approvedReviews.length - 1 : prev - 1)
+                      )
+                    }
+                    className="p-2 bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-all cursor-pointer border border-slate-850"
+                  >
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() =>
+                      setCurrentReviewIndex((prev) => (prev + 1) % approvedReviews.length)
+                    }
+                    className="p-2 bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-all cursor-pointer border border-slate-850"
+                  >
                     <ArrowLeft className="h-3.5 w-3.5" />
                   </button>
-                </motion.div>
-              );
-            })}
-          </div>
-
-        </div>
-      </section>
-
-      {/* 3. Creative Interactive Bento Box benefits with visual satisfaction */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 relative">
-        <div className="absolute top-[20%] right-[30%] w-[250px] h-[250px] bg-purple-500/5 blur-[100px] pointer-events-none rounded-full" />
-        
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
-          
-          <div className="lg:col-span-4 space-y-5 text-right">
-            <span className="text-xs text-blue-400 font-black uppercase tracking-widest block">استاندارهای کیفی ایزی‌درایور (Standards)</span>
-            <h2 className="text-2xl sm:text-3.5xl font-black text-slate-100 tracking-tight leading-[1.3]">
-              چرا هزاران کاربر به خدمات ریموت ما تکیه کرده‌اند؟
-            </h2>
-            <p className="text-xs text-slate-400 leading-relaxed font-normal">
-              ما یک پین‌بورد تکنیکالی امن ایجاد کرده‌ایم تا مشتریان دغدغه دستکاری فایل‌های آلوده یا سوختن قطعات بر اثر ناسازگاری لایسنس را نداشته باشند.
-            </p>
-            
-            <div className="pt-3">
-              <button
-                onClick={() => setActiveTab('reviews')}
-                className="text-xs font-bold text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer transition-colors"
-              >
-                <span>مشاهده بازخورد مشتریان</span>
-                <ArrowLeft className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-
-          <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-2 gap-6">
-            
-            <motion.div 
-              whileHover={{ y: -5 }}
-              className="p-6 bg-slate-900/40 rounded-3xl border border-slate-900 hover:border-slate-800 shadow-xs text-right space-y-3"
-            >
-              <div className="h-9 w-9 bg-blue-500/10 text-blue-400 rounded-xl flex items-center justify-center">
-                <Shield className="h-4.5 w-4.5" />
-              </div>
-              <h4 className="font-extrabold text-sm text-slate-100">بدون نیاز به خروج از منزل</h4>
-              <p className="text-xs text-slate-400 leading-relaxed font-normal">
-                بدون دردسرهای جابجایی ترافیک تهران و شهرستان‌ها، با نظارت زنده خودتان بر روی AnyDesk خدمات می‌گیرید.
-              </p>
-            </motion.div>
-
-            <motion.div 
-              whileHover={{ y: -5 }}
-              className="p-6 bg-slate-900/40 rounded-3xl border border-slate-900 hover:border-slate-800 shadow-xs text-right space-y-3"
-            >
-              <div className="h-9 w-9 bg-emerald-500/10 text-emerald-400 rounded-xl flex items-center justify-center">
-                <CheckCircle2 className="h-4.5 w-4.5" />
-              </div>
-              <h4 className="font-extrabold text-sm text-slate-100">ضمانت سلامت لایسنس و فایلها</h4>
-              <p className="text-xs text-slate-400 leading-relaxed font-normal">
-                ما تمام نرم‌افزارها را از منابع اصلی بررسی، هماهنگ و بدون داشتن کوچکترین تروجان یا بدافزار بارگذاری می‌نماییم.
-              </p>
-            </motion.div>
-
-            <motion.div 
-              whileHover={{ y: -5 }}
-              className="p-6 bg-slate-900/40 rounded-3xl border border-slate-900 hover:border-slate-800 shadow-xs text-right space-y-3"
-            >
-              <div className="h-9 w-9 bg-purple-500/10 text-purple-400 rounded-xl flex items-center justify-center">
-                <Activity className="h-4.5 w-4.5" />
-              </div>
-              <h4 className="font-extrabold text-sm text-slate-100">تحویل آنی و سرعت عمل بالا</h4>
-              <p className="text-xs text-slate-400 leading-relaxed font-normal">
-                تکنسین‌های مجرب بلافاصله پس از بررسی ادمین متصل شده و دتکت سیستم را در کمتر از ۴ ساعت نهایی می‌کنند.
-              </p>
-            </motion.div>
-
-            <motion.div 
-              whileHover={{ y: -5 }}
-              className="p-6 bg-slate-900/40 rounded-3xl border border-slate-900 hover:border-slate-800 shadow-xs text-right space-y-3"
-            >
-              <div className="h-9 w-9 bg-amber-500/10 text-amber-400 rounded-xl flex items-center justify-center">
-                <Star className="h-4.5 w-4.5" />
-              </div>
-              <h4 className="font-extrabold text-sm text-slate-100">پرداخت امن و فاکتور شفاف</h4>
-              <p className="text-xs text-slate-400 leading-relaxed font-normal">
-                امکان تضمین بازگشت کامل وجه در صورت عدم امکان نصب و ارائه گزارش جزئیات کارکرد به کاربران گرامی.
-              </p>
-            </motion.div>
-
-          </div>
-
-        </div>
-      </section>
-
-      {/* 4. Customer Reviews Slider Carousel (Gorgeous Ambient Dark Theme Card) */}
-      {approvedReviews.length > 0 && (
-        <section className="bg-slate-900/60 text-white py-18 relative">
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-indigo-950/10 to-transparent pointer-events-none" />
-          
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 relative z-10">
-            
-            <div className="text-center space-y-2 mb-12">
-              <span className="text-[10px] bg-indigo-505/20 text-indigo-300 font-bold px-3.5 py-1.5 rounded-full uppercase tracking-wider block w-fit mx-auto">
-                بازخورد کاربران (Testimonials)
-              </span>
-              <h2 className="text-2xl font-black text-slate-100">صدا و اعتماد مشتریان ما</h2>
-            </div>
-
-            <div className="min-h-56 bg-gradient-to-tr from-slate-900 to-slate-850 border border-slate-800 rounded-[30px] p-6 sm:p-10 flex flex-col justify-between text-right relative overflow-hidden shadow-xl">
-              <div className="absolute top-4 left-6 text-slate-800 font-serif text-8xl select-none leading-none opacity-40">
-                ”
-              </div>
-
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={currentReviewIndex}
-                  initial={{ opacity: 0, x: 25 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -25 }}
-                  transition={{ duration: 0.35 }}
-                  className="space-y-4"
-                >
-                  <div className="flex items-center gap-1">
-                    {[...Array(approvedReviews[currentReviewIndex].rating)].map((_, i) => (
-                      <Star key={i} className="h-4.5 w-4.5 text-amber-400 fill-amber-400" />
-                    ))}
-                  </div>
-
-                  <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-normal italic">
-                    « {approvedReviews[currentReviewIndex].comment} »
-                  </p>
-
-                  <div className="pt-5 border-t border-slate-800/80 flex items-center justify-between">
-                    <div>
-                      <h4 className="text-xs font-black text-white">
-                        {approvedReviews[currentReviewIndex].customerName}
-                      </h4>
-                      {approvedReviews[currentReviewIndex].serviceType && (
-                        <p className="text-[10px] text-slate-500 mt-1 font-semibold">
-                          سرویس: {approvedReviews[currentReviewIndex].serviceType}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              </AnimatePresence>
-
-              {/* Slider Control Arrows */}
-              <div className="flex justify-end gap-2 mt-6">
-                <button
-                  onClick={() =>
-                    setCurrentReviewIndex(
-                      (prev) => (prev === 0 ? approvedReviews.length - 1 : prev - 1)
-                    )
-                  }
-                  className="p-2.5 bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl transition-all cursor-pointer border border-slate-850"
-                >
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() =>
-                    setCurrentReviewIndex((prev) => (prev + 1) % approvedReviews.length)
-                  }
-                  className="p-2.5 bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl transition-all cursor-pointer border border-slate-850"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                </button>
-              </div>
-
-            </div>
-
-          </div>
-        </section>
-      )}
-
-      {/* 4.5. Frequently Asked Questions (FAQ) Accordion Section */}
-      <section className="bg-slate-950 text-white py-20 relative border-t border-slate-900">
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-indigo-950/5 to-transparent pointer-events-none" />
-        
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 relative z-10 space-y-12">
-          
-          <div className="text-center space-y-3">
-            <span className="text-[10px] bg-indigo-500/20 text-indigo-300 font-bold px-3.5 py-1.5 rounded-full uppercase tracking-wider block w-fit mx-auto">
-              سوالات متداول کاربران ایزی‌درایور (FAQ)
-            </span>
-            <h2 className="text-3xl font-black text-slate-100 tracking-tight">پاسخ به سوالات و ابهامات متداول شما</h2>
-            <p className="text-xs text-slate-400 max-w-lg mx-auto leading-relaxed">
-              هر آنچه برای شروع بکار، اطمینان از فرآیند اتصال امن، نحوه انجام کارهای نرم‌افزاری و روش‌های همگام‌سازی ابزار بر رایانه خود نیاز دارید را در اینجا بیابید.
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            {[
-              {
-                q: "چه خدماتی در ایزی‌درایور (EasyDriver) ارائه می‌شود؟",
-                a: "ایزی‌درایور پلتفرم تخصصی نصب، بروزرسانی و پیکربندی درایورهای سخت‌افزاری انواع رایانه‌ها و لپ‌تاپ‌ها به همراه نصب برنامه‌های کاربردی، تخصصی مهندسی، معماری، گرافیک و اداری با فعال‌سازی و لایسنس دائمی بر روی ویندوز است. ما متعهد به انجام روان‌ترین عیب‌یابی در بازار هستیم."
-              },
-              {
-                q: "چگونه می‌توانم یک درخواست خدمات ثبت کنم؟",
-                a: "جهت ثبت درخواست، کافیست وارد حساب کاربری خود شده، به بخش «ثبت درخواست جدید» بروید و با پر کردن فیلد نام، شماره همراه و توصیف مشکل سیستم نسبت به ایجاد پرونده اقدام کنید. به محض ثبت، کارشناسان یا اپراتورهای ما پرونده را بررسی کرده و بهترین متخصص فنی را به شما اختصاص می‌دهند."
-              },
-              {
-                q: "پروسه عیب‌یابی و نصب از راه دور چگونه انجام می‌گیرد؟",
-                a: "اتصال کارشناسان ما از طریق بسترهای کاملاً امن و رمزنگاری‌شده نظیر برنامه‌های محبوب انی‌دسک (AnyDesk) یا ریموت دسکتاپ برقرار می‌شود. تمامی مراحل عملیات فنی به طور مستقیم روی مانیتور شما قابل رویت بوده، ما هیچ فایلی خارج از هماهنگی شما جابجا نمی‌کنیم و هر زمان تمایل داشتید می‌توانید اتصال را فوراً با یک کلیک یکطرفه قطع کنید."
-              },
-              {
-                q: "شیوه‌های پرداخت و تسویه حساب مالی به چه صورت است؟",
-                a: "ما از درگاه‌های پرداخت امن اینترنتی شتاب کارمزد، تراکنش‌های پایا/کارت‌به‌کارت تحت فاکتور شفاف سیستم استفاده می‌کنیم. علاوه بر این، تمامی سرویس‌های ما شامل گارانتی برگشت ۱۰۰ درصدی وجه در صورت حل نشدن مشکل فنی رایانه شماست تا تجربه‌ای بی‌دغدغه داشته باشید."
-              }
-            ].map((item, index) => {
-              const isOpen = activeFaq === index;
-              return (
-                <div 
-                  key={index} 
-                  className="bg-slate-900/60 border border-slate-800/80 rounded-2xl overflow-hidden transition-all duration-300 hover:border-slate-700/80"
-                >
-                  <button
-                    onClick={() => setActiveFaq(isOpen ? null : index)}
-                    className="w-full p-5 text-right flex items-center justify-between gap-4 font-black text-xs sm:text-sm text-slate-200 hover:text-white transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3">
-                      <HelpCircle className="h-4.5 w-4.5 text-indigo-400 shrink-0" />
-                      <span>{item.q}</span>
-                    </div>
-                    <div className="p-1.5 bg-slate-800 rounded-lg text-slate-400">
-                      {isOpen ? <Minus className="h-3.5 w-3.5 text-indigo-300" /> : <Plus className="h-3.5 w-3.5 text-slate-300" />}
-                    </div>
-                  </button>
-
-                  <AnimatePresence initial={false}>
-                    {isOpen && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.25, ease: "easeInOut" }}
-                      >
-                        <div className="p-5 pt-0 border-t border-slate-800/40 text-xs text-slate-400 font-normal leading-relaxed text-right pl-10 pr-12">
-                          {item.a}
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
                 </div>
-              );
-            })}
-          </div>
+
+              </div>
+
+            </section>
+          )}
+
+          {/* 6. FAQ ACCORDION SECTION */}
+          <section className="space-y-8 border-t border-slate-900/80 pt-12">
+            
+            <div className="space-y-2">
+              <span className="text-[10px] text-indigo-400 font-extrabold uppercase tracking-widest block">سوالات متداول (FAQ)</span>
+              <h2 className="text-xl sm:text-2.5xl font-black text-slate-100">پاسخ به دغدغه‌های مکرر شما</h2>
+              <p className="text-[11px] text-slate-400">
+                هر آنچه در مورد امنیت اتصال، گارانتی تراکنش‌ها و نحوه کار باید بدانید.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {[
+                {
+                  q: "چه خدماتی در ایزی‌درایور (EasyDriver) ارائه می‌شود؟",
+                  a: "ایزی‌درایور پوم تخصصی نصب، بروزرسانی و تنظیم صحیح درایورهای سخت‌افزاری انواع سیستم‌ها و نصب برنامه‌های سنگین مهندسی نظیر متلب، در محیط‌های AnyDesk با فعال‌سازی و لایسنس همیشگی است."
+                },
+                {
+                  q: "امنیت فرآیند اتصال از راه دور چگونه تایید می‌شود؟",
+                  a: "اتصال کاملاً دوطرفه و مشروط بر تایید مکرر با AnyDesk است. شخص شما در حال نظارت زنده تمام کلیک‌های مهندسی مانیتور خود بوده و با بستن پنجره ریموت بلافاصله اتصال در لحظه قطع و غیرقابل برگشت می‌شود."
+                },
+                {
+                  q: "شیوه‌های ضمانت تراکنش‌ها به چه صورت است؟",
+                  a: "تمامی خدمات فازهای تسویه ایزی‌درایور در برگیرنده گارانتی بازگشت ۱۰۰٪ تراکنش‌های مالی در صورت عدم قابلیت ارتقا سخت‌افزار توسط متخصص ارشد فنی است."
+                }
+              ].map((item, index) => {
+                const isOpen = activeFaq === index;
+                return (
+                  <div 
+                    key={index} 
+                    className="bg-slate-900/40 border border-slate-850/80 rounded-xl overflow-hidden transition-all hover:border-slate-750"
+                  >
+                    <button
+                      onClick={() => setActiveFaq(isOpen ? null : index)}
+                      className="w-full p-4 text-right flex items-center justify-between gap-3 font-black text-xs text-slate-200 hover:text-white transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2">
+                        <HelpCircle className="h-4 w-4 text-indigo-400 shrink-0" />
+                        <span>{item.q}</span>
+                      </div>
+                      <div className="p-1.5 bg-slate-850 rounded-lg text-slate-400">
+                        {isOpen ? <Minus className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+                      </div>
+                    </button>
+
+                    <AnimatePresence initial={false}>
+                      {isOpen && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          <div className="p-4 pt-0 border-t border-slate-850/40 text-[10px] text-slate-400 leading-relaxed select-text">
+                            {item.a}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+              })}
+            </div>
+
+          </section>
+
+          {/* 7. CTA DIRECT TECHNICAL ACTIONS */}
+          <section className="space-y-6 border-t border-slate-900/80 pt-12">
+            
+            <motion.div
+              initial={{ opacity: 0, y: 15 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="bg-gradient-to-tr from-slate-900 to-indigo-950/20 border border-slate-850 p-6 sm:p-8 space-y-4 rounded-3xl"
+            >
+              <h3 className="text-lg font-black text-slate-100">نیاز به مشورت مستقیم و فوری دارید؟</h3>
+              <p className="text-[11px] text-slate-450 leading-relaxed font-normal">
+                مهندسین پشتیبان اورژانس ایزی‌درایور به صورت مستمر پاسخگوی ابهامات شما هستند. درایور نادرست بر روی سیستم دارید؟ ویندوز شما کند کار می‌کند؟ بلافاصله تیکت خود را ثبت یا چت زنده را آغاز کنید.
+              </p>
+
+              <div className="p-3 bg-slate-950 border border-slate-850 rounded-xl text-right flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <span className="text-[10px] text-slate-400 font-bold">ارتباط تلفنی مستقیم با مدیریت مـجموعه:</span>
+                <span className="text-xs sm:text-sm font-black text-indigo-300 font-mono hover:text-white transition-colors">۰۹۹۲۱۷۵۸۵۰۵</span>
+              </div>
+
+              <div className="flex flex-wrap gap-3 pt-2">
+                <button
+                  onClick={() => setActiveTab('tickets')}
+                  className="px-5 py-3 bg-white text-slate-950 hover:bg-slate-100 text-[10px] sm:text-xs font-black rounded-xl transition-all cursor-pointer shadow hover:shadow-white/5"
+                >
+                  ایجاد تیکت عیب‌یابی مکرر
+                </button>
+                <button
+                  onClick={() => setActiveTab('support-chat')}
+                  className="px-5 py-3 bg-slate-850 hover:bg-slate-800 text-indigo-300 hover:text-indigo-200 text-[10px] sm:text-xs font-bold rounded-xl transition-all border border-slate-750 cursor-pointer"
+                >
+                  شروع چت برخط با اپراتور فنی
+                </button>
+              </div>
+            </motion.div>
+
+          </section>
 
         </div>
-      </section>
 
-      {/* 5. Fluid Contact Info Segment */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center space-y-7 relative">
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="bg-gradient-to-tr from-slate-900 via-indigo-950/40 to-slate-900 border border-slate-800 rounded-[35px] p-8 sm:p-12 space-y-6 max-w-4xl mx-auto shadow-2xl"
-        >
-          <h2 className="text-2.5xl sm:text-3xl font-black text-slate-100">نیاز به ارتباط مستقیم و فوری دارید؟</h2>
-          <p className="text-xs sm:text-sm text-slate-400 max-w-xl mx-auto leading-relaxed font-normal">
-            مهندسین و پشتیبان‌های اورژانس درایور به صورت برخط و همیشگی آماده پاسخگویی به ابهامات شما هستند. درایور مناسب را پیدا نکرده‌اید؟ سیستم شما صفحه سیاه دارد؟ مکالمه زنده را با پشتیبانی فنی ما آغاز کنید.
-          </p>
-          
-          {/* شماره تماس مستقیم مدیریت و پشتیبانی واحد فنی */}
-          <div className="py-3 flex flex-col sm:flex-row items-center justify-center gap-2 text-indigo-300 font-black text-sm sm:text-base font-mono bg-slate-950/45 rounded-2xl border border-slate-800/80 p-4 max-w-lg mx-auto shadow-inner">
-            <span className="text-slate-350 font-sans text-xs sm:text-sm font-semibold">تلفن تماس مدیریت و بخش فنی (About Us):</span>
-            <span className="hover:text-white transition-colors">۰۹۹۲۱۷۵۸۵۰۵</span>
-          </div>
-          
-          <div className="flex flex-wrap justify-center gap-4 pt-3">
-            <button
-              onClick={() => setActiveTab('tickets')}
-              className="px-7 py-4 bg-white hover:bg-slate-100 text-slate-950 text-xs sm:text-sm font-black rounded-2xl transition-all cursor-pointer shadow-lg hover:shadow-white/10"
-            >
-              ثبت تیکت فنی برخط
-            </button>
-            <button
-              onClick={() => setActiveTab('support-chat')}
-              className="px-7 py-4 bg-slate-850 hover:bg-slate-800 text-indigo-300 hover:text-indigo-250 text-xs sm:text-sm font-black rounded-2xl transition-all border border-slate-750 cursor-pointer"
-            >
-              چت آنلاین با پشتیبان زنده
-            </button>
-          </div>
-        </motion.div>
-      </section>
+      </div>
 
     </div>
   );
